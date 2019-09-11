@@ -1,6 +1,7 @@
 use arrayref::{array_mut_ref, array_ref, array_refs, mut_array_refs};
 use arrayvec::ArrayVec;
 use core::cmp;
+use core::fmt;
 use core::mem::size_of;
 
 type Word = u32;
@@ -170,6 +171,7 @@ fn iv(key: &[Word; 8]) -> [Word; 8] {
     ]
 }
 
+#[derive(Clone)]
 struct ChunkState {
     half_state: [Word; 8],
     buf: [u8; BLOCK_BYTES],
@@ -298,6 +300,7 @@ fn hash_parent(left_hash: &[Word; 8], right_hash: &[Word; 8], key: &[Word; 8]) -
     state
 }
 
+#[derive(Clone)]
 pub struct Hasher {
     key: [Word; 8],
     chunk: ChunkState,
@@ -379,5 +382,14 @@ impl Hasher {
             hash = hash_parent(array_ref!(subtree, 0, 8), &hash, &self.key);
         }
         hash
+    }
+}
+
+// Implement Debug manually for two reasons. 1) ArrayVec doesn't implement
+// Debug for large lengths yet. 2) We don't want to print subtree hashes,
+// because they might be secret.
+impl fmt::Debug for Hasher {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Hasher {{ count: {} }}", self.chunk.total_count())
     }
 }
