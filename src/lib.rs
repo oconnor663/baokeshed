@@ -1,16 +1,16 @@
-use arrayref::{array_ref, array_refs, mut_array_refs};
+use arrayref::{array_mut_ref, array_ref, array_refs, mut_array_refs};
+use arrayvec::ArrayVec;
 use core::cmp;
 use core::mem::size_of;
 
 type Word = u32;
-type Count = u64;
 
-const WORDBYTES: usize = size_of::<Word>();
-const WORDBITS: usize = 8 * WORDBYTES;
-pub const OUTBYTES: usize = 8 * WORDBYTES;
-pub const KEYBYTES: usize = 8 * WORDBYTES;
-pub const BLOCKBYTES: usize = 16 * WORDBYTES;
-pub const CHUNKBYTES: usize = 4096;
+const WORD_BYTES: usize = size_of::<Word>();
+const WORD_BITS: usize = 8 * WORD_BYTES;
+pub const OUT_BYTES: usize = 8 * WORD_BYTES;
+pub const KEY_BYTES: usize = 8 * WORD_BYTES;
+pub const BLOCK_BYTES: usize = 16 * WORD_BYTES;
+pub const CHUNK_BYTES: usize = 4096;
 
 const IV: [Word; 8] = [
     0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A, 0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19,
@@ -59,7 +59,7 @@ fn round(state: &mut [Word; 16], msg: &[Word; 16], round: usize) {
 fn compress(
     half_state: &mut [Word; 8],
     block_words: &[Word; 16],
-    count: Count,
+    count: u64,
     block_len: Word,
     flags: Word,
 ) {
@@ -77,7 +77,7 @@ fn compress(
         IV[2],
         IV[3],
         IV[4] ^ count as Word,
-        IV[5] ^ (count >> WORDBITS) as Word,
+        IV[5] ^ (count >> WORD_BITS) as Word,
         IV[6] ^ block_len,
         IV[7] ^ flags,
     ];
@@ -100,7 +100,7 @@ fn compress(
     half_state[7] ^= full_state[7] ^ full_state[15];
 }
 
-fn words_from_bytes(bytes: &[u8; BLOCKBYTES]) -> [Word; 16] {
+fn words_from_msg_bytes(bytes: &[u8; BLOCK_BYTES]) -> [Word; 16] {
     // Parse the message bytes as little endian words.
     const W: usize = size_of::<Word>();
     let refs = array_refs!(bytes, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W);
@@ -124,8 +124,24 @@ fn words_from_bytes(bytes: &[u8; BLOCKBYTES]) -> [Word; 16] {
     ]
 }
 
-fn bytes_from_words(words: &[Word; 8]) -> [u8; OUTBYTES] {
-    let mut bytes = [0; OUTBYTES];
+fn words_from_key_bytes(bytes: &[u8; KEY_BYTES]) -> [Word; 8] {
+    // Parse the message bytes as little endian words.
+    const W: usize = size_of::<Word>();
+    let refs = array_refs!(bytes, W, W, W, W, W, W, W, W);
+    [
+        Word::from_le_bytes(*refs.0),
+        Word::from_le_bytes(*refs.1),
+        Word::from_le_bytes(*refs.2),
+        Word::from_le_bytes(*refs.3),
+        Word::from_le_bytes(*refs.4),
+        Word::from_le_bytes(*refs.5),
+        Word::from_le_bytes(*refs.6),
+        Word::from_le_bytes(*refs.7),
+    ]
+}
+
+fn bytes_from_state_words(words: &[Word; 8]) -> [u8; OUT_BYTES] {
+    let mut bytes = [0; OUT_BYTES];
     {
         const W: usize = size_of::<Word>();
         let refs = mut_array_refs!(&mut bytes, W, W, W, W, W, W, W, W);
@@ -156,80 +172,212 @@ fn iv(key: &[Word; 8]) -> [Word; 8] {
 
 struct ChunkState {
     half_state: [Word; 8],
-    buf: [u8; BLOCKBYTES],
+    buf: [u8; BLOCK_BYTES],
     buf_len: u8,
-    count: Count,
+    // Note count begins at the chunk's starting offset, not zero.
+    count: u64,
 }
 
 impl ChunkState {
-    fn new(key: &[Word; 8], count: Count) -> Self {
+    fn new(key: &[Word; 8], count: u64) -> Self {
+        debug_assert_eq!(count % CHUNK_BYTES as u64, 0);
         Self {
             half_state: iv(key),
-            buf: [0; BLOCKBYTES],
+            buf: [0; BLOCK_BYTES],
             buf_len: 0,
             count,
         }
     }
 
+    // The length of the current chunk, including buffered bytes.
+    fn len(&self) -> usize {
+        // The count never fully rolls over to the start of the next chunk, so
+        // we don't have to worry about this remainder wrapping to 0.
+        let count_this_chunk = self.count % CHUNK_BYTES as u64;
+        let len = count_this_chunk as usize + self.buf_len as usize;
+        debug_assert!(len <= CHUNK_BYTES);
+        len
+    }
+
+    // The total count of all input bytes so far, including buffered bytes and
+    // previous chunks.
+    fn total_count(&self) -> u64 {
+        // Note we keep incrementing the count across chunks, so the count of
+        // the current chunk reflects the input bytes hashed by all chunks so
+        // far.
+        self.count + self.buf_len as u64
+    }
+
     fn fill_buf(&mut self, input: &mut &[u8]) {
-        let take = cmp::min(BLOCKBYTES - self.buf_len as usize, input.len());
+        let want = BLOCK_BYTES - self.buf_len as usize;
+        let take = cmp::min(want, input.len());
         self.buf[self.buf_len as usize..self.buf_len as usize + take]
             .copy_from_slice(&input[..take]);
         self.buf_len += take as u8;
         *input = &input[take..];
     }
 
-    fn update(&mut self, mut input: &[u8]) {
+    fn append(&mut self, mut input: &[u8]) {
         if self.buf_len > 0 {
             self.fill_buf(&mut input);
             if !input.is_empty() {
-                debug_assert_eq!(self.buf_len as usize, BLOCKBYTES);
-                let block_words = words_from_bytes(&self.buf);
+                debug_assert_eq!(self.buf_len as usize, BLOCK_BYTES);
+                let block_words = words_from_msg_bytes(&self.buf);
                 let flags = 0; // TODO
                 compress(
                     &mut self.half_state,
                     &block_words,
                     self.count,
-                    BLOCKBYTES as Word,
+                    BLOCK_BYTES as Word,
                     flags,
                 );
-                self.count += BLOCKBYTES as u64;
+                self.count += BLOCK_BYTES as u64;
                 self.buf_len = 0;
-                self.buf = [0; BLOCKBYTES];
+                self.buf = [0; BLOCK_BYTES];
             }
         }
 
-        while input.len() > BLOCKBYTES {
+        while input.len() > BLOCK_BYTES {
             debug_assert_eq!(self.buf_len, 0);
-            let block = array_ref!(input, 0, BLOCKBYTES);
-            let block_words = words_from_bytes(block);
+            let block = array_ref!(input, 0, BLOCK_BYTES);
+            let block_words = words_from_msg_bytes(block);
             let flags = 0; // TODO
             compress(
                 &mut self.half_state,
                 &block_words,
                 self.count,
-                BLOCKBYTES as Word,
+                BLOCK_BYTES as Word,
                 flags,
             );
-            self.count += BLOCKBYTES as u64;
-            input = &input[BLOCKBYTES..];
+            self.count += BLOCK_BYTES as u64;
+            input = &input[BLOCK_BYTES..];
         }
 
         self.fill_buf(&mut input);
         debug_assert!(input.is_empty());
+        debug_assert!(self.len() <= CHUNK_BYTES);
     }
 
     fn finalize(&self) -> [Word; 8] {
-        let mut state_copy = self.half_state;
-        let block_words = words_from_bytes(&self.buf);
+        let mut output = self.half_state;
+        let block_words = words_from_msg_bytes(&self.buf);
         let flags = 0; // TODO
         compress(
-            &mut state_copy,
+            &mut output,
             &block_words,
             self.count,
             self.buf_len as Word,
             flags,
         );
-        state_copy
+        output
+    }
+}
+
+fn hash_parent(left_hash: &[Word; 8], right_hash: &[Word; 8], key: &[Word; 8]) -> [Word; 8] {
+    let parent_words = [
+        left_hash[0],
+        left_hash[1],
+        left_hash[2],
+        left_hash[3],
+        left_hash[4],
+        left_hash[5],
+        left_hash[6],
+        left_hash[7],
+        right_hash[0],
+        right_hash[1],
+        right_hash[2],
+        right_hash[3],
+        right_hash[4],
+        right_hash[5],
+        right_hash[6],
+        right_hash[7],
+    ];
+    let mut state = iv(key);
+    let flags = 0; // TODO
+    compress(&mut state, &parent_words, 0, BLOCK_BYTES as Word, flags);
+    state
+}
+
+pub struct Hasher {
+    key: [Word; 8],
+    chunk: ChunkState,
+    // This array is bigger than it needs to be (2 KiB instead of 1.7 KiB),
+    // because arrayvec doesn't currently support a length of 52 * 8 = 416. We
+    // could shrink this with a custom ArrayVec using unsafe code, but stable
+    // cont generics will make everything better someday.
+    subtree_hash_words: ArrayVec<[Word; 512]>,
+}
+
+impl Hasher {
+    pub fn new(key_bytes: &[u8; KEY_BYTES]) -> Self {
+        let key = words_from_key_bytes(key_bytes);
+        Self {
+            key,
+            chunk: ChunkState::new(&key, 0),
+            subtree_hash_words: ArrayVec::new(),
+        }
+    }
+
+    fn num_subtrees(&self) -> usize {
+        debug_assert_eq!(self.subtree_hash_words.len() % 8, 0);
+        self.subtree_hash_words.len() / 8
+    }
+
+    // We keep subtree hashes packed in the subtree_hash_words array without
+    // storing subtree sizes anywhere, and we use this cute trick to figure out
+    // when we should merge them. Because every subtree (prior to the
+    // finalization step) is a power of two times the chunk size, adding a new
+    // subtree to the right/small end is a lot like adding a 1 to a binary
+    // number, and merging subtrees is like propagating the carry bit. Each
+    // carry represents a place where two subtrees need to be merged, and the
+    // final number of 1 bits is the same as the final number of subtrees.
+    fn needs_merge(&self) -> bool {
+        debug_assert_eq!(self.chunk.total_count() % CHUNK_BYTES as u64, 0);
+        let total_chunks = self.chunk.total_count() / CHUNK_BYTES as u64;
+        self.num_subtrees() > total_chunks.count_ones() as usize
+    }
+
+    // Take two subtree hashes off the end of the stack, hash them into a
+    // parent node, and put that hash back on the stack.
+    fn merge_parent(&mut self) {
+        debug_assert!(self.num_subtrees() >= 2);
+        let left_start = self.subtree_hash_words.len() - 16;
+        let right_start = self.subtree_hash_words.len() - 8;
+        let left_hash = array_ref!(self.subtree_hash_words, left_start, 8);
+        let right_hash = array_ref!(self.subtree_hash_words, right_start, 8);
+        let hash = hash_parent(left_hash, right_hash, &self.key);
+        *array_mut_ref!(self.subtree_hash_words, left_start, 8) = hash;
+        let new_len = self.subtree_hash_words.len() - 8;
+        self.subtree_hash_words.truncate(new_len)
+    }
+
+    pub fn append(&mut self, mut input: &[u8]) {
+        while !input.is_empty() {
+            if self.chunk.len() == CHUNK_BYTES {
+                let chunk_hash = self.chunk.finalize();
+                self.subtree_hash_words.extend(chunk_hash.iter().copied());
+                self.chunk = ChunkState::new(&self.key, self.chunk.total_count());
+                while self.needs_merge() {
+                    self.merge_parent();
+                }
+            }
+            let want = CHUNK_BYTES - self.chunk.len();
+            let take = cmp::min(want, input.len());
+            self.chunk.append(&input[..take]);
+            input = &input[take..];
+        }
+    }
+
+    pub fn finalize(&self) -> [Word; 8] {
+        // Finalize the current chunk.
+        // TODO: root finalization flags
+        let mut hash = self.chunk.finalize();
+        // Merge that rightmost chunk hash with every hash in the subtree
+        // stack, from right (smallest) to left (largest) to produce the final
+        // root hash.
+        for subtree in self.subtree_hash_words.chunks_exact(8).rev() {
+            hash = hash_parent(array_ref!(subtree, 0, 8), &hash, &self.key);
+        }
+        hash
     }
 }
