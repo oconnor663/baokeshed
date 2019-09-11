@@ -27,6 +27,34 @@ const MSG_SCHEDULE: [[usize; 16]; 7] = [
     [12, 5, 1, 15, 14, 13, 4, 10, 0, 7, 6, 3, 9, 2, 8, 11],
 ];
 
+// The CHUNK_END and PARENT flags might not be strictly necessary. CHUNK_END
+// might not be necessary because the keyed root node makes it impossible to
+// extend a chunk hash without the key. PARENT might not be necessary because
+// CHUNK_START already effectively domain-separates chunks from parent nodes.
+// But it doesn't cost anything to be conservative here.
+bitflags::bitflags! {
+    struct Flags: Word {
+        const CHUNK_START = 1;
+        const CHUNK_END = 2;
+        const PARENT = 4;
+        const ROOT = 8;
+    }
+}
+
+enum IsRoot {
+    NotRoot,
+    Root,
+}
+
+impl IsRoot {
+    fn flag(&self) -> Flags {
+        match self {
+            IsRoot::NotRoot => Flags::empty(),
+            IsRoot::Root => Flags::ROOT,
+        }
+    }
+}
+
 #[inline(always)]
 fn g(state: &mut [Word; 16], a: usize, b: usize, c: usize, d: usize, x: Word, y: Word) {
     state[a] = state[a].wrapping_add(state[b]).wrapping_add(x);
@@ -62,7 +90,7 @@ fn compress(
     block_words: &[Word; 16],
     count: u64,
     block_len: Word,
-    flags: Word,
+    flags: Flags,
 ) {
     let mut full_state = [
         half_state[0],
@@ -80,7 +108,7 @@ fn compress(
         IV[4] ^ count as Word,
         IV[5] ^ (count >> WORD_BITS) as Word,
         IV[6] ^ block_len,
-        IV[7] ^ flags,
+        IV[7] ^ flags.bits(),
     ];
 
     round(&mut full_state, block_words, 0);
@@ -219,19 +247,29 @@ impl ChunkState {
         *input = &input[take..];
     }
 
+    fn maybe_chunk_start_flag(&self) -> Flags {
+        // Again, self.count never wraps to the next chunk start.
+        let no_blocks_yet = self.count % CHUNK_BYTES as u64 == 0;
+        if no_blocks_yet {
+            Flags::CHUNK_START
+        } else {
+            Flags::empty()
+        }
+    }
+
     fn append(&mut self, mut input: &[u8]) {
         if self.buf_len > 0 {
             self.fill_buf(&mut input);
             if !input.is_empty() {
                 debug_assert_eq!(self.buf_len as usize, BLOCK_BYTES);
                 let block_words = words_from_msg_bytes(&self.buf);
-                let flags = 0; // TODO
+                let flag = self.maybe_chunk_start_flag();
                 compress(
                     &mut self.half_state,
                     &block_words,
                     self.count,
                     BLOCK_BYTES as Word,
-                    flags,
+                    flag,
                 );
                 self.count += BLOCK_BYTES as u64;
                 self.buf_len = 0;
@@ -243,13 +281,13 @@ impl ChunkState {
             debug_assert_eq!(self.buf_len, 0);
             let block = array_ref!(input, 0, BLOCK_BYTES);
             let block_words = words_from_msg_bytes(block);
-            let flags = 0; // TODO
+            let flag = self.maybe_chunk_start_flag();
             compress(
                 &mut self.half_state,
                 &block_words,
                 self.count,
                 BLOCK_BYTES as Word,
-                flags,
+                flag,
             );
             self.count += BLOCK_BYTES as u64;
             input = &input[BLOCK_BYTES..];
@@ -260,43 +298,38 @@ impl ChunkState {
         debug_assert!(self.len() <= CHUNK_BYTES);
     }
 
-    fn finalize(&self) -> [Word; 8] {
+    fn finalize(&self, is_root: IsRoot) -> [Word; 8] {
         let mut output = self.half_state;
         let block_words = words_from_msg_bytes(&self.buf);
-        let flags = 0; // TODO
         compress(
             &mut output,
             &block_words,
             self.count,
             self.buf_len as Word,
-            flags,
+            self.maybe_chunk_start_flag() | Flags::CHUNK_END | is_root.flag(),
         );
         output
     }
 }
 
-fn hash_parent(left_hash: &[Word; 8], right_hash: &[Word; 8], key: &[Word; 8]) -> [Word; 8] {
-    let parent_words = [
-        left_hash[0],
-        left_hash[1],
-        left_hash[2],
-        left_hash[3],
-        left_hash[4],
-        left_hash[5],
-        left_hash[6],
-        left_hash[7],
-        right_hash[0],
-        right_hash[1],
-        right_hash[2],
-        right_hash[3],
-        right_hash[4],
-        right_hash[5],
-        right_hash[6],
-        right_hash[7],
-    ];
+fn hash_parent(
+    left_hash: &[Word; 8],
+    right_hash: &[Word; 8],
+    key: &[Word; 8],
+    is_root: IsRoot,
+) -> [Word; 8] {
+    let mut parent_words = [0; 16];
+    let refs = mut_array_refs!(&mut parent_words, 8, 8);
+    *refs.0 = *left_hash;
+    *refs.1 = *right_hash;
     let mut state = iv(key);
-    let flags = 0; // TODO
-    compress(&mut state, &parent_words, 0, BLOCK_BYTES as Word, flags);
+    compress(
+        &mut state,
+        &parent_words,
+        0,
+        BLOCK_BYTES as Word,
+        Flags::PARENT | is_root.flag(),
+    );
     state
 }
 
@@ -348,7 +381,8 @@ impl Hasher {
         let right_start = self.subtree_hash_words.len() - 8;
         let left_hash = array_ref!(self.subtree_hash_words, left_start, 8);
         let right_hash = array_ref!(self.subtree_hash_words, right_start, 8);
-        let hash = hash_parent(left_hash, right_hash, &self.key);
+        // This isn't called during finalization, so this merge is non-root.
+        let hash = hash_parent(left_hash, right_hash, &self.key, IsRoot::NotRoot);
         *array_mut_ref!(self.subtree_hash_words, left_start, 8) = hash;
         let new_len = self.subtree_hash_words.len() - 8;
         self.subtree_hash_words.truncate(new_len)
@@ -357,7 +391,7 @@ impl Hasher {
     pub fn append(&mut self, mut input: &[u8]) {
         while !input.is_empty() {
             if self.chunk.len() == CHUNK_BYTES {
-                let chunk_hash = self.chunk.finalize();
+                let chunk_hash = self.chunk.finalize(IsRoot::NotRoot);
                 self.subtree_hash_words.extend(chunk_hash.iter().copied());
                 self.chunk = ChunkState::new(&self.key, self.chunk.total_count());
                 while self.needs_merge() {
@@ -372,16 +406,29 @@ impl Hasher {
     }
 
     pub fn finalize(&self) -> [Word; 8] {
-        // Finalize the current chunk.
-        // TODO: root finalization flags
-        let mut hash = self.chunk.finalize();
-        // Merge that rightmost chunk hash with every hash in the subtree
-        // stack, from right (smallest) to left (largest) to produce the final
-        // root hash.
-        for subtree in self.subtree_hash_words.chunks_exact(8).rev() {
-            hash = hash_parent(array_ref!(subtree, 0, 8), &hash, &self.key);
+        // If the current chunk is the only chunk, that makes it the root node
+        // also. Hash it with the root flag and return that hash. Otherwise, we
+        // need to merge all the existing subtrees.
+        if self.subtree_hash_words.is_empty() {
+            self.chunk.finalize(IsRoot::Root)
+        } else {
+            let mut hash = self.chunk.finalize(IsRoot::NotRoot);
+            // Merge that rightmost chunk hash with every hash in the subtree
+            // stack, from right (smallest) to left (largest) to produce the
+            // final root hash.
+            let mut subtrees_remaining = self.num_subtrees();
+            for subtree in self.subtree_hash_words.chunks_exact(8).rev() {
+                let is_root = if subtrees_remaining == 1 {
+                    IsRoot::Root
+                } else {
+                    IsRoot::NotRoot
+                };
+                hash = hash_parent(array_ref!(subtree, 0, 8), &hash, &self.key, is_root);
+                subtrees_remaining -= 1;
+            }
+            debug_assert_eq!(subtrees_remaining, 0);
+            hash
         }
-        hash
     }
 }
 
