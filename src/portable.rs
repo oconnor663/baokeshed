@@ -89,12 +89,12 @@ pub fn compress(
     round(&mut full_state, &block_words, 5);
     round(&mut full_state, &block_words, 6);
 
-    state[0] ^= full_state[0] ^ full_state[8];
-    state[1] ^= full_state[1] ^ full_state[9];
-    state[2] ^= full_state[2] ^ full_state[10];
-    state[3] ^= full_state[3] ^ full_state[11];
-    state[4] ^= full_state[4] ^ full_state[12];
-    state[5] ^= full_state[5] ^ full_state[13];
-    state[6] ^= full_state[6] ^ full_state[14];
-    state[7] ^= full_state[7] ^ full_state[15];
+    state[0] = full_state[0] ^ full_state[8];
+    state[1] = full_state[1] ^ full_state[9];
+    state[2] = full_state[2] ^ full_state[10];
+    state[3] = full_state[3] ^ full_state[11];
+    state[4] = full_state[4] ^ full_state[12];
+    state[5] = full_state[5] ^ full_state[13];
+    state[6] = full_state[6] ^ full_state[14];
+    state[7] = full_state[7] ^ full_state[15];
 }
