@@ -1,3 +1,23 @@
+// Design notes:
+//
+// The CHUNK_END and PARENT flags aren't strictly necessary, the former because
+// the keyed root node makes it impossible to extend a chunk hash without the
+// key, and the latter because CHUNK_START already effectively domain-separates
+// chunks from parent nodes. But do we want to have to think about what happens
+// when someone length-extends a non-root keyed chunk, or what happens when
+// someone "smuggles" a chunk CV into a parent IV via the key? It doesn't cost
+// much to be conservative here.
+//
+// Rather than incrementing the count for each chunk, we can keep it set to the
+// chunk offset for all the blocks of that chunk, and start calling it the
+// "offset". That preserves the "no dangerous caching optimizations" behavior,
+// and it leads to two nice simplifications: 1) Setting the offset back to zero
+// when we finalize a root chunk is no longer a special case. It's already
+// zero. 2) The SIMD chunk compression loop doesn't need to increment the
+// offset. The offset is split into two vectors of 32-bit words at that point,
+// and leaving those words constant lets us delete the instructions that were
+// doing wrapping addition.
+
 use arrayref::{array_ref, array_refs, mut_array_refs};
 use arrayvec::{ArrayString, ArrayVec};
 use core::cmp;
@@ -33,11 +53,6 @@ const MSG_SCHEDULE: [[usize; 16]; 7] = [
     [12, 5, 1, 15, 14, 13, 4, 10, 0, 7, 6, 3, 9, 2, 8, 11],
 ];
 
-// The CHUNK_END and PARENT flags might not be strictly necessary. CHUNK_END
-// might not be necessary because the keyed root node makes it impossible to
-// extend a chunk hash without the key. PARENT might not be necessary because
-// CHUNK_START already effectively domain-separates chunks from parent nodes.
-// But it doesn't cost anything to be conservative here.
 bitflags::bitflags! {
     struct Flags: Word {
         const CHUNK_START = 1;
@@ -94,7 +109,7 @@ fn round(state: &mut [Word; 16], msg: &[Word; 16], round: usize) {
 fn compress(
     state: &mut [Word; 8],
     block_words: &[Word; 16],
-    count: u64,
+    offset: u64,
     block_len: Word,
     flags: Flags,
 ) {
@@ -111,8 +126,8 @@ fn compress(
         IV[1],
         IV[2],
         IV[3],
-        IV[4] ^ count as Word,
-        IV[5] ^ (count >> WORD_BITS) as Word,
+        IV[4] ^ offset as Word,
+        IV[5] ^ (offset >> WORD_BITS) as Word,
         IV[6] ^ block_len,
         IV[7] ^ flags.bits(),
     ];
@@ -286,33 +301,31 @@ impl Output {
 fn hash_chunk(mut chunk: &[u8], key: &[Word; 8], offset: u64, is_root: IsRoot) -> [Word; 8] {
     debug_assert!(chunk.len() <= CHUNK_BYTES);
     debug_assert_eq!(offset % CHUNK_BYTES as u64, 0);
+    if let IsRoot::Root = is_root {
+        // Root finalization starts with offset 0 to support the XOF, so it's
+        // convenient that only the chunk at offset 0 can be the root.
+        debug_assert_eq!(offset, 0);
+    }
     let mut state = iv(key);
-    let mut count = offset;
     let mut maybe_start_flag = Flags::CHUNK_START;
     while chunk.len() > BLOCK_BYTES {
         let block = words_from_msg_bytes(array_ref!(chunk, 0, BLOCK_BYTES));
         compress(
             &mut state,
             &block,
-            count,
+            offset,
             BLOCK_BYTES as Word,
             maybe_start_flag,
         );
-        count += BLOCK_BYTES as u64;
         chunk = &chunk[BLOCK_BYTES..];
         maybe_start_flag = Flags::empty();
     }
     let mut last_block = [0; BLOCK_BYTES];
     last_block[..chunk.len()].copy_from_slice(chunk);
-    // Root finalization resets the count to zero.
-    let last_block_count = match is_root {
-        IsRoot::NotRoot => count,
-        IsRoot::Root => 0,
-    };
     compress(
         &mut state,
         &words_from_msg_bytes(&last_block),
-        last_block_count,
+        offset,
         chunk.len() as Word,
         maybe_start_flag | Flags::CHUNK_END | is_root.flag(),
     );
@@ -337,7 +350,7 @@ fn hash_parent(
     compress(
         &mut state,
         &concat_parent(left_hash, right_hash),
-        0,
+        0, // Note that parents always use offset zero.
         BLOCK_BYTES as Word,
         Flags::PARENT | is_root.flag(),
     );
@@ -359,28 +372,25 @@ fn left_len(content_len: usize) -> usize {
     largest_power_of_two_leq(full_chunks) * CHUNK_BYTES
 }
 
-fn hash_recurse(input: &[u8], key: &[Word; 8], count: u64, is_root: IsRoot) -> [Word; 8] {
+fn hash_recurse(input: &[u8], key: &[Word; 8], offset: u64, is_root: IsRoot) -> [Word; 8] {
     if input.len() <= CHUNK_BYTES {
-        return hash_chunk(input, key, count, is_root);
+        return hash_chunk(input, key, offset, is_root);
     }
     let (left, right) = input.split_at(left_len(input.len()));
-    let left_hash;
-    let right_hash;
+    let right_offset = offset + left.len() as u64;
+
     #[cfg(feature = "rayon")]
-    {
-        let (l, r) = rayon::join(
-            || hash_recurse(left, key, count, IsRoot::NotRoot),
-            || hash_recurse(right, key, count + left.len() as u64, IsRoot::NotRoot),
-        );
-        left_hash = l;
-        right_hash = r;
-    }
+    let children = rayon::join(
+        || hash_recurse(left, key, offset, IsRoot::NotRoot),
+        || hash_recurse(right, key, right_offset, IsRoot::NotRoot),
+    );
     #[cfg(not(feature = "rayon"))]
-    {
-        left_hash = hash_recurse(left, key, count, IsRoot::NotRoot);
-        right_hash = hash_recurse(right, key, count + left.len() as u64, IsRoot::NotRoot);
-    }
-    hash_parent(&left_hash, &right_hash, key, is_root)
+    let children = (
+        hash_recurse(left, key, offset, IsRoot::NotRoot),
+        hash_recurse(right, key, right_offset, IsRoot::NotRoot),
+    );
+
+    hash_parent(&children.0, &children.1, key, is_root)
 }
 
 pub fn hash_keyed(input: &[u8], key: &[u8; KEY_BYTES]) -> Hash {
@@ -400,40 +410,27 @@ pub fn hash(input: &[u8]) -> Hash {
 #[derive(Clone)]
 struct ChunkState {
     state: [Word; 8],
+    offset: u64,
+    count: u16,
     buf: [u8; BLOCK_BYTES],
     buf_len: u8,
-    // Note count begins at the chunk's starting offset, not zero.
-    count: u64,
 }
 
 impl ChunkState {
-    fn new(key: &[Word; 8], count: u64) -> Self {
-        debug_assert_eq!(count % CHUNK_BYTES as u64, 0);
+    fn new(key: &[Word; 8], offset: u64) -> Self {
+        debug_assert_eq!(offset % CHUNK_BYTES as u64, 0);
         Self {
             state: iv(key),
+            offset,
+            count: 0,
             buf: [0; BLOCK_BYTES],
             buf_len: 0,
-            count,
         }
     }
 
     // The length of the current chunk, including buffered bytes.
     fn len(&self) -> usize {
-        // The count never fully rolls over to the start of the next chunk, so
-        // we don't have to worry about this remainder wrapping to 0.
-        let count_this_chunk = self.count % CHUNK_BYTES as u64;
-        let len = count_this_chunk as usize + self.buf_len as usize;
-        debug_assert!(len <= CHUNK_BYTES);
-        len
-    }
-
-    // The total count of all input bytes so far, including buffered bytes and
-    // previous chunks.
-    fn total_count(&self) -> u64 {
-        // Note we keep incrementing the count across chunks, so the count of
-        // the current chunk reflects the input bytes hashed by all chunks so
-        // far.
-        self.count + self.buf_len as u64
+        self.count as usize + self.buf_len as usize
     }
 
     fn fill_buf(&mut self, input: &mut &[u8]) {
@@ -446,9 +443,7 @@ impl ChunkState {
     }
 
     fn maybe_chunk_start_flag(&self) -> Flags {
-        // Again, self.count never wraps to the next chunk start.
-        let no_blocks_yet = self.count % CHUNK_BYTES as u64 == 0;
-        if no_blocks_yet {
+        if self.count == 0 {
             Flags::CHUNK_START
         } else {
             Flags::empty()
@@ -465,11 +460,11 @@ impl ChunkState {
                 compress(
                     &mut self.state,
                     &block_words,
-                    self.count,
+                    self.offset,
                     BLOCK_BYTES as Word,
                     flag,
                 );
-                self.count += BLOCK_BYTES as u64;
+                self.count += BLOCK_BYTES as u16;
                 self.buf_len = 0;
                 self.buf = [0; BLOCK_BYTES];
             }
@@ -483,11 +478,11 @@ impl ChunkState {
             compress(
                 &mut self.state,
                 &block_words,
-                self.count,
+                self.offset,
                 BLOCK_BYTES as Word,
                 flag,
             );
-            self.count += BLOCK_BYTES as u64;
+            self.count += BLOCK_BYTES as u16;
             input = &input[BLOCK_BYTES..];
         }
 
@@ -497,17 +492,17 @@ impl ChunkState {
     }
 
     fn finalize(&self, is_root: IsRoot) -> [Word; 8] {
+        if let IsRoot::Root = is_root {
+            // Root finalization starts with offset 0 to support the XOF, so
+            // it's convenient that only the chunk at offset 0 can be the root.
+            debug_assert_eq!(self.offset, 0);
+        }
         let mut output = self.state;
         let block_words = words_from_msg_bytes(&self.buf);
-        // Root finalization resets the count to zero.
-        let last_block_count = match is_root {
-            IsRoot::NotRoot => self.count,
-            IsRoot::Root => 0,
-        };
         compress(
             &mut output,
             &block_words,
-            last_block_count,
+            self.offset,
             self.buf_len as Word,
             self.maybe_chunk_start_flag() | Flags::CHUNK_END | is_root.flag(),
         );
@@ -516,6 +511,7 @@ impl ChunkState {
 
     // IsRoot::Root is implied here.
     fn finalize_xof(&self) -> Output {
+        debug_assert_eq!(self.offset, 0);
         Output {
             state: self.state,
             block: words_from_msg_bytes(&self.buf),
@@ -555,9 +551,8 @@ impl Hasher {
     // merging subtrees is like propagating the carry bit. Each carry
     // represents a place where two subtrees need to be merged, and the final
     // number of 1 bits is the same as the final number of subtrees.
-    fn needs_merge(&self) -> bool {
-        debug_assert_eq!(self.chunk.total_count() % CHUNK_BYTES as u64, 0);
-        let total_chunks = self.chunk.total_count() / CHUNK_BYTES as u64;
+    fn needs_merge(&self, total_bytes: u64) -> bool {
+        let total_chunks = total_bytes / CHUNK_BYTES as u64;
         self.subtree_hashes.len() > total_chunks.count_ones() as usize
     }
 
@@ -576,13 +571,16 @@ impl Hasher {
 
     pub fn append(&mut self, mut input: &[u8]) {
         while !input.is_empty() {
+            // More input coming means that we can finish this chunk and merge
+            // parents without doing root finalization.
             if self.chunk.len() == CHUNK_BYTES {
                 let chunk_hash = self.chunk.finalize(IsRoot::NotRoot);
                 self.subtree_hashes.push(chunk_hash);
-                self.chunk = ChunkState::new(&self.key, self.chunk.total_count());
-                while self.needs_merge() {
+                let total_bytes = self.chunk.offset + CHUNK_BYTES as u64;
+                while self.needs_merge(total_bytes) {
                     self.merge_parent();
                 }
+                self.chunk = ChunkState::new(&self.key, total_bytes);
             }
             let want = CHUNK_BYTES - self.chunk.len();
             let take = cmp::min(want, input.len());
@@ -627,6 +625,6 @@ impl Hasher {
 // implement Debug manually.
 impl fmt::Debug for Hasher {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Hasher {{ count: {} }}", self.chunk.total_count())
+        write!(f, "Hasher {{ ... }}")
     }
 }

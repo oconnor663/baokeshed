@@ -164,7 +164,7 @@ fn test_three_blocks() {
     compress(
         &mut state,
         &block1_words,
-        BLOCK_BYTES as u64,
+        0, // Subsequent blocks keep using the chunk's starting offset.
         BLOCK_BYTES as Word,
         Flags::empty(),
     );
@@ -175,8 +175,7 @@ fn test_three_blocks() {
     compress(
         &mut state,
         &block2_words,
-        // Root finalization resets the count to zero.
-        0,
+        0, // Subsequent blocks keep using the chunk's starting offset.
         1,
         Flags::CHUNK_END | Flags::ROOT,
     );
