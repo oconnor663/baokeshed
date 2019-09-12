@@ -66,7 +66,7 @@ pub const TEST_CASES: &[usize] = &[
 
 // Paint a byte pattern that won't repeat, so that we don't accidentally
 // miss buffer offset bugs.
-fn paint_test_input(buf: &mut [u8]) {
+pub fn paint_test_input(buf: &mut [u8]) {
     let mut offset = 0;
     let mut counter: u32 = 1;
     while offset < buf.len() {
