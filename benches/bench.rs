@@ -96,3 +96,11 @@ fn bench_hasher_long(b: &mut Bencher) {
         hasher.finalize()
     });
 }
+
+#[bench]
+fn bench_xof(b: &mut Bencher) {
+    b.bytes = OUT_BYTES as u64;
+    let hasher = Hasher::new();
+    let mut xof = hasher.finalize_xof();
+    b.iter(|| xof.read());
+}

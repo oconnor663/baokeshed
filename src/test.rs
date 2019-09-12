@@ -175,7 +175,8 @@ fn test_three_blocks() {
     compress(
         &mut state,
         &block2_words,
-        2 * BLOCK_BYTES as u64,
+        // Root finalization resets the count to zero.
+        0,
         1,
         Flags::CHUNK_END | Flags::ROOT,
     );
@@ -235,4 +236,25 @@ fn test_default_key() {
     let mut hasher = Hasher::new();
     hasher.append(b"abc");
     assert_eq!(expected_hash, hasher.finalize());
+}
+
+#[test]
+fn test_xof_small() {
+    let input = b"abc";
+
+    let mut hasher = Hasher::new();
+    hasher.append(input);
+
+    // Pin hasher as immutable for all of the following.
+    let hasher = hasher;
+
+    let expected_hash = hasher.finalize();
+
+    let mut xof = hasher.finalize_xof();
+    let first_bytes = xof.read();
+    assert_eq!(expected_hash.as_bytes(), &first_bytes);
+    let second_bytes = xof.read();
+    assert!(first_bytes != second_bytes);
+    let third_bytes = xof.read();
+    assert!(second_bytes != third_bytes);
 }
