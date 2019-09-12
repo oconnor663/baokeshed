@@ -26,6 +26,8 @@ use core::fmt;
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 pub mod avx2;
 mod portable;
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+pub mod sse41;
 
 #[cfg(test)]
 mod test;
