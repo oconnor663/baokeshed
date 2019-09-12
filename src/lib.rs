@@ -1,4 +1,4 @@
-use arrayref::{array_mut_ref, array_ref, array_refs, mut_array_refs};
+use arrayref::{array_ref, array_refs, mut_array_refs};
 use arrayvec::{ArrayString, ArrayVec};
 use core::cmp;
 use core::fmt;
@@ -11,6 +11,7 @@ type Word = u32;
 
 const WORD_BYTES: usize = size_of::<Word>();
 const WORD_BITS: usize = 8 * WORD_BYTES;
+const MAX_DEPTH: usize = 52; // 2^52 * 4096 = 2^64
 pub const OUT_BYTES: usize = 8 * WORD_BYTES;
 pub const KEY_BYTES: usize = 8 * WORD_BYTES;
 #[doc(hidden)] // for benchmarks
@@ -529,11 +530,7 @@ impl ChunkState {
 pub struct Hasher {
     key: [Word; 8],
     chunk: ChunkState,
-    // This array is bigger than it needs to be (2 KiB instead of 1.7 KiB),
-    // because arrayvec doesn't currently support a length of 52 * 8 = 416. We
-    // could shrink this with a custom ArrayVec using unsafe code, but stable
-    // cont generics will make everything better someday.
-    subtree_hash_words: ArrayVec<[Word; 512]>,
+    subtree_hashes: ArrayVec<[[Word; 8]; MAX_DEPTH]>,
 }
 
 impl Hasher {
@@ -546,49 +543,42 @@ impl Hasher {
         Self {
             key,
             chunk: ChunkState::new(&key, 0),
-            subtree_hash_words: ArrayVec::new(),
+            subtree_hashes: ArrayVec::new(),
         }
     }
 
-    fn num_subtrees(&self) -> usize {
-        debug_assert_eq!(self.subtree_hash_words.len() % 8, 0);
-        self.subtree_hash_words.len() / 8
-    }
-
-    // We keep subtree hashes packed in the subtree_hash_words array without
-    // storing subtree sizes anywhere, and we use this cute trick to figure out
-    // when we should merge them. Because every subtree (prior to the
-    // finalization step) is a power of two times the chunk size, adding a new
-    // subtree to the right/small end is a lot like adding a 1 to a binary
-    // number, and merging subtrees is like propagating the carry bit. Each
-    // carry represents a place where two subtrees need to be merged, and the
-    // final number of 1 bits is the same as the final number of subtrees.
+    // We keep subtree hashes in the subtree_hashes array without storing
+    // subtree sizes anywhere, and we use this cute trick to figure out when we
+    // should merge them. Because every subtree (prior to the finalization
+    // step) is a power of two times the chunk size, adding a new subtree to
+    // the right/small end is a lot like adding a 1 to a binary number, and
+    // merging subtrees is like propagating the carry bit. Each carry
+    // represents a place where two subtrees need to be merged, and the final
+    // number of 1 bits is the same as the final number of subtrees.
     fn needs_merge(&self) -> bool {
         debug_assert_eq!(self.chunk.total_count() % CHUNK_BYTES as u64, 0);
         let total_chunks = self.chunk.total_count() / CHUNK_BYTES as u64;
-        self.num_subtrees() > total_chunks.count_ones() as usize
+        self.subtree_hashes.len() > total_chunks.count_ones() as usize
     }
 
     // Take two subtree hashes off the end of the stack, hash them into a
     // parent node, and put that hash back on the stack.
     fn merge_parent(&mut self) {
-        debug_assert!(self.num_subtrees() >= 2);
-        let left_start = self.subtree_hash_words.len() - 16;
-        let right_start = self.subtree_hash_words.len() - 8;
-        let left_hash = array_ref!(self.subtree_hash_words, left_start, 8);
-        let right_hash = array_ref!(self.subtree_hash_words, right_start, 8);
+        let num_subtrees = self.subtree_hashes.len();
+        debug_assert!(num_subtrees >= 2);
+        let left_hash = &self.subtree_hashes[num_subtrees - 2];
+        let right_hash = &self.subtree_hashes[num_subtrees - 1];
         // This isn't called during finalization, so this merge is non-root.
         let hash = hash_parent(left_hash, right_hash, &self.key, IsRoot::NotRoot);
-        *array_mut_ref!(self.subtree_hash_words, left_start, 8) = hash;
-        let new_len = self.subtree_hash_words.len() - 8;
-        self.subtree_hash_words.truncate(new_len)
+        self.subtree_hashes[num_subtrees - 2] = hash;
+        self.subtree_hashes.truncate(num_subtrees - 1)
     }
 
     pub fn append(&mut self, mut input: &[u8]) {
         while !input.is_empty() {
             if self.chunk.len() == CHUNK_BYTES {
                 let chunk_hash = self.chunk.finalize(IsRoot::NotRoot);
-                self.subtree_hash_words.extend(chunk_hash.iter().copied());
+                self.subtree_hashes.push(chunk_hash);
                 self.chunk = ChunkState::new(&self.key, self.chunk.total_count());
                 while self.needs_merge() {
                     self.merge_parent();
@@ -609,7 +599,7 @@ impl Hasher {
         // If the current chunk is the only chunk, that makes it the root node
         // also. Convert it directoy into an Output. Otherwise, we need to
         // merge subtrees.
-        if self.subtree_hash_words.is_empty() {
+        if self.subtree_hashes.is_empty() {
             self.chunk.finalize_xof()
         } else {
             let mut hash = self.chunk.finalize(IsRoot::NotRoot);
@@ -617,13 +607,13 @@ impl Hasher {
             // from right (smallest) to left (largest) until there's only one
             // subtree remaining. Then convert the final parent node into an
             // Output.
-            for subtree_index in (1..self.num_subtrees()).rev() {
-                let subtree = array_ref!(self.subtree_hash_words, 8 * subtree_index, 8);
+            for subtree_index in (1..self.subtree_hashes.len()).rev() {
+                let subtree = &self.subtree_hashes[subtree_index];
                 hash = hash_parent(subtree, &hash, &self.key, IsRoot::NotRoot);
             }
             Output {
                 state: iv(&self.key),
-                block: concat_parent(array_ref!(self.subtree_hash_words, 0, 8), &hash),
+                block: concat_parent(&self.subtree_hashes[0], &hash),
                 block_len: BLOCK_BYTES as u8,
                 flags: Flags::PARENT | Flags::ROOT,
                 offset: 0,
