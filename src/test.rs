@@ -109,9 +109,8 @@ fn test_zero_bytes() {
     let key_words = words_from_key_bytes(&key);
     let mut state = iv(&key_words);
     let block = [0; BLOCK_BYTES];
-    let block_words = words_from_msg_bytes(&block);
     let flags = Flags::CHUNK_START | Flags::CHUNK_END | Flags::ROOT;
-    compress(&mut state, &block_words, 0, 0, flags);
+    portable::compress(&mut state, &block, 0, 0, flags.bits());
     let expected_hash = hash_from_state_words(&state);
 
     assert_eq!(expected_hash, hash_keyed(&[], &key));
@@ -128,9 +127,8 @@ fn test_one_byte() {
     let mut state = iv(&key_words);
     let mut block = [0; BLOCK_BYTES];
     block[0] = 9;
-    let block_words = words_from_msg_bytes(&block);
     let flags = Flags::CHUNK_START | Flags::CHUNK_END | Flags::ROOT;
-    compress(&mut state, &block_words, 0, 1, flags);
+    portable::compress(&mut state, &block, 1, 0, flags.bits());
     let expected_hash = hash_from_state_words(&state);
 
     assert_eq!(expected_hash, hash_keyed(&[9], &key));
@@ -150,34 +148,31 @@ fn test_three_blocks() {
     let mut state = iv(&key_words);
 
     let block0 = array_ref!(input, 0, BLOCK_BYTES);
-    let block0_words = words_from_msg_bytes(block0);
-    compress(
+    portable::compress(
         &mut state,
-        &block0_words,
-        0,
+        &block0,
         BLOCK_BYTES as Word,
-        Flags::CHUNK_START,
+        0,
+        Flags::CHUNK_START.bits(),
     );
 
     let block1 = array_ref!(input, BLOCK_BYTES, BLOCK_BYTES);
-    let block1_words = words_from_msg_bytes(block1);
-    compress(
+    portable::compress(
         &mut state,
-        &block1_words,
-        0, // Subsequent blocks keep using the chunk's starting offset.
+        &block1,
         BLOCK_BYTES as Word,
-        Flags::empty(),
+        0, // Subsequent blocks keep using the chunk's starting offset.
+        Flags::empty().bits(),
     );
 
     let mut block2 = [0; BLOCK_BYTES];
     block2[0] = *input.last().unwrap();
-    let block2_words = words_from_msg_bytes(&block2);
-    compress(
+    portable::compress(
         &mut state,
-        &block2_words,
-        0, // Subsequent blocks keep using the chunk's starting offset.
+        &block2,
         1,
-        Flags::CHUNK_END | Flags::ROOT,
+        0, // Subsequent blocks keep using the chunk's starting offset.
+        (Flags::CHUNK_END | Flags::ROOT).bits(),
     );
 
     let expected_hash = hash_from_state_words(&state);

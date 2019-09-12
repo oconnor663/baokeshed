@@ -22,14 +22,15 @@ use arrayref::{array_ref, array_refs, mut_array_refs};
 use arrayvec::{ArrayString, ArrayVec};
 use core::cmp;
 use core::fmt;
-use core::mem::size_of;
+
+mod portable;
 
 #[cfg(test)]
 mod test;
 
 type Word = u32;
 
-const WORD_BYTES: usize = size_of::<Word>();
+const WORD_BYTES: usize = core::mem::size_of::<Word>();
 const WORD_BITS: usize = 8 * WORD_BYTES;
 const MAX_DEPTH: usize = 52; // 2^52 * 4096 = 2^64
 pub const OUT_BYTES: usize = 8 * WORD_BYTES;
@@ -76,108 +77,9 @@ impl IsRoot {
     }
 }
 
-#[inline(always)]
-fn g(state: &mut [Word; 16], a: usize, b: usize, c: usize, d: usize, x: Word, y: Word) {
-    state[a] = state[a].wrapping_add(state[b]).wrapping_add(x);
-    state[d] = (state[d] ^ state[a]).rotate_right(16);
-    state[c] = state[c].wrapping_add(state[d]);
-    state[b] = (state[b] ^ state[c]).rotate_right(12);
-    state[a] = state[a].wrapping_add(state[b]).wrapping_add(y);
-    state[d] = (state[d] ^ state[a]).rotate_right(8);
-    state[c] = state[c].wrapping_add(state[d]);
-    state[b] = (state[b] ^ state[c]).rotate_right(7);
-}
-
-#[inline(always)]
-fn round(state: &mut [Word; 16], msg: &[Word; 16], round: usize) {
-    // Select the message schedule based on the round.
-    let schedule = MSG_SCHEDULE[round];
-
-    // Mix the columns.
-    g(state, 0, 4, 8, 12, msg[schedule[0]], msg[schedule[1]]);
-    g(state, 1, 5, 9, 13, msg[schedule[2]], msg[schedule[3]]);
-    g(state, 2, 6, 10, 14, msg[schedule[4]], msg[schedule[5]]);
-    g(state, 3, 7, 11, 15, msg[schedule[6]], msg[schedule[7]]);
-
-    // Mix the rows.
-    g(state, 0, 5, 10, 15, msg[schedule[8]], msg[schedule[9]]);
-    g(state, 1, 6, 11, 12, msg[schedule[10]], msg[schedule[11]]);
-    g(state, 2, 7, 8, 13, msg[schedule[12]], msg[schedule[13]]);
-    g(state, 3, 4, 9, 14, msg[schedule[14]], msg[schedule[15]]);
-}
-
-fn compress(
-    state: &mut [Word; 8],
-    block_words: &[Word; 16],
-    offset: u64,
-    block_len: Word,
-    flags: Flags,
-) {
-    let mut full_state = [
-        state[0],
-        state[1],
-        state[2],
-        state[3],
-        state[4],
-        state[5],
-        state[6],
-        state[7],
-        IV[0],
-        IV[1],
-        IV[2],
-        IV[3],
-        IV[4] ^ offset as Word,
-        IV[5] ^ (offset >> WORD_BITS) as Word,
-        IV[6] ^ block_len,
-        IV[7] ^ flags.bits(),
-    ];
-
-    round(&mut full_state, block_words, 0);
-    round(&mut full_state, block_words, 1);
-    round(&mut full_state, block_words, 2);
-    round(&mut full_state, block_words, 3);
-    round(&mut full_state, block_words, 4);
-    round(&mut full_state, block_words, 5);
-    round(&mut full_state, block_words, 6);
-
-    state[0] ^= full_state[0] ^ full_state[8];
-    state[1] ^= full_state[1] ^ full_state[9];
-    state[2] ^= full_state[2] ^ full_state[10];
-    state[3] ^= full_state[3] ^ full_state[11];
-    state[4] ^= full_state[4] ^ full_state[12];
-    state[5] ^= full_state[5] ^ full_state[13];
-    state[6] ^= full_state[6] ^ full_state[14];
-    state[7] ^= full_state[7] ^ full_state[15];
-}
-
-fn words_from_msg_bytes(bytes: &[u8; BLOCK_BYTES]) -> [Word; 16] {
-    // Parse the message bytes as little endian words.
-    const W: usize = size_of::<Word>();
-    let refs = array_refs!(bytes, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W);
-    [
-        Word::from_le_bytes(*refs.0),
-        Word::from_le_bytes(*refs.1),
-        Word::from_le_bytes(*refs.2),
-        Word::from_le_bytes(*refs.3),
-        Word::from_le_bytes(*refs.4),
-        Word::from_le_bytes(*refs.5),
-        Word::from_le_bytes(*refs.6),
-        Word::from_le_bytes(*refs.7),
-        Word::from_le_bytes(*refs.8),
-        Word::from_le_bytes(*refs.9),
-        Word::from_le_bytes(*refs.10),
-        Word::from_le_bytes(*refs.11),
-        Word::from_le_bytes(*refs.12),
-        Word::from_le_bytes(*refs.13),
-        Word::from_le_bytes(*refs.14),
-        Word::from_le_bytes(*refs.15),
-    ]
-}
-
 fn words_from_key_bytes(bytes: &[u8; KEY_BYTES]) -> [Word; 8] {
     // Parse the message bytes as little endian words.
-    const W: usize = size_of::<Word>();
-    let refs = array_refs!(bytes, W, W, W, W, W, W, W, W);
+    let refs = array_refs!(bytes, 4, 4, 4, 4, 4, 4, 4, 4);
     [
         Word::from_le_bytes(*refs.0),
         Word::from_le_bytes(*refs.1),
@@ -193,8 +95,7 @@ fn words_from_key_bytes(bytes: &[u8; KEY_BYTES]) -> [Word; 8] {
 fn bytes_from_state_words(words: &[Word; 8]) -> [u8; OUT_BYTES] {
     let mut bytes = [0; OUT_BYTES];
     {
-        const W: usize = size_of::<Word>();
-        let refs = mut_array_refs!(&mut bytes, W, W, W, W, W, W, W, W);
+        let refs = mut_array_refs!(&mut bytes, 4, 4, 4, 4, 4, 4, 4, 4);
         *refs.0 = words[0].to_le_bytes();
         *refs.1 = words[1].to_le_bytes();
         *refs.2 = words[2].to_le_bytes();
@@ -272,7 +173,7 @@ impl fmt::Debug for Hash {
 #[derive(Clone)]
 pub struct Output {
     state: [Word; 8],
-    block: [Word; 16],
+    block: [u8; BLOCK_BYTES],
     block_len: u8,
     flags: Flags,
     offset: u64,
@@ -282,12 +183,12 @@ impl Output {
     pub fn read(&mut self) -> [u8; OUT_BYTES] {
         debug_assert!(self.flags.contains(Flags::ROOT));
         let mut state_copy = self.state;
-        compress(
+        portable::compress(
             &mut state_copy,
             &self.block,
-            self.offset,
             self.block_len as Word,
-            self.flags,
+            self.offset,
+            self.flags.bits(),
         );
         self.offset += OUT_BYTES as u64;
         bytes_from_state_words(&state_copy)
@@ -309,35 +210,35 @@ fn hash_chunk(mut chunk: &[u8], key: &[Word; 8], offset: u64, is_root: IsRoot) -
     let mut state = iv(key);
     let mut maybe_start_flag = Flags::CHUNK_START;
     while chunk.len() > BLOCK_BYTES {
-        let block = words_from_msg_bytes(array_ref!(chunk, 0, BLOCK_BYTES));
-        compress(
+        portable::compress(
             &mut state,
-            &block,
-            offset,
+            array_ref!(chunk, 0, BLOCK_BYTES),
             BLOCK_BYTES as Word,
-            maybe_start_flag,
+            offset,
+            maybe_start_flag.bits(),
         );
         chunk = &chunk[BLOCK_BYTES..];
         maybe_start_flag = Flags::empty();
     }
     let mut last_block = [0; BLOCK_BYTES];
     last_block[..chunk.len()].copy_from_slice(chunk);
-    compress(
+    let flags = maybe_start_flag | Flags::CHUNK_END | is_root.flag();
+    portable::compress(
         &mut state,
-        &words_from_msg_bytes(&last_block),
-        offset,
+        &last_block,
         chunk.len() as Word,
-        maybe_start_flag | Flags::CHUNK_END | is_root.flag(),
+        offset,
+        flags.bits(),
     );
     state
 }
 
-fn concat_parent(left_hash: &[Word; 8], right_hash: &[Word; 8]) -> [Word; 16] {
-    let mut parent_words = [0; 16];
-    let refs = mut_array_refs!(&mut parent_words, 8, 8);
-    *refs.0 = *left_hash;
-    *refs.1 = *right_hash;
-    parent_words
+fn concat_parent(left_hash: &[Word; 8], right_hash: &[Word; 8]) -> [u8; BLOCK_BYTES] {
+    let mut block = [0; BLOCK_BYTES];
+    let refs = mut_array_refs!(&mut block, OUT_BYTES, OUT_BYTES);
+    *refs.0 = bytes_from_state_words(left_hash);
+    *refs.1 = bytes_from_state_words(right_hash);
+    block
 }
 
 fn hash_parent(
@@ -347,12 +248,13 @@ fn hash_parent(
     is_root: IsRoot,
 ) -> [Word; 8] {
     let mut state = iv(key);
-    compress(
+    let flags = Flags::PARENT | is_root.flag();
+    portable::compress(
         &mut state,
         &concat_parent(left_hash, right_hash),
-        0, // Note that parents always use offset zero.
         BLOCK_BYTES as Word,
-        Flags::PARENT | is_root.flag(),
+        0, // Note that parents always use offset zero.
+        flags.bits(),
     );
     state
 }
@@ -455,14 +357,13 @@ impl ChunkState {
             self.fill_buf(&mut input);
             if !input.is_empty() {
                 debug_assert_eq!(self.buf_len as usize, BLOCK_BYTES);
-                let block_words = words_from_msg_bytes(&self.buf);
-                let flag = self.maybe_chunk_start_flag();
-                compress(
+                let flags = self.maybe_chunk_start_flag();
+                portable::compress(
                     &mut self.state,
-                    &block_words,
-                    self.offset,
+                    &self.buf,
                     BLOCK_BYTES as Word,
-                    flag,
+                    self.offset,
+                    flags.bits(),
                 );
                 self.count += BLOCK_BYTES as u16;
                 self.buf_len = 0;
@@ -472,15 +373,13 @@ impl ChunkState {
 
         while input.len() > BLOCK_BYTES {
             debug_assert_eq!(self.buf_len, 0);
-            let block = array_ref!(input, 0, BLOCK_BYTES);
-            let block_words = words_from_msg_bytes(block);
-            let flag = self.maybe_chunk_start_flag();
-            compress(
+            let flags = self.maybe_chunk_start_flag();
+            portable::compress(
                 &mut self.state,
-                &block_words,
-                self.offset,
+                array_ref!(input, 0, BLOCK_BYTES),
                 BLOCK_BYTES as Word,
-                flag,
+                self.offset,
+                flags.bits(),
             );
             self.count += BLOCK_BYTES as u16;
             input = &input[BLOCK_BYTES..];
@@ -498,13 +397,13 @@ impl ChunkState {
             debug_assert_eq!(self.offset, 0);
         }
         let mut output = self.state;
-        let block_words = words_from_msg_bytes(&self.buf);
-        compress(
+        let flags = self.maybe_chunk_start_flag() | Flags::CHUNK_END | is_root.flag();
+        portable::compress(
             &mut output,
-            &block_words,
-            self.offset,
+            &self.buf,
             self.buf_len as Word,
-            self.maybe_chunk_start_flag() | Flags::CHUNK_END | is_root.flag(),
+            self.offset,
+            flags.bits(),
         );
         output
     }
@@ -514,7 +413,7 @@ impl ChunkState {
         debug_assert_eq!(self.offset, 0);
         Output {
             state: self.state,
-            block: words_from_msg_bytes(&self.buf),
+            block: self.buf,
             block_len: self.buf_len,
             flags: self.maybe_chunk_start_flag() | Flags::CHUNK_END | Flags::ROOT,
             offset: 0,
