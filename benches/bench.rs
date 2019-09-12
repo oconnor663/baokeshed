@@ -50,19 +50,19 @@ impl RandomInput {
 }
 
 #[bench]
-fn bench_hash_slice_short(b: &mut Bencher) {
+fn bench_hash_short(b: &mut Bencher) {
     let mut input = RandomInput::new(b, SHORT);
     b.iter(|| baokeshed::hash(input.get()));
 }
 
 #[bench]
-fn bench_hash_slice_medium(b: &mut Bencher) {
+fn bench_hash_medium(b: &mut Bencher) {
     let mut input = RandomInput::new(b, MEDIUM);
     b.iter(|| baokeshed::hash(input.get()));
 }
 
 #[bench]
-fn bench_hash_slice_long(b: &mut Bencher) {
+fn bench_hash_long(b: &mut Bencher) {
     let mut input = RandomInput::new(b, LONG);
     b.iter(|| baokeshed::hash(input.get()));
 }
