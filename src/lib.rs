@@ -13,7 +13,9 @@ const WORD_BYTES: usize = size_of::<Word>();
 const WORD_BITS: usize = 8 * WORD_BYTES;
 pub const OUT_BYTES: usize = 8 * WORD_BYTES;
 pub const KEY_BYTES: usize = 8 * WORD_BYTES;
+#[doc(hidden)] // for benchmarks
 pub const BLOCK_BYTES: usize = 16 * WORD_BYTES;
+#[doc(hidden)] // for benchmarks
 pub const CHUNK_BYTES: usize = 4096;
 
 const IV: [Word; 8] = [
