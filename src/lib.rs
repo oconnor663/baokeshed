@@ -617,4 +617,91 @@ mod test {
             assert_eq!(recursive_hash, incremental_hash_one_at_a_time);
         }
     }
+
+    #[test]
+    fn test_zero_bytes() {
+        let mut key = [0; KEY_BYTES];
+        paint_test_input(&mut key);
+        let key_words = words_from_key_bytes(&key);
+        let mut state = iv(&key_words);
+        let block = [0; BLOCK_BYTES];
+        let block_words = words_from_msg_bytes(&block);
+        let flags = Flags::CHUNK_START | Flags::CHUNK_END | Flags::ROOT;
+        compress(&mut state, &block_words, 0, 0, flags);
+        let expected_hash = bytes_from_state_words(&state);
+
+        assert_eq!(expected_hash, hash(&[], &key));
+
+        let hasher = Hasher::new(&key);
+        assert_eq!(expected_hash, hasher.finalize());
+    }
+
+    #[test]
+    fn test_one_byte() {
+        let mut key = [0; KEY_BYTES];
+        paint_test_input(&mut key);
+        let key_words = words_from_key_bytes(&key);
+        let mut state = iv(&key_words);
+        let mut block = [0; BLOCK_BYTES];
+        block[0] = 9;
+        let block_words = words_from_msg_bytes(&block);
+        let flags = Flags::CHUNK_START | Flags::CHUNK_END | Flags::ROOT;
+        compress(&mut state, &block_words, 0, 1, flags);
+        let expected_hash = bytes_from_state_words(&state);
+
+        assert_eq!(expected_hash, hash(&[9], &key));
+
+        let mut hasher = Hasher::new(&key);
+        hasher.append(&[9]);
+        assert_eq!(expected_hash, hasher.finalize());
+    }
+
+    #[test]
+    fn test_three_blocks() {
+        let mut input = [0; 2 * BLOCK_BYTES + 1];
+        paint_test_input(&mut input);
+        let mut key = [0; KEY_BYTES];
+        paint_test_input(&mut key);
+        let key_words = words_from_key_bytes(&key);
+        let mut state = iv(&key_words);
+
+        let block0 = array_ref!(input, 0, BLOCK_BYTES);
+        let block0_words = words_from_msg_bytes(block0);
+        compress(
+            &mut state,
+            &block0_words,
+            0,
+            BLOCK_BYTES as Word,
+            Flags::CHUNK_START,
+        );
+
+        let block1 = array_ref!(input, BLOCK_BYTES, BLOCK_BYTES);
+        let block1_words = words_from_msg_bytes(block1);
+        compress(
+            &mut state,
+            &block1_words,
+            BLOCK_BYTES as u64,
+            BLOCK_BYTES as Word,
+            Flags::empty(),
+        );
+
+        let mut block2 = [0; BLOCK_BYTES];
+        block2[0] = *input.last().unwrap();
+        let block2_words = words_from_msg_bytes(&block2);
+        compress(
+            &mut state,
+            &block2_words,
+            2 * BLOCK_BYTES as u64,
+            1,
+            Flags::CHUNK_END | Flags::ROOT,
+        );
+
+        let expected_hash = bytes_from_state_words(&state);
+
+        assert_eq!(expected_hash, hash(&input, &key));
+
+        let mut hasher = Hasher::new(&key);
+        hasher.append(&input);
+        assert_eq!(expected_hash, hasher.finalize());
+    }
 }
