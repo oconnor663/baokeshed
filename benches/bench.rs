@@ -52,26 +52,26 @@ impl RandomInput {
 #[bench]
 fn bench_hash_slice_short(b: &mut Bencher) {
     let mut input = RandomInput::new(b, SHORT);
-    b.iter(|| baokeshed::hash(input.get(), &[0; KEY_BYTES]));
+    b.iter(|| baokeshed::hash(input.get()));
 }
 
 #[bench]
 fn bench_hash_slice_medium(b: &mut Bencher) {
     let mut input = RandomInput::new(b, MEDIUM);
-    b.iter(|| baokeshed::hash(input.get(), &[0; KEY_BYTES]));
+    b.iter(|| baokeshed::hash(input.get()));
 }
 
 #[bench]
 fn bench_hash_slice_long(b: &mut Bencher) {
     let mut input = RandomInput::new(b, LONG);
-    b.iter(|| baokeshed::hash(input.get(), &[0; KEY_BYTES]));
+    b.iter(|| baokeshed::hash(input.get()));
 }
 
 #[bench]
 fn bench_hasher_short(b: &mut Bencher) {
     let mut input = RandomInput::new(b, SHORT);
     b.iter(|| {
-        let mut hasher = Hasher::new(&[0; KEY_BYTES]);
+        let mut hasher = Hasher::new();
         hasher.append(input.get());
         hasher.finalize()
     });
@@ -81,7 +81,7 @@ fn bench_hasher_short(b: &mut Bencher) {
 fn bench_hasher_medium(b: &mut Bencher) {
     let mut input = RandomInput::new(b, MEDIUM);
     b.iter(|| {
-        let mut hasher = Hasher::new(&[0; KEY_BYTES]);
+        let mut hasher = Hasher::new();
         hasher.append(input.get());
         hasher.finalize()
     });
@@ -91,7 +91,7 @@ fn bench_hasher_medium(b: &mut Bencher) {
 fn bench_hasher_long(b: &mut Bencher) {
     let mut input = RandomInput::new(b, LONG);
     b.iter(|| {
-        let mut hasher = Hasher::new(&[0; KEY_BYTES]);
+        let mut hasher = Hasher::new();
         hasher.append(input.get());
         hasher.finalize()
     });

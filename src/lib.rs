@@ -283,10 +283,14 @@ fn hash_recurse(input: &[u8], key: &[Word; 8], count: u64, is_root: IsRoot) -> [
     hash_parent(&left_hash, &right_hash, key, is_root)
 }
 
-pub fn hash(input: &[u8], key: &[u8; KEY_BYTES]) -> [u8; OUT_BYTES] {
+pub fn hash_keyed(input: &[u8], key: &[u8; KEY_BYTES]) -> [u8; OUT_BYTES] {
     let key_words = words_from_key_bytes(key);
     let hash_words = hash_recurse(input, &key_words, 0, IsRoot::Root);
     bytes_from_state_words(&hash_words)
+}
+
+pub fn hash(input: &[u8]) -> [u8; OUT_BYTES] {
+    hash_keyed(input, &[0; KEY_BYTES])
 }
 
 // =======================================================================
@@ -418,7 +422,11 @@ pub struct Hasher {
 }
 
 impl Hasher {
-    pub fn new(key_bytes: &[u8; KEY_BYTES]) -> Self {
+    pub fn new() -> Self {
+        Self::new_keyed(&[0; KEY_BYTES])
+    }
+
+    pub fn new_keyed(key_bytes: &[u8; KEY_BYTES]) -> Self {
         let key = words_from_key_bytes(key_bytes);
         Self {
             key,

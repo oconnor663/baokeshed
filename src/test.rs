@@ -86,14 +86,14 @@ fn test_recursive_incremental_same() {
         let input = &input_buf[..case];
         let key = array_ref!(input_buf, 0, KEY_BYTES);
 
-        let recursive_hash = hash(input, key);
+        let recursive_hash = hash_keyed(input, key);
 
-        let mut hasher_all = Hasher::new(key);
+        let mut hasher_all = Hasher::new_keyed(key);
         hasher_all.append(input);
         let incremental_hash_all = hasher_all.finalize();
         assert_eq!(recursive_hash, incremental_hash_all);
 
-        let mut hasher_one_at_a_time = Hasher::new(key);
+        let mut hasher_one_at_a_time = Hasher::new_keyed(key);
         for &byte in input {
             hasher_one_at_a_time.append(&[byte]);
         }
@@ -114,9 +114,9 @@ fn test_zero_bytes() {
     compress(&mut state, &block_words, 0, 0, flags);
     let expected_hash = bytes_from_state_words(&state);
 
-    assert_eq!(expected_hash, hash(&[], &key));
+    assert_eq!(expected_hash, hash_keyed(&[], &key));
 
-    let hasher = Hasher::new(&key);
+    let hasher = Hasher::new_keyed(&key);
     assert_eq!(expected_hash, hasher.finalize());
 }
 
@@ -133,9 +133,9 @@ fn test_one_byte() {
     compress(&mut state, &block_words, 0, 1, flags);
     let expected_hash = bytes_from_state_words(&state);
 
-    assert_eq!(expected_hash, hash(&[9], &key));
+    assert_eq!(expected_hash, hash_keyed(&[9], &key));
 
-    let mut hasher = Hasher::new(&key);
+    let mut hasher = Hasher::new_keyed(&key);
     hasher.append(&[9]);
     assert_eq!(expected_hash, hasher.finalize());
 }
@@ -182,9 +182,9 @@ fn test_three_blocks() {
 
     let expected_hash = bytes_from_state_words(&state);
 
-    assert_eq!(expected_hash, hash(&input, &key));
+    assert_eq!(expected_hash, hash_keyed(&input, &key));
 
-    let mut hasher = Hasher::new(&key);
+    let mut hasher = Hasher::new_keyed(&key);
     hasher.append(&input);
     assert_eq!(expected_hash, hasher.finalize());
 }
@@ -217,9 +217,22 @@ fn test_three_chunks() {
 
     let expected_hash = bytes_from_state_words(&root_parent);
 
-    assert_eq!(expected_hash, hash(&input, &key));
+    assert_eq!(expected_hash, hash_keyed(&input, &key));
 
-    let mut hasher = Hasher::new(&key);
+    let mut hasher = Hasher::new_keyed(&key);
     hasher.append(&input);
+    assert_eq!(expected_hash, hasher.finalize());
+}
+
+#[test]
+fn test_default_key() {
+    let default_key = &[0; KEY_BYTES];
+
+    let expected_hash = hash_keyed(b"abc", &default_key);
+
+    assert_eq!(expected_hash, hash(b"abc"));
+
+    let mut hasher = Hasher::new();
+    hasher.append(b"abc");
     assert_eq!(expected_hash, hasher.finalize());
 }
