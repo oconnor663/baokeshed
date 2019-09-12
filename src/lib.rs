@@ -199,6 +199,97 @@ fn iv(key: &[Word; 8]) -> [Word; 8] {
     ]
 }
 
+// =======================================================================
+// ================== Recursive tree hash implementation =================
+// =======================================================================
+
+fn hash_chunk(mut chunk: &[u8], key: &[Word; 8], offset: u64, is_root: IsRoot) -> [Word; 8] {
+    debug_assert!(chunk.len() <= CHUNK_BYTES);
+    debug_assert_eq!(offset % CHUNK_BYTES as u64, 0);
+    let mut state = iv(key);
+    let mut count = offset;
+    let mut maybe_start_flag = Flags::CHUNK_START;
+    while chunk.len() > BLOCK_BYTES {
+        let block = words_from_msg_bytes(array_ref!(chunk, 0, BLOCK_BYTES));
+        compress(
+            &mut state,
+            &block,
+            count,
+            BLOCK_BYTES as Word,
+            maybe_start_flag,
+        );
+        count += BLOCK_BYTES as u64;
+        chunk = &chunk[BLOCK_BYTES..];
+        maybe_start_flag = Flags::empty();
+    }
+    let mut last_block = [0; BLOCK_BYTES];
+    last_block[..chunk.len()].copy_from_slice(chunk);
+    compress(
+        &mut state,
+        &words_from_msg_bytes(&last_block),
+        count,
+        chunk.len() as Word,
+        maybe_start_flag | Flags::CHUNK_END | is_root.flag(),
+    );
+    state
+}
+
+fn hash_parent(
+    left_hash: &[Word; 8],
+    right_hash: &[Word; 8],
+    key: &[Word; 8],
+    is_root: IsRoot,
+) -> [Word; 8] {
+    let mut parent_words = [0; 16];
+    let refs = mut_array_refs!(&mut parent_words, 8, 8);
+    *refs.0 = *left_hash;
+    *refs.1 = *right_hash;
+    let mut state = iv(key);
+    compress(
+        &mut state,
+        &parent_words,
+        0,
+        BLOCK_BYTES as Word,
+        Flags::PARENT | is_root.flag(),
+    );
+    state
+}
+
+// Find the largest power of two that's less than or equal to `n`. We use this
+// for computing subtree sizes below.
+fn largest_power_of_two_leq(n: usize) -> usize {
+    ((n / 2) + 1).next_power_of_two()
+}
+
+// Given some input larger than one chunk, find the largest full tree of chunks
+// that can go on the left.
+fn left_len(content_len: usize) -> usize {
+    debug_assert!(content_len > CHUNK_BYTES);
+    // Subtract 1 to reserve at least one byte for the right side.
+    let full_chunks = (content_len - 1) / CHUNK_BYTES;
+    largest_power_of_two_leq(full_chunks) * CHUNK_BYTES
+}
+
+fn hash_recurse(input: &[u8], key: &[Word; 8], count: u64, is_root: IsRoot) -> [Word; 8] {
+    if input.len() <= CHUNK_BYTES {
+        return hash_chunk(input, key, count, is_root);
+    }
+    let (left, right) = input.split_at(left_len(input.len()));
+    let left_hash = hash_recurse(left, key, count, IsRoot::NotRoot);
+    let right_hash = hash_recurse(right, key, count + left.len() as u64, IsRoot::NotRoot);
+    hash_parent(&left_hash, &right_hash, key, is_root)
+}
+
+pub fn hash(input: &[u8], key: &[u8; KEY_BYTES]) -> [u8; OUT_BYTES] {
+    let key_words = words_from_key_bytes(key);
+    let hash_words = hash_recurse(input, &key_words, 0, IsRoot::Root);
+    bytes_from_state_words(&hash_words)
+}
+
+// =======================================================================
+// ================== Iterative tree hash implementation =================
+// =======================================================================
+
 #[derive(Clone)]
 struct ChunkState {
     half_state: [Word; 8],
@@ -312,27 +403,6 @@ impl ChunkState {
     }
 }
 
-fn hash_parent(
-    left_hash: &[Word; 8],
-    right_hash: &[Word; 8],
-    key: &[Word; 8],
-    is_root: IsRoot,
-) -> [Word; 8] {
-    let mut parent_words = [0; 16];
-    let refs = mut_array_refs!(&mut parent_words, 8, 8);
-    *refs.0 = *left_hash;
-    *refs.1 = *right_hash;
-    let mut state = iv(key);
-    compress(
-        &mut state,
-        &parent_words,
-        0,
-        BLOCK_BYTES as Word,
-        Flags::PARENT | is_root.flag(),
-    );
-    state
-}
-
 #[derive(Clone)]
 pub struct Hasher {
     key: [Word; 8],
@@ -405,12 +475,13 @@ impl Hasher {
         }
     }
 
-    pub fn finalize(&self) -> [Word; 8] {
+    pub fn finalize(&self) -> [u8; OUT_BYTES] {
         // If the current chunk is the only chunk, that makes it the root node
         // also. Hash it with the root flag and return that hash. Otherwise, we
         // need to merge all the existing subtrees.
         if self.subtree_hash_words.is_empty() {
-            self.chunk.finalize(IsRoot::Root)
+            let hash = self.chunk.finalize(IsRoot::Root);
+            bytes_from_state_words(&hash)
         } else {
             let mut hash = self.chunk.finalize(IsRoot::NotRoot);
             // Merge that rightmost chunk hash with every hash in the subtree
@@ -427,7 +498,7 @@ impl Hasher {
                 subtrees_remaining -= 1;
             }
             debug_assert_eq!(subtrees_remaining, 0);
-            hash
+            bytes_from_state_words(&hash)
         }
     }
 }
@@ -438,5 +509,112 @@ impl Hasher {
 impl fmt::Debug for Hasher {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Hasher {{ count: {} }}", self.chunk.total_count())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_largest_power_of_two_leq() {
+        let input_output = &[
+            // The zero case is nonsensical, but it does work.
+            (0, 1),
+            (1, 1),
+            (2, 2),
+            (3, 2),
+            (4, 4),
+            (5, 4),
+            (6, 4),
+            (7, 4),
+            (8, 8),
+            // the largest possible u64
+            (0xffffffffffffffff, 0x8000000000000000),
+        ];
+        for &(input, output) in input_output {
+            assert_eq!(
+                output,
+                largest_power_of_two_leq(input),
+                "wrong output for n={}",
+                input
+            );
+        }
+    }
+
+    #[test]
+    fn test_left_len() {
+        let input_output = &[
+            (CHUNK_BYTES + 1, CHUNK_BYTES),
+            (2 * CHUNK_BYTES - 1, CHUNK_BYTES),
+            (2 * CHUNK_BYTES, CHUNK_BYTES),
+            (2 * CHUNK_BYTES + 1, 2 * CHUNK_BYTES),
+            (4 * CHUNK_BYTES - 1, 2 * CHUNK_BYTES),
+            (4 * CHUNK_BYTES, 2 * CHUNK_BYTES),
+            (4 * CHUNK_BYTES + 1, 4 * CHUNK_BYTES),
+        ];
+        for &(input, output) in input_output {
+            assert_eq!(left_len(input), output);
+        }
+    }
+
+    // Interesting input lengths to run tests on.
+    pub const TEST_CASES: &[usize] = &[
+        0,
+        1,
+        10,
+        CHUNK_BYTES - 1,
+        CHUNK_BYTES,
+        CHUNK_BYTES + 1,
+        2 * CHUNK_BYTES - 1,
+        2 * CHUNK_BYTES,
+        2 * CHUNK_BYTES + 1,
+        3 * CHUNK_BYTES - 1,
+        3 * CHUNK_BYTES,
+        3 * CHUNK_BYTES + 1,
+        4 * CHUNK_BYTES - 1,
+        4 * CHUNK_BYTES,
+        4 * CHUNK_BYTES + 1,
+        8 * CHUNK_BYTES - 1,
+        8 * CHUNK_BYTES,
+        8 * CHUNK_BYTES + 1,
+    ];
+
+    // Paint a byte pattern that won't repeat, so that we don't accidentally
+    // miss buffer offset bugs.
+    fn paint_test_input(buf: &mut [u8]) {
+        let mut offset = 0;
+        let mut counter: u32 = 1;
+        while offset < buf.len() {
+            let bytes = counter.to_le_bytes();
+            let take = cmp::min(bytes.len(), buf.len() - offset);
+            buf[offset..][..take].copy_from_slice(&bytes[..take]);
+            counter += 1;
+            offset += take;
+        }
+    }
+
+    #[test]
+    fn test_recursive_incremental_same() {
+        let mut input_buf = [0; 65536];
+        paint_test_input(&mut input_buf);
+        for &case in TEST_CASES {
+            let input = &input_buf[..case];
+            let key = array_ref!(input_buf, 0, KEY_BYTES);
+
+            let recursive_hash = hash(input, key);
+
+            let mut hasher_all = Hasher::new(key);
+            hasher_all.append(input);
+            let incremental_hash_all = hasher_all.finalize();
+            assert_eq!(recursive_hash, incremental_hash_all);
+
+            let mut hasher_one_at_a_time = Hasher::new(key);
+            for &byte in input {
+                hasher_one_at_a_time.append(&[byte]);
+            }
+            let incremental_hash_one_at_a_time = hasher_one_at_a_time.finalize();
+            assert_eq!(recursive_hash, incremental_hash_one_at_a_time);
+        }
     }
 }
