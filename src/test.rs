@@ -188,3 +188,38 @@ fn test_three_blocks() {
     hasher.append(&input);
     assert_eq!(expected_hash, hasher.finalize());
 }
+
+#[test]
+fn test_three_chunks() {
+    let mut input = [0; 2 * CHUNK_BYTES + 1];
+    paint_test_input(&mut input);
+    let mut key = [0; KEY_BYTES];
+    paint_test_input(&mut key);
+    let key_words = words_from_key_bytes(&key);
+
+    let chunk0 = hash_chunk(&input[..CHUNK_BYTES], &key_words, 0, IsRoot::NotRoot);
+    let chunk1 = hash_chunk(
+        &input[CHUNK_BYTES..][..CHUNK_BYTES],
+        &key_words,
+        CHUNK_BYTES as u64,
+        IsRoot::NotRoot,
+    );
+    let chunk2 = hash_chunk(
+        &input[2 * CHUNK_BYTES..],
+        &key_words,
+        2 * CHUNK_BYTES as u64,
+        IsRoot::NotRoot,
+    );
+
+    let left_parent = hash_parent(&chunk0, &chunk1, &key_words, IsRoot::NotRoot);
+
+    let root_parent = hash_parent(&left_parent, &chunk2, &key_words, IsRoot::Root);
+
+    let expected_hash = bytes_from_state_words(&root_parent);
+
+    assert_eq!(expected_hash, hash(&input, &key));
+
+    let mut hasher = Hasher::new(&key);
+    hasher.append(&input);
+    assert_eq!(expected_hash, hasher.finalize());
+}
