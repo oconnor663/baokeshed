@@ -249,12 +249,15 @@ fn test_xof_small() {
     let hasher = hasher;
 
     let expected_hash = hasher.finalize();
-
     let mut xof = hasher.finalize_xof();
+
     let first_bytes = xof.read();
     assert_eq!(expected_hash.as_bytes(), &first_bytes);
+
     let second_bytes = xof.read();
     assert!(first_bytes != second_bytes);
+
     let third_bytes = xof.read();
+    assert!(first_bytes != third_bytes);
     assert!(second_bytes != third_bytes);
 }

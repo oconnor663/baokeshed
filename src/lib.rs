@@ -597,7 +597,7 @@ impl Hasher {
 
     pub fn finalize_xof(&self) -> Output {
         // If the current chunk is the only chunk, that makes it the root node
-        // also. Convert it directoy into an Output. Otherwise, we need to
+        // also. Convert it directly into an Output. Otherwise, we need to
         // merge subtrees.
         if self.subtree_hashes.is_empty() {
             self.chunk.finalize_xof()
@@ -622,9 +622,9 @@ impl Hasher {
     }
 }
 
-// Implement Debug manually for two reasons. 1) ArrayVec doesn't implement
-// Debug for large lengths yet. 2) We don't want to print subtree hashes,
-// because they might be secret.
+// We don't want to print subtree hashes or other intermediate words, because
+// they might be secret, and because they might enable length extension. So we
+// implement Debug manually.
 impl fmt::Debug for Hasher {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Hasher {{ count: {} }}", self.chunk.total_count())
