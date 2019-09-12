@@ -112,7 +112,7 @@ fn test_zero_bytes() {
     let block_words = words_from_msg_bytes(&block);
     let flags = Flags::CHUNK_START | Flags::CHUNK_END | Flags::ROOT;
     compress(&mut state, &block_words, 0, 0, flags);
-    let expected_hash = bytes_from_state_words(&state);
+    let expected_hash = hash_from_state_words(&state);
 
     assert_eq!(expected_hash, hash_keyed(&[], &key));
 
@@ -131,7 +131,7 @@ fn test_one_byte() {
     let block_words = words_from_msg_bytes(&block);
     let flags = Flags::CHUNK_START | Flags::CHUNK_END | Flags::ROOT;
     compress(&mut state, &block_words, 0, 1, flags);
-    let expected_hash = bytes_from_state_words(&state);
+    let expected_hash = hash_from_state_words(&state);
 
     assert_eq!(expected_hash, hash_keyed(&[9], &key));
 
@@ -180,7 +180,7 @@ fn test_three_blocks() {
         Flags::CHUNK_END | Flags::ROOT,
     );
 
-    let expected_hash = bytes_from_state_words(&state);
+    let expected_hash = hash_from_state_words(&state);
 
     assert_eq!(expected_hash, hash_keyed(&input, &key));
 
@@ -215,7 +215,7 @@ fn test_three_chunks() {
 
     let root_parent = hash_parent(&left_parent, &chunk2, &key_words, IsRoot::Root);
 
-    let expected_hash = bytes_from_state_words(&root_parent);
+    let expected_hash = hash_from_state_words(&root_parent);
 
     assert_eq!(expected_hash, hash_keyed(&input, &key));
 

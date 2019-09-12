@@ -1,5 +1,5 @@
 use arrayref::{array_mut_ref, array_ref, array_refs, mut_array_refs};
-use arrayvec::ArrayVec;
+use arrayvec::{ArrayString, ArrayVec};
 use core::cmp;
 use core::fmt;
 use core::mem::size_of;
@@ -172,7 +172,7 @@ fn words_from_key_bytes(bytes: &[u8; KEY_BYTES]) -> [Word; 8] {
     ]
 }
 
-fn bytes_from_state_words(words: &[Word; 8]) -> [u8; OUT_BYTES] {
+fn hash_from_state_words(words: &[Word; 8]) -> Hash {
     let mut bytes = [0; OUT_BYTES];
     {
         const W: usize = size_of::<Word>();
@@ -186,7 +186,7 @@ fn bytes_from_state_words(words: &[Word; 8]) -> [u8; OUT_BYTES] {
         *refs.6 = words[6].to_le_bytes();
         *refs.7 = words[7].to_le_bytes();
     }
-    bytes
+    bytes.into()
 }
 
 fn iv(key: &[Word; 8]) -> [Word; 8] {
@@ -200,6 +200,51 @@ fn iv(key: &[Word; 8]) -> [Word; 8] {
         IV[6] ^ key[6],
         IV[7] ^ key[7],
     ]
+}
+
+#[derive(Clone, Copy)]
+pub struct Hash([u8; OUT_BYTES]);
+
+impl Hash {
+    pub fn as_bytes(&self) -> &[u8; OUT_BYTES] {
+        &self.0
+    }
+
+    pub fn to_hex(&self) -> ArrayString<[u8; 2 * OUT_BYTES]> {
+        let mut s = ArrayString::new();
+        let table = b"0123456789abcdef";
+        for &b in self.0.iter() {
+            s.push(table[(b >> 4) as usize] as char);
+            s.push(table[(b & 0xf) as usize] as char);
+        }
+        s
+    }
+}
+
+impl From<[u8; OUT_BYTES]> for Hash {
+    fn from(bytes: [u8; OUT_BYTES]) -> Self {
+        Self(bytes)
+    }
+}
+
+impl PartialEq for Hash {
+    fn eq(&self, other: &Hash) -> bool {
+        constant_time_eq::constant_time_eq(&self.0[..], &other.0[..])
+    }
+}
+
+impl PartialEq<[u8]> for Hash {
+    fn eq(&self, other: &[u8]) -> bool {
+        constant_time_eq::constant_time_eq(&self.0[..], other)
+    }
+}
+
+impl Eq for Hash {}
+
+impl fmt::Debug for Hash {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Hash(0x{})", self.to_hex())
+    }
 }
 
 // =======================================================================
@@ -283,13 +328,13 @@ fn hash_recurse(input: &[u8], key: &[Word; 8], count: u64, is_root: IsRoot) -> [
     hash_parent(&left_hash, &right_hash, key, is_root)
 }
 
-pub fn hash_keyed(input: &[u8], key: &[u8; KEY_BYTES]) -> [u8; OUT_BYTES] {
+pub fn hash_keyed(input: &[u8], key: &[u8; KEY_BYTES]) -> Hash {
     let key_words = words_from_key_bytes(key);
     let hash_words = hash_recurse(input, &key_words, 0, IsRoot::Root);
-    bytes_from_state_words(&hash_words)
+    hash_from_state_words(&hash_words)
 }
 
-pub fn hash(input: &[u8]) -> [u8; OUT_BYTES] {
+pub fn hash(input: &[u8]) -> Hash {
     hash_keyed(input, &[0; KEY_BYTES])
 }
 
@@ -486,13 +531,13 @@ impl Hasher {
         }
     }
 
-    pub fn finalize(&self) -> [u8; OUT_BYTES] {
+    pub fn finalize(&self) -> Hash {
         // If the current chunk is the only chunk, that makes it the root node
         // also. Hash it with the root flag and return that hash. Otherwise, we
         // need to merge all the existing subtrees.
         if self.subtree_hash_words.is_empty() {
             let hash = self.chunk.finalize(IsRoot::Root);
-            bytes_from_state_words(&hash)
+            hash_from_state_words(&hash)
         } else {
             let mut hash = self.chunk.finalize(IsRoot::NotRoot);
             // Merge that rightmost chunk hash with every hash in the subtree
@@ -509,7 +554,7 @@ impl Hasher {
                 subtrees_remaining -= 1;
             }
             debug_assert_eq!(subtrees_remaining, 0);
-            bytes_from_state_words(&hash)
+            hash_from_state_words(&hash)
         }
     }
 }
