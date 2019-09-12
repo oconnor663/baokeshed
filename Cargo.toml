@@ -9,3 +9,7 @@ arrayref = "0.3.5"
 arrayvec = { version = "0.4.11", default-features = false }
 bitflags = "1.1.0"
 constant_time_eq = "0.1.4"
+
+[dev-dependencies]
+page_size = "0.4.1"
+rand = "0.7.0"
