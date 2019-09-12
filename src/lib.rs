@@ -363,8 +363,22 @@ fn hash_recurse(input: &[u8], key: &[Word; 8], count: u64, is_root: IsRoot) -> [
         return hash_chunk(input, key, count, is_root);
     }
     let (left, right) = input.split_at(left_len(input.len()));
-    let left_hash = hash_recurse(left, key, count, IsRoot::NotRoot);
-    let right_hash = hash_recurse(right, key, count + left.len() as u64, IsRoot::NotRoot);
+    let left_hash;
+    let right_hash;
+    #[cfg(feature = "rayon")]
+    {
+        let (l, r) = rayon::join(
+            || hash_recurse(left, key, count, IsRoot::NotRoot),
+            || hash_recurse(right, key, count + left.len() as u64, IsRoot::NotRoot),
+        );
+        left_hash = l;
+        right_hash = r;
+    }
+    #[cfg(not(feature = "rayon"))]
+    {
+        left_hash = hash_recurse(left, key, count, IsRoot::NotRoot);
+        right_hash = hash_recurse(right, key, count + left.len() as u64, IsRoot::NotRoot);
+    }
     hash_parent(&left_hash, &right_hash, key, is_root)
 }
 
