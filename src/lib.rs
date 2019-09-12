@@ -195,6 +195,13 @@ impl Output {
     }
 }
 
+// Derive an empty Debug impl, because the contents might be secret.
+impl fmt::Debug for Output {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Output {{ ... }}")
+    }
+}
+
 // =======================================================================
 // ================== Recursive tree hash implementation =================
 // =======================================================================
@@ -519,9 +526,7 @@ impl Hasher {
     }
 }
 
-// We don't want to print subtree hashes or other intermediate words, because
-// they might be secret, and because they might enable length extension. So we
-// implement Debug manually.
+// Derive an empty Debug impl, because the contents might be secret.
 impl fmt::Debug for Hasher {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Hasher {{ ... }}")
