@@ -24,10 +24,11 @@ use core::cmp;
 use core::fmt;
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-pub mod avx2;
+mod avx2;
+pub mod platform;
 mod portable;
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-pub mod sse41;
+mod sse41;
 
 #[cfg(test)]
 mod test;
@@ -419,7 +420,7 @@ impl ChunkState {
         output
     }
 
-    // IsRoot::Root is implied here.
+    // Root is implied here.
     fn finalize_xof(&self) -> Output {
         debug_assert_eq!(self.offset, 0);
         Output {
