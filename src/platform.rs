@@ -20,7 +20,8 @@ type HashManyFn = unsafe fn(
     inputs: &[*const u8],
     blocks: usize,
     key: &[Word; 8],
-    offsets: &[u64],
+    offset: u64,
+    offset_delta: u64,
     flags_all: Word,
     flags_start: Word,
     flags_end: Word,
@@ -74,7 +75,7 @@ impl Platform {
         &self,
         chunks: &[&[u8; CHUNK_BYTES]],
         key: &[Word; 8],
-        offsets: &[u64],
+        offset: u64,
         flags_all: Word,
         flags_start: Word,
         flags_end: Word,
@@ -83,7 +84,7 @@ impl Platform {
         let blocks = CHUNK_BYTES / BLOCK_BYTES;
         unsafe {
             // Safe because the layout of arrays is guaranteed, and because the
-            // `blocks` count determined statically from the argument type.
+            // `blocks` count is determined statically from the argument type.
             let chunk_ptrs: &[*const u8] =
                 core::slice::from_raw_parts(chunks.as_ptr() as *const *const u8, chunks.len());
             // Safe because detect() checked for platform support.
@@ -91,8 +92,41 @@ impl Platform {
                 chunk_ptrs,
                 blocks,
                 key,
-                offsets,
+                offset,
+                CHUNK_BYTES as u64,
                 flags_all,
+                flags_start,
+                flags_end,
+                out,
+            );
+        }
+    }
+
+    pub fn hash_many_parents(
+        &self,
+        parents: &[&[u8; BLOCK_BYTES]],
+        key: &[Word; 8],
+        flags: Word,
+        out: &mut [u8],
+    ) {
+        let blocks = 1;
+        unsafe {
+            // Safe because the layout of arrays is guaranteed, and because the
+            // `blocks` count is determined statically from the argument type.
+            let parent_ptrs: &[*const u8] =
+                core::slice::from_raw_parts(parents.as_ptr() as *const *const u8, parents.len());
+            // Safe because detect() checked for platform support.
+            let offset = 0;
+            let offset_delta = 0;
+            let flags_start = 0;
+            let flags_end = 0;
+            (self.hash_many_fn)(
+                parent_ptrs,
+                blocks,
+                key,
+                offset,
+                offset_delta,
+                flags,
                 flags_start,
                 flags_end,
                 out,
@@ -101,62 +135,38 @@ impl Platform {
     }
 }
 
-unsafe fn hash_one(
-    input: *const u8,
-    mut blocks: usize,
-    key: &[Word; 8],
-    offset: u64,
-    flags_all: Word,
-    flags_start: Word,
-    flags_end: Word,
-    out: &mut [u8; OUT_BYTES],
-    compression_fn: CompressionFn,
-) {
-    let mut state = iv(key);
-    let mut flags = flags_all | flags_start;
-    while blocks > 0 {
-        if blocks == 1 {
-            flags |= flags_end;
-        }
-        compression_fn(
-            &mut state,
-            &*(input as *const [u8; BLOCK_BYTES]),
-            BLOCK_BYTES as Word,
-            offset,
-            flags,
-        );
-        blocks -= 1;
-        flags = flags_all;
-    }
-    *out = bytes_from_state_words(&state);
-}
-
 unsafe fn hash_many_serial(
     mut inputs: &[*const u8],
     blocks: usize,
     key: &[Word; 8],
-    mut offsets: &[u64],
+    mut offset: u64,
+    offset_delta: u64,
     flags_all: Word,
     flags_start: Word,
     flags_end: Word,
     mut out: &mut [u8],
     compression_fn: CompressionFn,
 ) {
-    while !inputs.is_empty() && !offsets.is_empty() && out.len() >= OUT_BYTES {
-        hash_one(
-            inputs[0],
-            blocks,
-            key,
-            offsets[0],
-            flags_all,
-            flags_start,
-            flags_end,
-            array_mut_ref!(out, 0, OUT_BYTES),
-            compression_fn,
-        );
+    while !inputs.is_empty() && out.len() >= OUT_BYTES {
+        let mut state = iv(key);
+        let mut flags = flags_all | flags_start;
+        for block in 0..blocks {
+            if block == blocks - 1 {
+                flags |= flags_end;
+            }
+            compression_fn(
+                &mut state,
+                &*(inputs[0] as *const [u8; BLOCK_BYTES]),
+                BLOCK_BYTES as Word,
+                offset,
+                flags,
+            );
+            flags = flags_all;
+        }
+        *array_mut_ref!(out, 0, OUT_BYTES) = bytes_from_state_words(&state);
         inputs = &inputs[1..];
-        offsets = &offsets[1..];
         out = &mut out[OUT_BYTES..];
+        offset += offset_delta;
     }
 }
 
@@ -164,7 +174,8 @@ unsafe fn hash_many_portable(
     inputs: &[*const u8],
     blocks: usize,
     key: &[Word; 8],
-    offsets: &[u64],
+    offset: u64,
+    offset_delta: u64,
     flags_all: Word,
     flags_start: Word,
     flags_end: Word,
@@ -174,7 +185,8 @@ unsafe fn hash_many_portable(
         inputs,
         blocks,
         key,
-        offsets,
+        offset,
+        offset_delta,
         flags_all,
         flags_start,
         flags_end,
@@ -188,50 +200,44 @@ unsafe fn hash_many_sse41(
     mut inputs: &[*const u8],
     blocks: usize,
     key: &[Word; 8],
-    mut offsets: &[u64],
+    mut offset: u64,
+    offset_delta: u64,
     flags_all: Word,
     flags_start: Word,
     flags_end: Word,
     mut out: &mut [u8],
 ) {
-    while inputs.len() >= sse41::DEGREE
-        && offsets.len() >= sse41::DEGREE
-        && out.len() >= sse41::DEGREE * OUT_BYTES
-    {
+    while inputs.len() >= sse41::DEGREE && out.len() >= sse41::DEGREE * OUT_BYTES {
         let inputs_array = array_ref!(inputs, 0, sse41::DEGREE);
-        let offsets_array = array_ref!(offsets, 0, sse41::DEGREE);
         let out_array = array_mut_ref!(out, 0, sse41::DEGREE * OUT_BYTES);
         sse41::compress4_loop(
             inputs_array,
             blocks,
             key,
-            offsets_array,
+            offset,
+            offset_delta,
             flags_all,
             flags_start,
             flags_end,
             out_array,
         );
         inputs = &inputs[sse41::DEGREE..];
-        offsets = &offsets[sse41::DEGREE..];
         out = &mut out[sse41::DEGREE * OUT_BYTES..];
+        offset += sse41::DEGREE as u64 * offset_delta;
     }
 
-    while !inputs.is_empty() && !offsets.is_empty() && out.len() >= OUT_BYTES {
-        hash_one(
-            inputs[0],
-            blocks,
-            key,
-            offsets[0],
-            flags_all,
-            flags_start,
-            flags_end,
-            array_mut_ref!(out, 0, OUT_BYTES),
-            sse41::compress,
-        );
-        inputs = &inputs[1..];
-        offsets = &offsets[1..];
-        out = &mut out[OUT_BYTES..];
-    }
+    hash_many_serial(
+        inputs,
+        blocks,
+        key,
+        offset,
+        offset_delta,
+        flags_all,
+        flags_start,
+        flags_end,
+        out,
+        sse41::compress,
+    );
 }
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
@@ -239,39 +245,38 @@ unsafe fn hash_many_avx2(
     mut inputs: &[*const u8],
     blocks: usize,
     key: &[Word; 8],
-    mut offsets: &[u64],
+    mut offset: u64,
+    offset_delta: u64,
     flags_all: Word,
     flags_start: Word,
     flags_end: Word,
     mut out: &mut [u8],
 ) {
-    while inputs.len() >= avx2::DEGREE
-        && offsets.len() >= avx2::DEGREE
-        && out.len() >= avx2::DEGREE * OUT_BYTES
-    {
+    while inputs.len() >= avx2::DEGREE && out.len() >= avx2::DEGREE * OUT_BYTES {
         let inputs_array = array_ref!(inputs, 0, avx2::DEGREE);
-        let offsets_array = array_ref!(offsets, 0, avx2::DEGREE);
         let out_array = array_mut_ref!(out, 0, avx2::DEGREE * OUT_BYTES);
         avx2::compress8_loop(
             inputs_array,
             blocks,
             key,
-            offsets_array,
+            offset,
+            offset_delta,
             flags_all,
             flags_start,
             flags_end,
             out_array,
         );
         inputs = &inputs[avx2::DEGREE..];
-        offsets = &offsets[avx2::DEGREE..];
         out = &mut out[avx2::DEGREE * OUT_BYTES..];
+        offset += avx2::DEGREE as u64 * offset_delta;
     }
 
     hash_many_sse41(
         inputs,
         blocks,
         key,
-        offsets,
+        offset,
+        offset_delta,
         flags_all,
         flags_start,
         flags_end,
@@ -297,10 +302,8 @@ mod test {
         let mut input_buf = [0; NUM_INPUTS * BLOCK_BYTES];
         crate::test::paint_test_input(&mut input_buf);
         let mut blocks_array = ArrayVec::<[*const u8; NUM_INPUTS]>::new();
-        let mut offsets_array = ArrayVec::<[u64; NUM_INPUTS]>::new();
         for i in 0..NUM_INPUTS {
             blocks_array.push(input_buf[i * BLOCK_BYTES..].as_ptr());
-            offsets_array.push(i as u64);
         }
 
         let mut out_portable = [0; NUM_INPUTS * OUT_BYTES];
@@ -309,7 +312,8 @@ mod test {
                 &blocks_array,
                 1,
                 &[42; 8],
-                &offsets_array,
+                1001,
+                1002,
                 1,
                 2,
                 4,
@@ -323,7 +327,8 @@ mod test {
                 &blocks_array,
                 1,
                 &[42; 8],
-                &offsets_array,
+                1001,
+                1002,
                 1,
                 2,
                 4,
@@ -347,10 +352,8 @@ mod test {
         let mut input_buf = [0; NUM_INPUTS * BLOCK_BYTES];
         crate::test::paint_test_input(&mut input_buf);
         let mut blocks_array = ArrayVec::<[*const u8; NUM_INPUTS]>::new();
-        let mut offsets_array = ArrayVec::<[u64; NUM_INPUTS]>::new();
         for i in 0..NUM_INPUTS {
             blocks_array.push(input_buf[i * BLOCK_BYTES..].as_ptr());
-            offsets_array.push(i as u64);
         }
 
         let mut out_portable = [0; NUM_INPUTS * OUT_BYTES];
@@ -359,7 +362,8 @@ mod test {
                 &blocks_array,
                 1,
                 &[42; 8],
-                &offsets_array,
+                1001,
+                1002,
                 1,
                 2,
                 4,
@@ -373,7 +377,8 @@ mod test {
                 &blocks_array,
                 1,
                 &[42; 8],
-                &offsets_array,
+                1001,
+                1002,
                 1,
                 2,
                 4,

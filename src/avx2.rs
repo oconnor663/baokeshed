@@ -316,27 +316,27 @@ unsafe fn transpose_msg_vecs(inputs: &[*const u8; DEGREE], block_offset: usize) 
 }
 
 #[inline(always)]
-unsafe fn load_offsets(offsets: &[u64; DEGREE]) -> (__m256i, __m256i) {
+unsafe fn load_offsets(offset: u64, offset_delta: u64) -> (__m256i, __m256i) {
     (
         set8(
-            offsets[0] as Word,
-            offsets[1] as Word,
-            offsets[2] as Word,
-            offsets[3] as Word,
-            offsets[4] as Word,
-            offsets[5] as Word,
-            offsets[6] as Word,
-            offsets[7] as Word,
+            (offset + 0 * offset_delta) as Word,
+            (offset + 1 * offset_delta) as Word,
+            (offset + 2 * offset_delta) as Word,
+            (offset + 3 * offset_delta) as Word,
+            (offset + 4 * offset_delta) as Word,
+            (offset + 5 * offset_delta) as Word,
+            (offset + 6 * offset_delta) as Word,
+            (offset + 7 * offset_delta) as Word,
         ),
         set8(
-            (offsets[0] >> WORD_BITS) as Word,
-            (offsets[1] >> WORD_BITS) as Word,
-            (offsets[2] >> WORD_BITS) as Word,
-            (offsets[3] >> WORD_BITS) as Word,
-            (offsets[4] >> WORD_BITS) as Word,
-            (offsets[5] >> WORD_BITS) as Word,
-            (offsets[6] >> WORD_BITS) as Word,
-            (offsets[7] >> WORD_BITS) as Word,
+            ((offset + 0 * offset_delta) >> WORD_BITS) as Word,
+            ((offset + 1 * offset_delta) >> WORD_BITS) as Word,
+            ((offset + 2 * offset_delta) >> WORD_BITS) as Word,
+            ((offset + 3 * offset_delta) >> WORD_BITS) as Word,
+            ((offset + 4 * offset_delta) >> WORD_BITS) as Word,
+            ((offset + 5 * offset_delta) >> WORD_BITS) as Word,
+            ((offset + 6 * offset_delta) >> WORD_BITS) as Word,
+            ((offset + 7 * offset_delta) >> WORD_BITS) as Word,
         ),
     )
 }
@@ -346,7 +346,8 @@ pub unsafe fn compress8_loop(
     inputs: &[*const u8; DEGREE],
     mut blocks: usize,
     key: &[Word; 8],
-    offsets: &[u64; DEGREE],
+    offset: u64,
+    offset_delta: u64,
     // flags_start and flags_end get OR'ed into flags_all when applicable.
     flags_all: Word,
     flags_start: Word,
@@ -363,7 +364,7 @@ pub unsafe fn compress8_loop(
         xor(set1(IV[6]), set1(key[6])),
         xor(set1(IV[7]), set1(key[7])),
     ];
-    let (offset_low_vec, offset_high_vec) = load_offsets(offsets);
+    let (offset_low_vec, offset_high_vec) = load_offsets(offset, offset_delta);
     let mut block_flags = flags_all | flags_start;
 
     let mut block_offset = 0;
@@ -482,7 +483,8 @@ mod test {
                 &inputs,
                 1,
                 &key,
-                &[0; DEGREE],
+                0,
+                0,
                 Flags::PARENT.bits(),
                 Flags::empty().bits(),
                 Flags::empty().bits(),
@@ -550,22 +552,13 @@ mod test {
             chunks[6].as_ptr(),
             chunks[7].as_ptr(),
         ];
-        let offsets = [
-            0 * CHUNK_BYTES as u64,
-            1 * CHUNK_BYTES as u64,
-            2 * CHUNK_BYTES as u64,
-            3 * CHUNK_BYTES as u64,
-            4 * CHUNK_BYTES as u64,
-            5 * CHUNK_BYTES as u64,
-            6 * CHUNK_BYTES as u64,
-            7 * CHUNK_BYTES as u64,
-        ];
         unsafe {
             compress8_loop(
                 &inputs,
                 CHUNK_BYTES / BLOCK_BYTES,
                 &key,
-                &offsets,
+                0,
+                CHUNK_BYTES as u64,
                 Flags::empty().bits(),
                 Flags::CHUNK_START.bits(),
                 Flags::CHUNK_END.bits(),
