@@ -520,22 +520,36 @@ unsafe fn transpose_msg_vecs(inputs: [*const u8; DEGREE], block_offset: usize) -
     vecs
 }
 
+#[inline(always)]
+unsafe fn load_offsets(offsets: &[u64; DEGREE]) -> (__m128i, __m128i) {
+    (
+        set4(
+            offsets[0] as Word,
+            offsets[1] as Word,
+            offsets[2] as Word,
+            offsets[3] as Word,
+        ),
+        set4(
+            (offsets[0] >> WORD_BITS) as Word,
+            (offsets[1] >> WORD_BITS) as Word,
+            (offsets[2] >> WORD_BITS) as Word,
+            (offsets[3] >> WORD_BITS) as Word,
+        ),
+    )
+}
+
 #[target_feature(enable = "sse4.1")]
 pub unsafe fn compress4_loop(
     inputs: [*const u8; DEGREE],
     mut blocks: usize,
     key: &[Word; 8],
-    offset_low_words: &[Word; DEGREE],
-    offset_high_words: &[Word; DEGREE],
+    offsets: &[u64; DEGREE],
     // flags_start and flags_end get OR'ed into flags_all when applicable.
     flags_all: Word,
     flags_start: Word,
     flags_end: Word,
     out: &mut [u8; DEGREE * OUT_BYTES],
 ) {
-    let offset_low_vec = loadu(offset_low_words.as_ptr() as _);
-    let offset_high_vec = loadu(offset_high_words.as_ptr() as _);
-    let mut block_flags = flags_all | flags_start;
     let mut h_vecs = [
         xor(set1(IV[0]), set1(key[0])),
         xor(set1(IV[1]), set1(key[1])),
@@ -546,6 +560,8 @@ pub unsafe fn compress4_loop(
         xor(set1(IV[6]), set1(key[6])),
         xor(set1(IV[7]), set1(key[7])),
     ];
+    let (offset_low_vec, offset_high_vec) = load_offsets(offsets);
+    let mut block_flags = flags_all | flags_start;
 
     let mut block_offset = 0;
     while blocks > 0 {
@@ -696,7 +712,6 @@ mod test {
                 1,
                 &key,
                 &[0; DEGREE],
-                &[0; DEGREE],
                 Flags::PARENT.bits(),
                 Flags::empty().bits(),
                 Flags::empty().bits(),
@@ -756,19 +771,18 @@ mod test {
             chunks[2].as_ptr(),
             chunks[3].as_ptr(),
         ];
-        let offsets_low = [
-            0 * CHUNK_BYTES as Word,
-            1 * CHUNK_BYTES as Word,
-            2 * CHUNK_BYTES as Word,
-            3 * CHUNK_BYTES as Word,
+        let offsets = [
+            0 * CHUNK_BYTES as u64,
+            1 * CHUNK_BYTES as u64,
+            2 * CHUNK_BYTES as u64,
+            3 * CHUNK_BYTES as u64,
         ];
         unsafe {
             compress4_loop(
                 inputs,
                 CHUNK_BYTES / BLOCK_BYTES,
                 &key,
-                &offsets_low,
-                &[0; DEGREE],
+                &offsets,
                 Flags::empty().bits(),
                 Flags::CHUNK_START.bits(),
                 Flags::CHUNK_END.bits(),
