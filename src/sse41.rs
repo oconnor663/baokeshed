@@ -493,7 +493,7 @@ unsafe fn transpose_vecs(vecs: &mut [__m128i; DEGREE]) {
 }
 
 #[inline(always)]
-unsafe fn transpose_msg_vecs(inputs: [*const u8; DEGREE], block_offset: usize) -> [__m128i; 16] {
+unsafe fn transpose_msg_vecs(inputs: &[*const u8; DEGREE], block_offset: usize) -> [__m128i; 16] {
     let mut vecs = [
         loadu(inputs[0].add(block_offset + 0 * WORD_BYTES * DEGREE)),
         loadu(inputs[1].add(block_offset + 0 * WORD_BYTES * DEGREE)),
@@ -540,7 +540,7 @@ unsafe fn load_offsets(offsets: &[u64; DEGREE]) -> (__m128i, __m128i) {
 
 #[target_feature(enable = "sse4.1")]
 pub unsafe fn compress4_loop(
-    inputs: [*const u8; DEGREE],
+    inputs: &[*const u8; DEGREE],
     mut blocks: usize,
     key: &[Word; 8],
     offsets: &[u64; DEGREE],
@@ -708,7 +708,7 @@ mod test {
         ];
         unsafe {
             compress4_loop(
-                inputs,
+                &inputs,
                 1,
                 &key,
                 &[0; DEGREE],
@@ -779,7 +779,7 @@ mod test {
         ];
         unsafe {
             compress4_loop(
-                inputs,
+                &inputs,
                 CHUNK_BYTES / BLOCK_BYTES,
                 &key,
                 &offsets,

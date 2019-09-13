@@ -290,7 +290,7 @@ unsafe fn transpose_vecs(vecs: &mut [__m256i; DEGREE]) {
 }
 
 #[inline(always)]
-unsafe fn transpose_msg_vecs(inputs: [*const u8; DEGREE], block_offset: usize) -> [__m256i; 16] {
+unsafe fn transpose_msg_vecs(inputs: &[*const u8; DEGREE], block_offset: usize) -> [__m256i; 16] {
     let mut vecs = [
         loadu(inputs[0].add(block_offset + 0 * WORD_BYTES * DEGREE)),
         loadu(inputs[1].add(block_offset + 0 * WORD_BYTES * DEGREE)),
@@ -343,7 +343,7 @@ unsafe fn load_offsets(offsets: &[u64; DEGREE]) -> (__m256i, __m256i) {
 
 #[target_feature(enable = "avx2")]
 pub unsafe fn compress8_loop(
-    inputs: [*const u8; DEGREE],
+    inputs: &[*const u8; DEGREE],
     mut blocks: usize,
     key: &[Word; 8],
     offsets: &[u64; DEGREE],
@@ -479,7 +479,7 @@ mod test {
         ];
         unsafe {
             compress8_loop(
-                inputs,
+                &inputs,
                 1,
                 &key,
                 &[0; DEGREE],
@@ -562,7 +562,7 @@ mod test {
         ];
         unsafe {
             compress8_loop(
-                inputs,
+                &inputs,
                 CHUNK_BYTES / BLOCK_BYTES,
                 &key,
                 &offsets,
