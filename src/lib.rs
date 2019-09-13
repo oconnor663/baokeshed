@@ -22,10 +22,11 @@ use arrayref::{array_ref, array_refs, mut_array_refs};
 use arrayvec::{ArrayString, ArrayVec};
 use core::cmp;
 use core::fmt;
+use platform::Platform;
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod avx2;
-pub mod platform;
+mod platform;
 mod portable;
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod sse41;
@@ -175,6 +176,9 @@ impl fmt::Debug for Hash {
     }
 }
 
+/// A very simple interface to the XOF, as a proof of concept. A more
+/// fleshed-out implementation would implement `std::io::{Read, Seek}` and
+/// would use SIMD parallelism internally.
 #[derive(Clone)]
 pub struct Output {
     state: [Word; 8],
@@ -182,13 +186,14 @@ pub struct Output {
     block_len: u8,
     flags: Flags,
     offset: u64,
+    platform: Platform,
 }
 
 impl Output {
     pub fn read(&mut self) -> [u8; OUT_BYTES] {
         debug_assert!(self.flags.contains(Flags::ROOT));
         let mut state_copy = self.state;
-        portable::compress(
+        self.platform.compress(
             &mut state_copy,
             &self.block,
             self.block_len as Word,
@@ -211,7 +216,13 @@ impl fmt::Debug for Output {
 // ================== Recursive tree hash implementation =================
 // =======================================================================
 
-fn hash_chunk(mut chunk: &[u8], key: &[Word; 8], offset: u64, is_root: IsRoot) -> [Word; 8] {
+fn hash_chunk(
+    mut chunk: &[u8],
+    key: &[Word; 8],
+    offset: u64,
+    is_root: IsRoot,
+    platform: Platform,
+) -> [Word; 8] {
     debug_assert!(chunk.len() <= CHUNK_BYTES);
     debug_assert_eq!(offset % CHUNK_BYTES as u64, 0);
     if let IsRoot::Root = is_root {
@@ -222,7 +233,7 @@ fn hash_chunk(mut chunk: &[u8], key: &[Word; 8], offset: u64, is_root: IsRoot) -
     let mut state = iv(key);
     let mut maybe_start_flag = Flags::CHUNK_START;
     while chunk.len() > BLOCK_BYTES {
-        portable::compress(
+        platform.compress(
             &mut state,
             array_ref!(chunk, 0, BLOCK_BYTES),
             BLOCK_BYTES as Word,
@@ -235,7 +246,7 @@ fn hash_chunk(mut chunk: &[u8], key: &[Word; 8], offset: u64, is_root: IsRoot) -
     let mut last_block = [0; BLOCK_BYTES];
     last_block[..chunk.len()].copy_from_slice(chunk);
     let flags = maybe_start_flag | Flags::CHUNK_END | is_root.flag();
-    portable::compress(
+    platform.compress(
         &mut state,
         &last_block,
         chunk.len() as Word,
@@ -258,10 +269,11 @@ fn hash_parent(
     right_hash: &[Word; 8],
     key: &[Word; 8],
     is_root: IsRoot,
+    platform: Platform,
 ) -> [Word; 8] {
     let mut state = iv(key);
     let flags = Flags::PARENT | is_root.flag();
-    portable::compress(
+    platform.compress(
         &mut state,
         &concat_parent(left_hash, right_hash),
         BLOCK_BYTES as Word,
@@ -286,30 +298,37 @@ fn left_len(content_len: usize) -> usize {
     largest_power_of_two_leq(full_chunks) * CHUNK_BYTES
 }
 
-fn hash_recurse(input: &[u8], key: &[Word; 8], offset: u64, is_root: IsRoot) -> [Word; 8] {
+fn hash_recurse(
+    input: &[u8],
+    key: &[Word; 8],
+    offset: u64,
+    is_root: IsRoot,
+    platform: Platform,
+) -> [Word; 8] {
     if input.len() <= CHUNK_BYTES {
-        return hash_chunk(input, key, offset, is_root);
+        return hash_chunk(input, key, offset, is_root, platform);
     }
     let (left, right) = input.split_at(left_len(input.len()));
     let right_offset = offset + left.len() as u64;
 
     #[cfg(feature = "rayon")]
     let children = rayon::join(
-        || hash_recurse(left, key, offset, IsRoot::NotRoot),
-        || hash_recurse(right, key, right_offset, IsRoot::NotRoot),
+        || hash_recurse(left, key, offset, IsRoot::NotRoot, platform),
+        || hash_recurse(right, key, right_offset, IsRoot::NotRoot, platform),
     );
     #[cfg(not(feature = "rayon"))]
     let children = (
-        hash_recurse(left, key, offset, IsRoot::NotRoot),
-        hash_recurse(right, key, right_offset, IsRoot::NotRoot),
+        hash_recurse(left, key, offset, IsRoot::NotRoot, platform),
+        hash_recurse(right, key, right_offset, IsRoot::NotRoot, platform),
     );
 
-    hash_parent(&children.0, &children.1, key, is_root)
+    hash_parent(&children.0, &children.1, key, is_root, platform)
 }
 
 pub fn hash_keyed(input: &[u8], key: &[u8; KEY_BYTES]) -> Hash {
+    let platform = Platform::detect();
     let key_words = words_from_key_bytes(key);
-    let hash_words = hash_recurse(input, &key_words, 0, IsRoot::Root);
+    let hash_words = hash_recurse(input, &key_words, 0, IsRoot::Root, platform);
     hash_from_state_words(&hash_words)
 }
 
@@ -364,13 +383,13 @@ impl ChunkState {
         }
     }
 
-    fn append(&mut self, mut input: &[u8]) {
+    fn append(&mut self, mut input: &[u8], platform: Platform) {
         if self.buf_len > 0 {
             self.fill_buf(&mut input);
             if !input.is_empty() {
                 debug_assert_eq!(self.buf_len as usize, BLOCK_BYTES);
                 let flags = self.maybe_chunk_start_flag();
-                portable::compress(
+                platform.compress(
                     &mut self.state,
                     &self.buf,
                     BLOCK_BYTES as Word,
@@ -386,7 +405,7 @@ impl ChunkState {
         while input.len() > BLOCK_BYTES {
             debug_assert_eq!(self.buf_len, 0);
             let flags = self.maybe_chunk_start_flag();
-            portable::compress(
+            platform.compress(
                 &mut self.state,
                 array_ref!(input, 0, BLOCK_BYTES),
                 BLOCK_BYTES as Word,
@@ -402,7 +421,7 @@ impl ChunkState {
         debug_assert!(self.len() <= CHUNK_BYTES);
     }
 
-    fn finalize(&self, is_root: IsRoot) -> [Word; 8] {
+    fn finalize(&self, is_root: IsRoot, platform: Platform) -> [Word; 8] {
         if let IsRoot::Root = is_root {
             // Root finalization starts with offset 0 to support the XOF, so
             // it's convenient that only the chunk at offset 0 can be the root.
@@ -410,7 +429,7 @@ impl ChunkState {
         }
         let mut output = self.state;
         let flags = self.maybe_chunk_start_flag() | Flags::CHUNK_END | is_root.flag();
-        portable::compress(
+        platform.compress(
             &mut output,
             &self.buf,
             self.buf_len as Word,
@@ -421,7 +440,7 @@ impl ChunkState {
     }
 
     // Root is implied here.
-    fn finalize_xof(&self) -> Output {
+    fn finalize_xof(&self, platform: Platform) -> Output {
         debug_assert_eq!(self.offset, 0);
         Output {
             state: self.state,
@@ -429,6 +448,7 @@ impl ChunkState {
             block_len: self.buf_len,
             flags: self.maybe_chunk_start_flag() | Flags::CHUNK_END | Flags::ROOT,
             offset: 0,
+            platform,
         }
     }
 }
@@ -438,6 +458,7 @@ pub struct Hasher {
     key: [Word; 8],
     chunk: ChunkState,
     subtree_hashes: ArrayVec<[[Word; 8]; MAX_DEPTH]>,
+    platform: Platform,
 }
 
 impl Hasher {
@@ -451,6 +472,7 @@ impl Hasher {
             key,
             chunk: ChunkState::new(&key, 0),
             subtree_hashes: ArrayVec::new(),
+            platform: Platform::detect(),
         }
     }
 
@@ -475,7 +497,13 @@ impl Hasher {
         let left_hash = &self.subtree_hashes[num_subtrees - 2];
         let right_hash = &self.subtree_hashes[num_subtrees - 1];
         // This isn't called during finalization, so this merge is non-root.
-        let hash = hash_parent(left_hash, right_hash, &self.key, IsRoot::NotRoot);
+        let hash = hash_parent(
+            left_hash,
+            right_hash,
+            &self.key,
+            IsRoot::NotRoot,
+            self.platform,
+        );
         self.subtree_hashes[num_subtrees - 2] = hash;
         self.subtree_hashes.truncate(num_subtrees - 1)
     }
@@ -485,7 +513,7 @@ impl Hasher {
             // More input coming means that we can finish this chunk and merge
             // parents without doing root finalization.
             if self.chunk.len() == CHUNK_BYTES {
-                let chunk_hash = self.chunk.finalize(IsRoot::NotRoot);
+                let chunk_hash = self.chunk.finalize(IsRoot::NotRoot, self.platform);
                 self.subtree_hashes.push(chunk_hash);
                 let total_bytes = self.chunk.offset + CHUNK_BYTES as u64;
                 while self.needs_merge(total_bytes) {
@@ -495,7 +523,7 @@ impl Hasher {
             }
             let want = CHUNK_BYTES - self.chunk.len();
             let take = cmp::min(want, input.len());
-            self.chunk.append(&input[..take]);
+            self.chunk.append(&input[..take], self.platform);
             input = &input[take..];
         }
     }
@@ -509,16 +537,16 @@ impl Hasher {
         // also. Convert it directly into an Output. Otherwise, we need to
         // merge subtrees.
         if self.subtree_hashes.is_empty() {
-            self.chunk.finalize_xof()
+            self.chunk.finalize_xof(self.platform)
         } else {
-            let mut hash = self.chunk.finalize(IsRoot::NotRoot);
+            let mut hash = self.chunk.finalize(IsRoot::NotRoot, self.platform);
             // Merge that rightmost chunk hash with each successive subtree,
             // from right (smallest) to left (largest) until there's only one
             // subtree remaining. Then convert the final parent node into an
             // Output.
             for subtree_index in (1..self.subtree_hashes.len()).rev() {
                 let subtree = &self.subtree_hashes[subtree_index];
-                hash = hash_parent(subtree, &hash, &self.key, IsRoot::NotRoot);
+                hash = hash_parent(subtree, &hash, &self.key, IsRoot::NotRoot, self.platform);
             }
             Output {
                 state: iv(&self.key),
@@ -526,6 +554,7 @@ impl Hasher {
                 block_len: BLOCK_BYTES as u8,
                 flags: Flags::PARENT | Flags::ROOT,
                 offset: 0,
+                platform: self.platform,
             }
         }
     }

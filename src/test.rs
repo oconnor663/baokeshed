@@ -192,23 +192,43 @@ fn test_three_chunks() {
     paint_test_input(&mut key);
     let key_words = words_from_key_bytes(&key);
 
-    let chunk0 = hash_chunk(&input[..CHUNK_BYTES], &key_words, 0, IsRoot::NotRoot);
+    let chunk0 = hash_chunk(
+        &input[..CHUNK_BYTES],
+        &key_words,
+        0,
+        IsRoot::NotRoot,
+        Platform::detect(),
+    );
     let chunk1 = hash_chunk(
         &input[CHUNK_BYTES..][..CHUNK_BYTES],
         &key_words,
         CHUNK_BYTES as u64,
         IsRoot::NotRoot,
+        Platform::detect(),
     );
     let chunk2 = hash_chunk(
         &input[2 * CHUNK_BYTES..],
         &key_words,
         2 * CHUNK_BYTES as u64,
         IsRoot::NotRoot,
+        Platform::detect(),
     );
 
-    let left_parent = hash_parent(&chunk0, &chunk1, &key_words, IsRoot::NotRoot);
+    let left_parent = hash_parent(
+        &chunk0,
+        &chunk1,
+        &key_words,
+        IsRoot::NotRoot,
+        Platform::detect(),
+    );
 
-    let root_parent = hash_parent(&left_parent, &chunk2, &key_words, IsRoot::Root);
+    let root_parent = hash_parent(
+        &left_parent,
+        &chunk2,
+        &key_words,
+        IsRoot::Root,
+        Platform::detect(),
+    );
 
     let expected_hash = hash_from_state_words(&root_parent);
 

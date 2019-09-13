@@ -122,7 +122,7 @@ unsafe fn undiagonalize(row1: &mut __m128i, row3: &mut __m128i, row4: &mut __m12
     *row3 = _mm_shuffle_epi32(*row3, _MM_SHUFFLE!(2, 1, 0, 3));
 }
 
-#[inline(always)]
+#[target_feature(enable = "sse4.1")]
 pub unsafe fn compress(
     state: &mut [Word; 8],
     block: &[u8; BLOCK_BYTES],

@@ -27,6 +27,7 @@ type HashManyFn = unsafe fn(
     out: &mut [u8],
 );
 
+#[derive(Clone, Copy)]
 pub struct Platform {
     compression_fn: CompressionFn,
     hash_many_fn: HashManyFn,
