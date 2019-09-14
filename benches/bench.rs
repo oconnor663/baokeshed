@@ -6,11 +6,13 @@ use baokeshed::*;
 use rand::prelude::*;
 use test::Bencher;
 
-const SHORT: usize = baokeshed::BLOCK_BYTES;
+const BLOCK: usize = baokeshed::BLOCK_BYTES;
 
-const MEDIUM: usize = baokeshed::CHUNK_BYTES;
+const CHUNK: usize = baokeshed::CHUNK_BYTES;
 
-const LONG: usize = 1 << 20;
+const MEDIUM: usize = baokeshed::MAX_SIMD_DEGREE * baokeshed::CHUNK_BYTES;
+
+const LONG: usize = 1 << 24; // 16 MiB
 
 // This struct randomizes two things:
 // 1. The actual bytes of input.
@@ -50,26 +52,32 @@ impl RandomInput {
 }
 
 #[bench]
-fn bench_hash_short(b: &mut Bencher) {
-    let mut input = RandomInput::new(b, SHORT);
-    b.iter(|| baokeshed::hash(input.get()));
-}
-
-#[bench]
-fn bench_hash_medium(b: &mut Bencher) {
-    let mut input = RandomInput::new(b, MEDIUM);
-    b.iter(|| baokeshed::hash(input.get()));
-}
-
-#[bench]
-fn bench_hash_long(b: &mut Bencher) {
+fn bench_hash_01_long(b: &mut Bencher) {
     let mut input = RandomInput::new(b, LONG);
     b.iter(|| baokeshed::hash(input.get()));
 }
 
 #[bench]
-fn bench_hasher_short(b: &mut Bencher) {
-    let mut input = RandomInput::new(b, SHORT);
+fn bench_hash_02_medium(b: &mut Bencher) {
+    let mut input = RandomInput::new(b, MEDIUM);
+    b.iter(|| baokeshed::hash(input.get()));
+}
+
+#[bench]
+fn bench_hash_03_chunk(b: &mut Bencher) {
+    let mut input = RandomInput::new(b, CHUNK);
+    b.iter(|| baokeshed::hash(input.get()));
+}
+
+#[bench]
+fn bench_hash_04_block(b: &mut Bencher) {
+    let mut input = RandomInput::new(b, BLOCK);
+    b.iter(|| baokeshed::hash(input.get()));
+}
+
+#[bench]
+fn bench_hasher_01_long(b: &mut Bencher) {
+    let mut input = RandomInput::new(b, LONG);
     b.iter(|| {
         let mut hasher = Hasher::new();
         hasher.append(input.get());
@@ -78,7 +86,7 @@ fn bench_hasher_short(b: &mut Bencher) {
 }
 
 #[bench]
-fn bench_hasher_medium(b: &mut Bencher) {
+fn bench_hasher_02_medium(b: &mut Bencher) {
     let mut input = RandomInput::new(b, MEDIUM);
     b.iter(|| {
         let mut hasher = Hasher::new();
@@ -88,8 +96,18 @@ fn bench_hasher_medium(b: &mut Bencher) {
 }
 
 #[bench]
-fn bench_hasher_long(b: &mut Bencher) {
-    let mut input = RandomInput::new(b, LONG);
+fn bench_hasher_03_chunk(b: &mut Bencher) {
+    let mut input = RandomInput::new(b, CHUNK);
+    b.iter(|| {
+        let mut hasher = Hasher::new();
+        hasher.append(input.get());
+        hasher.finalize()
+    });
+}
+
+#[bench]
+fn bench_hasher_04_block(b: &mut Bencher) {
+    let mut input = RandomInput::new(b, BLOCK);
     b.iter(|| {
         let mut hasher = Hasher::new();
         hasher.append(input.get());

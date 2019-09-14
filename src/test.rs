@@ -111,7 +111,7 @@ fn test_zero_bytes() {
     let block = [0; BLOCK_BYTES];
     let flags = Flags::CHUNK_START | Flags::CHUNK_END | Flags::ROOT;
     portable::compress(&mut state, &block, 0, 0, flags.bits());
-    let expected_hash = hash_from_state_words(&state);
+    let expected_hash: Hash = bytes_from_state_words(&state).into();
 
     assert_eq!(expected_hash, hash_keyed(&[], &key));
 
@@ -129,7 +129,7 @@ fn test_one_byte() {
     block[0] = 9;
     let flags = Flags::CHUNK_START | Flags::CHUNK_END | Flags::ROOT;
     portable::compress(&mut state, &block, 1, 0, flags.bits());
-    let expected_hash = hash_from_state_words(&state);
+    let expected_hash: Hash = bytes_from_state_words(&state).into();
 
     assert_eq!(expected_hash, hash_keyed(&[9], &key));
 
@@ -175,7 +175,7 @@ fn test_three_blocks() {
         (Flags::CHUNK_END | Flags::ROOT).bits(),
     );
 
-    let expected_hash = hash_from_state_words(&state);
+    let expected_hash: Hash = bytes_from_state_words(&state).into();
 
     assert_eq!(expected_hash, hash_keyed(&input, &key));
 
@@ -192,29 +192,32 @@ fn test_three_chunks() {
     paint_test_input(&mut key);
     let key_words = words_from_key_bytes(&key);
 
-    let chunk0 = hash_chunk(
+    let chunk0 = hash_one_chunk(
         &input[..CHUNK_BYTES],
         &key_words,
         0,
         IsRoot::NotRoot,
         Platform::detect(),
-    );
-    let chunk1 = hash_chunk(
+    )
+    .read();
+    let chunk1 = hash_one_chunk(
         &input[CHUNK_BYTES..][..CHUNK_BYTES],
         &key_words,
         CHUNK_BYTES as u64,
         IsRoot::NotRoot,
         Platform::detect(),
-    );
-    let chunk2 = hash_chunk(
+    )
+    .read();
+    let chunk2 = hash_one_chunk(
         &input[2 * CHUNK_BYTES..],
         &key_words,
         2 * CHUNK_BYTES as u64,
         IsRoot::NotRoot,
         Platform::detect(),
-    );
+    )
+    .read();
 
-    let left_parent = hash_parent(
+    let left_parent = hash_one_parent(
         &chunk0,
         &chunk1,
         &key_words,
@@ -222,15 +225,14 @@ fn test_three_chunks() {
         Platform::detect(),
     );
 
-    let root_parent = hash_parent(
+    let expected_hash: Hash = hash_one_parent(
         &left_parent,
         &chunk2,
         &key_words,
         IsRoot::Root,
         Platform::detect(),
-    );
-
-    let expected_hash = hash_from_state_words(&root_parent);
+    )
+    .into();
 
     assert_eq!(expected_hash, hash_keyed(&input, &key));
 
@@ -253,18 +255,18 @@ fn test_default_key() {
 }
 
 #[test]
-fn test_xof_small() {
+fn test_xof_output() {
     let input = b"abc";
+    let expected_hash = hash(input);
 
     let mut hasher = Hasher::new();
     hasher.append(input);
-
     // Pin hasher as immutable for all of the following.
     let hasher = hasher;
 
-    let expected_hash = hasher.finalize();
-    let mut xof = hasher.finalize_xof();
+    assert_eq!(expected_hash, hasher.finalize());
 
+    let mut xof = hasher.finalize_xof();
     let first_bytes = xof.read();
     assert_eq!(expected_hash.as_bytes(), &first_bytes);
 
@@ -274,4 +276,17 @@ fn test_xof_small() {
     let third_bytes = xof.read();
     assert!(first_bytes != third_bytes);
     assert!(second_bytes != third_bytes);
+}
+
+#[test]
+fn test_keyed_xof_wrappers() {
+    let input = b"abc";
+    let expected_hash = hash(input);
+    let mut xof = hash_xof(input);
+    assert!(expected_hash == xof.read());
+
+    let key = [42; KEY_BYTES];
+    let expected_keyed_hash = hash_keyed(input, &key);
+    let mut keyed_xof = hash_keyed_xof(input, &key);
+    assert_eq!(expected_keyed_hash, keyed_xof.read());
 }

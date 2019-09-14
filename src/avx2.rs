@@ -344,7 +344,7 @@ unsafe fn load_offsets(offset: u64, offset_delta: u64) -> (__m256i, __m256i) {
 #[target_feature(enable = "avx2")]
 pub unsafe fn compress8_loop(
     inputs: &[*const u8; DEGREE],
-    mut blocks: usize,
+    blocks: usize,
     key: &[Word; 8],
     offset: u64,
     offset_delta: u64,
@@ -365,15 +365,14 @@ pub unsafe fn compress8_loop(
         xor(set1(IV[7]), set1(key[7])),
     ];
     let (offset_low_vec, offset_high_vec) = load_offsets(offset, offset_delta);
-    let mut block_flags = flags_all | flags_start;
+    let mut flags = flags_all | flags_start;
 
-    let mut block_offset = 0;
-    while blocks > 0 {
-        if blocks == 1 {
-            block_flags |= flags_end;
+    for block in 0..blocks {
+        if block + 1 == blocks {
+            flags |= flags_end;
         }
-        let flags_vec = set1(block_flags);
-        let msg_vecs = transpose_msg_vecs(inputs, block_offset);
+        let flags_vec = set1(flags);
+        let msg_vecs = transpose_msg_vecs(inputs, block * BLOCK_BYTES);
         compress8_transposed(
             &mut h_vecs,
             &msg_vecs,
@@ -381,9 +380,7 @@ pub unsafe fn compress8_loop(
             offset_high_vec,
             flags_vec,
         );
-        block_offset += BLOCK_BYTES;
-        block_flags = flags_all;
-        blocks -= 1;
+        flags = flags_all;
     }
 
     transpose_vecs(&mut h_vecs);
