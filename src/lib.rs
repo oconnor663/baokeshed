@@ -40,14 +40,16 @@ const WORD_BYTES: usize = core::mem::size_of::<Word>();
 const WORD_BITS: usize = 8 * WORD_BYTES;
 const MAX_DEPTH: usize = 52; // 2^52 * 4096 = 2^64
 const DEFAULT_KEY: &[u8; KEY_BYTES] = &[0; KEY_BYTES];
+
 pub const OUT_BYTES: usize = 8 * WORD_BYTES;
 pub const KEY_BYTES: usize = 8 * WORD_BYTES;
 
-#[doc(hidden)] // for benchmarks
+// These are pub for tests and benchmarks. Callers don't need them.
+#[doc(hidden)]
 pub const BLOCK_BYTES: usize = 16 * WORD_BYTES;
-#[doc(hidden)] // for benchmarks
+#[doc(hidden)]
 pub const CHUNK_BYTES: usize = 4096;
-#[doc(hidden)] // for benchmarks
+#[doc(hidden)]
 pub use platform::MAX_SIMD_DEGREE;
 
 const IV: [Word; 8] = [
@@ -184,8 +186,8 @@ pub struct Output {
     state: [Word; 8],
     block: [u8; BLOCK_BYTES],
     block_len: u8,
-    flags: Flags,
     offset: u64,
+    flags: Flags,
     platform: Platform,
 }
 
@@ -218,11 +220,11 @@ impl fmt::Debug for Output {
 // This isn't as fast as hash_chunks_parallel when multiple chunks are
 // available, but it handles partial chunks and root/XOF finalization.
 //
-// Note that when we use this function internally, we might finalize chunks
-// with non-zero offsets. But outputs returned publicly are always root
-// finalizations, and those always start at offset zero, because they're either
-// the only chunk (which is always going to sit at offset zero) or a parent
-// node (which is offset zero by definition).
+// Note that when we use this function internally, we might build Output
+// objects without the root flag and with non-zero offsets. But Output objects
+// returned publicly are always root finalizations starting at offset zero.
+// That's because the root is either the only chunk (which is always going to
+// sit at offset zero) or a parent node (which is offset zero by definition).
 fn hash_one_chunk(
     chunk: &[u8],
     key: &[Word; 8],
@@ -242,8 +244,8 @@ fn hash_one_chunk(
                 state,
                 block: *array_ref!(chunk, block_offset, BLOCK_BYTES),
                 block_len: BLOCK_BYTES as u8,
-                flags: flags | Flags::CHUNK_END | is_root.flag(),
                 offset,
+                flags: flags | Flags::CHUNK_END | is_root.flag(),
                 platform,
             };
         }
@@ -268,8 +270,8 @@ fn hash_one_chunk(
         state,
         block: last_block,
         block_len: block_len as u8,
-        flags: flags | Flags::CHUNK_END | is_root.flag(),
         offset,
+        flags: flags | Flags::CHUNK_END | is_root.flag(),
         platform,
     }
 }
@@ -285,11 +287,11 @@ fn hash_chunks_parallel(
     out: &mut [u8],
 ) -> usize {
     debug_assert!(!input.is_empty(), "empty chunks below the root");
-    debug_assert!(input.len() <= platform::MAX_SIMD_DEGREE * CHUNK_BYTES);
+    debug_assert!(input.len() <= MAX_SIMD_DEGREE * CHUNK_BYTES);
     debug_assert_eq!(offset % CHUNK_BYTES as u64, 0, "invalid offset");
 
     let mut chunks_exact = input.chunks_exact(CHUNK_BYTES);
-    let mut chunks_array = ArrayVec::<[&[u8; CHUNK_BYTES]; platform::MAX_SIMD_DEGREE]>::new();
+    let mut chunks_array = ArrayVec::<[&[u8; CHUNK_BYTES]; MAX_SIMD_DEGREE]>::new();
     for chunk in &mut chunks_exact {
         chunks_array.push(array_ref!(chunk, 0, CHUNK_BYTES));
     }
@@ -334,10 +336,10 @@ fn hash_parents_parallel(
     debug_assert_eq!(child_hashes.len() % OUT_BYTES, 0, "wacky hash bytes");
     let num_children = child_hashes.len() / OUT_BYTES;
     debug_assert!(num_children >= 2, "not enough children");
-    debug_assert!(num_children <= 2 * platform::MAX_SIMD_DEGREE, "too many");
+    debug_assert!(num_children <= 2 * MAX_SIMD_DEGREE, "too many");
 
     let mut parents_exact = child_hashes.chunks_exact(BLOCK_BYTES);
-    let mut parents_array = ArrayVec::<[&[u8; BLOCK_BYTES]; platform::MAX_SIMD_DEGREE]>::new();
+    let mut parents_array = ArrayVec::<[&[u8; BLOCK_BYTES]; MAX_SIMD_DEGREE]>::new();
     for parent in &mut parents_exact {
         parents_array.push(array_ref!(parent, 0, BLOCK_BYTES));
     }
@@ -401,7 +403,7 @@ fn hash_recurse(
     let (left, right) = input.split_at(left_len(input.len()));
     let right_off = offset + left.len() as u64;
     debug_assert_eq!(platform.simd_degree().count_ones(), 1, "power of two");
-    let mut children_array = [0; 2 * platform::MAX_SIMD_DEGREE * OUT_BYTES];
+    let mut children_array = [0; 2 * MAX_SIMD_DEGREE * OUT_BYTES];
     let (left_out, right_out) = children_array.split_at_mut(platform.simd_degree() * OUT_BYTES);
 
     let (left_n, right_n) = join(
@@ -422,7 +424,7 @@ fn hash_recurse(
 fn condense_root(mut children: &mut [u8], key: &[Word; 8], platform: Platform) -> Output {
     debug_assert_eq!(children.len() % OUT_BYTES, 0);
     debug_assert!(children.len() >= BLOCK_BYTES);
-    let mut out_array = [0; platform::MAX_SIMD_DEGREE * OUT_BYTES / 2];
+    let mut out_array = [0; MAX_SIMD_DEGREE * OUT_BYTES / 2];
     while children.len() > BLOCK_BYTES {
         let out_n = hash_parents_parallel(children, key, platform, &mut out_array);
         children[..out_n * OUT_BYTES].copy_from_slice(&out_array[..out_n * OUT_BYTES]);
@@ -444,7 +446,7 @@ pub fn hash_keyed_xof(input: &[u8], key: &[u8; KEY_BYTES]) -> Output {
     if input.len() <= CHUNK_BYTES {
         return hash_one_chunk(input, &key_words, 0, IsRoot::Root, platform);
     }
-    let mut children_array = [0; platform::MAX_SIMD_DEGREE * OUT_BYTES];
+    let mut children_array = [0; MAX_SIMD_DEGREE * OUT_BYTES];
     let num_children = if input.len() <= platform.simd_degree() * CHUNK_BYTES {
         // We don't call hash_recurse when there are <= simd_degree children,
         // because in that cases it might need to root/XOF finalize, and we
@@ -557,58 +559,52 @@ impl ChunkState {
         debug_assert!(self.len() <= CHUNK_BYTES);
     }
 
-    fn finalize(&self, is_root: IsRoot, platform: Platform) -> [u8; OUT_BYTES] {
+    // Note that similar to hash_one_chunk, when we use this function
+    // internally, we might build Output objects without the root flag and with
+    // non-zero offsets. But Output objects returned publicly are always root
+    // finalizations starting at offset zero.
+    fn finalize(&self, is_root: IsRoot, platform: Platform) -> Output {
         if let IsRoot::Root = is_root {
             // Root finalization starts with offset 0 to support the XOF, so
             // it's convenient that only the chunk at offset 0 can be the root.
             debug_assert_eq!(self.offset, 0);
         }
-        let mut state = self.state;
-        let flags = self.maybe_chunk_start_flag() | Flags::CHUNK_END | is_root.flag();
-        platform.compress(
-            &mut state,
-            &self.buf,
-            self.buf_len as Word,
-            self.offset,
-            flags.bits(),
-        );
-        bytes_from_state_words(&state)
-    }
-
-    // Root is implied here.
-    fn finalize_xof(&self, platform: Platform) -> Output {
-        debug_assert_eq!(self.offset, 0);
         Output {
             state: self.state,
             block: self.buf,
             block_len: self.buf_len,
-            flags: self.maybe_chunk_start_flag() | Flags::CHUNK_END | Flags::ROOT,
-            offset: 0,
+            offset: self.offset,
+            flags: self.maybe_chunk_start_flag() | Flags::CHUNK_END | is_root.flag(),
             platform,
         }
     }
 }
 
+// This isn't as fast as hash_parents_parallel when multiple parents are
+// available, but it handles root/XOF finalization.
+//
+// Note that similar to hash_one_chunk, when we use this function internally,
+// we might build Output objects without the root flag. But Output objects
+// returned publicly are always root finalizations.
 fn hash_one_parent(
     left_child: &[u8; OUT_BYTES],
     right_child: &[u8; OUT_BYTES],
     key: &[Word; 8],
     is_root: IsRoot,
     platform: Platform,
-) -> [u8; OUT_BYTES] {
-    let mut state = iv(key);
+) -> Output {
     let mut block = [0; BLOCK_BYTES];
     let refs = mut_array_refs!(&mut block, OUT_BYTES, OUT_BYTES);
     *refs.0 = *left_child;
     *refs.1 = *right_child;
-    platform.compress(
-        &mut state,
-        &block,
-        BLOCK_BYTES as Word,
-        0,
-        (Flags::PARENT | is_root.flag()).bits(),
-    );
-    bytes_from_state_words(&state)
+    Output {
+        state: iv(key),
+        block,
+        block_len: BLOCK_BYTES as u8,
+        offset: 0,
+        flags: Flags::PARENT | is_root.flag(),
+        platform,
+    }
 }
 
 #[derive(Clone)]
@@ -658,28 +654,102 @@ impl Hasher {
             &self.key,
             IsRoot::NotRoot,
             self.platform,
-        );
+        )
+        .read();
         self.subtree_hashes[num_subtrees - 2] = hash;
         self.subtree_hashes.truncate(num_subtrees - 1)
     }
 
+    fn push_chunk_hash(&mut self, hash: &[u8; OUT_BYTES], offset: u64) {
+        // Do subtree merging *before* pushing the new hash. That way we know
+        // that the merged parent node isn't the root.
+        while self.needs_merge(offset) {
+            self.merge_parent();
+        }
+        self.subtree_hashes.push(*hash);
+    }
+
     pub fn append(&mut self, mut input: &[u8]) {
-        while !input.is_empty() {
-            // More input coming means that we can finish this chunk and merge
-            // parents without doing root finalization.
-            if self.chunk.len() == CHUNK_BYTES {
-                let chunk_hash = self.chunk.finalize(IsRoot::NotRoot, self.platform);
-                self.subtree_hashes.push(chunk_hash);
-                let total_bytes = self.chunk.offset + CHUNK_BYTES as u64;
-                while self.needs_merge(total_bytes) {
-                    self.merge_parent();
-                }
-                self.chunk = ChunkState::new(&self.key, total_bytes);
-            }
+        // When we have whole chunks coming in, hash_chunks_parallel gives the
+        // best performance. However, we have to be careful with the very first
+        // chunk. If we don't have more input yet, then we don't know whether
+        // it's the root, and we have to keep it in the ChunkState until we
+        // find out. Also, if we have any partial chunk bytes in the ChunkState
+        // already, we need to finish it.
+        let is_first_chunk = self.chunk.offset == 0;
+        let maybe_root = is_first_chunk && input.len() == CHUNK_BYTES;
+        if maybe_root || self.chunk.len() > 0 {
             let want = CHUNK_BYTES - self.chunk.len();
             let take = cmp::min(want, input.len());
             self.chunk.append(&input[..take], self.platform);
             input = &input[take..];
+            if !input.is_empty() {
+                // We've filled the current chunk, and there's more input
+                // coming, so we know it's not the root and we can finalize it.
+                // Then we'll proceed to hashing whole chunks below.
+                debug_assert_eq!(self.chunk.len(), CHUNK_BYTES);
+                let chunk_hash = self.chunk.finalize(IsRoot::NotRoot, self.platform).read();
+                self.push_chunk_hash(&chunk_hash, self.chunk.offset);
+                self.chunk = ChunkState::new(&self.key, self.chunk.offset + CHUNK_BYTES as u64);
+            } else {
+                return;
+            }
+        }
+
+        // At this point, the ChunkState is clear. Hash all the full chunks
+        // that we can, using SIMD parallelism. But note that this still
+        // single-threaded. (Only the recursive hash functions are
+        // multi-threaded.)
+        let mut chunks_exact = input.chunks_exact(CHUNK_BYTES);
+        let mut fused_chunks = chunks_exact
+            .by_ref()
+            .map(|chunk| array_ref!(chunk, 0, CHUNK_BYTES))
+            .fuse();
+        let mut chunks_array = ArrayVec::<[&[u8; CHUNK_BYTES]; MAX_SIMD_DEGREE]>::new();
+        let mut out_array = [0; MAX_SIMD_DEGREE * OUT_BYTES];
+        debug_assert_eq!(self.chunk.len(), 0);
+        loop {
+            chunks_array.extend(fused_chunks.by_ref().take(MAX_SIMD_DEGREE));
+            if chunks_array.is_empty() {
+                // We've exhausted the whole chunks. Add any remaining input to
+                // the ChunkState below.
+                break;
+            }
+            self.platform.hash_many_chunks(
+                &chunks_array,
+                &self.key,
+                self.chunk.offset,
+                Flags::empty().bits(),
+                Flags::CHUNK_START.bits(),
+                Flags::CHUNK_END.bits(),
+                &mut out_array,
+            );
+            for chunk_hash in out_array.chunks_exact(OUT_BYTES).take(chunks_array.len()) {
+                self.push_chunk_hash(array_ref!(chunk_hash, 0, OUT_BYTES), self.chunk.offset);
+                // Move the ChunkState's offset forward after each hash. This
+                // is safe because it's clear, and it leaves it in the right
+                // position for any remainder bytes below or subsequent calls
+                // to append.
+                self.chunk.offset += CHUNK_BYTES as u64;
+            }
+            chunks_array.clear();
+        }
+
+        // The loop above hashed all the whole chunks it could. If there are
+        // any bytes left, add them to the ChunkState. The ChunkState's offset
+        // may have been updated above.
+        debug_assert_eq!(self.chunk.len(), 0);
+        debug_assert!(chunks_exact.remainder().len() < CHUNK_BYTES);
+        if !chunks_exact.remainder().is_empty() {
+            // Working ahead: The subtree_hashes stack might contain subtrees
+            // that need to be merged. Normally these would be merged by the
+            // next call to push_subtree. However, if we go ahead and take care
+            // of it now (since we see there's more input), that will simplify
+            // finalization later.
+            while self.needs_merge(self.chunk.offset) {
+                self.merge_parent();
+            }
+            self.chunk.append(chunks_exact.remainder(), self.platform);
         }
     }
 
@@ -690,31 +760,51 @@ impl Hasher {
     pub fn finalize_xof(&self) -> Output {
         // If the current chunk is the only chunk, that makes it the root node
         // also. Convert it directly into an Output. Otherwise, we need to
-        // merge subtrees.
+        // merge subtrees below.
         if self.subtree_hashes.is_empty() {
-            self.chunk.finalize_xof(self.platform)
+            return self.chunk.finalize(IsRoot::Root, self.platform);
+        }
+
+        // If there are any bytes in the ChunkState, finalize that chunk and
+        // merge it with everything in the subtree stack. In that case, the
+        // work we did at the end of append above guarantees that the stack
+        // doesn't contain any unmerged subtrees that need to be merged first.
+        // (This is important, because if there were two chunk hashes sitting
+        // on top of the stack, they would need to merge with each other, and
+        // merging a new chunk hash into them would be incorrect.)
+        //
+        // If there are no bytes in the ChunkState, we'll merge what's already
+        // in the stack. In this case it's fine if there are unmerged chunks on
+        // top, because we'll merge them with each other.
+        let mut working_hash;
+        let mut next_subtree_index;
+        if self.chunk.len() > 0 {
+            debug_assert!(!self.needs_merge(self.chunk.offset));
+            working_hash = self.chunk.finalize(IsRoot::NotRoot, self.platform).read();
+            next_subtree_index = self.subtree_hashes.len() - 1;
         } else {
-            let mut hash = self.chunk.finalize(IsRoot::NotRoot, self.platform);
-            // Merge that rightmost chunk hash with each successive subtree,
-            // from right (smallest) to left (largest) until there's only one
-            // subtree remaining. Then convert the final parent node into an
-            // Output.
-            for subtree_index in (1..self.subtree_hashes.len()).rev() {
-                let subtree = &self.subtree_hashes[subtree_index];
-                hash = hash_one_parent(subtree, &hash, &self.key, IsRoot::NotRoot, self.platform);
+            debug_assert!(self.subtree_hashes.len() >= 2);
+            working_hash = *self.subtree_hashes.last().unwrap();
+            next_subtree_index = self.subtree_hashes.len() - 2;
+        }
+        loop {
+            let is_root = if next_subtree_index == 0 {
+                IsRoot::Root
+            } else {
+                IsRoot::NotRoot
+            };
+            let mut output = hash_one_parent(
+                &self.subtree_hashes[next_subtree_index],
+                &working_hash,
+                &self.key,
+                is_root,
+                self.platform,
+            );
+            if next_subtree_index == 0 {
+                return output;
             }
-            let mut parent_block = [0; BLOCK_BYTES];
-            let refs = mut_array_refs!(&mut parent_block, OUT_BYTES, OUT_BYTES);
-            *refs.0 = self.subtree_hashes[0];
-            *refs.1 = hash;
-            Output {
-                state: iv(&self.key),
-                block: parent_block,
-                block_len: BLOCK_BYTES as u8,
-                flags: Flags::PARENT | Flags::ROOT,
-                offset: 0,
-                platform: self.platform,
-            }
+            working_hash = output.read();
+            next_subtree_index -= 1;
         }
     }
 }

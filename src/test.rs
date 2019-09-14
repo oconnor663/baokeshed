@@ -46,20 +46,21 @@ fn test_left_len() {
 pub const TEST_CASES: &[usize] = &[
     0,
     1,
-    10,
     CHUNK_BYTES - 1,
     CHUNK_BYTES,
     CHUNK_BYTES + 1,
-    2 * CHUNK_BYTES - 1,
     2 * CHUNK_BYTES,
     2 * CHUNK_BYTES + 1,
-    3 * CHUNK_BYTES - 1,
     3 * CHUNK_BYTES,
     3 * CHUNK_BYTES + 1,
-    4 * CHUNK_BYTES - 1,
     4 * CHUNK_BYTES,
     4 * CHUNK_BYTES + 1,
-    8 * CHUNK_BYTES - 1,
+    5 * CHUNK_BYTES,
+    5 * CHUNK_BYTES + 1,
+    6 * CHUNK_BYTES,
+    6 * CHUNK_BYTES + 1,
+    7 * CHUNK_BYTES,
+    7 * CHUNK_BYTES + 1,
     8 * CHUNK_BYTES,
     8 * CHUNK_BYTES + 1,
 ];
@@ -80,7 +81,11 @@ pub fn paint_test_input(buf: &mut [u8]) {
 
 #[test]
 fn test_recursive_incremental_same() {
-    let mut input_buf = [0; 65536];
+    // This is a pretty large stack array. I don't want to use a Vec here,
+    // because these tests need to be no_std compatible. If this becomes a
+    // problem, we can make this one an integration test instead, which would
+    // let it use std:: even when the crate doesn't.
+    let mut input_buf = [0; 100 * CHUNK_BYTES];
     paint_test_input(&mut input_buf);
     for &case in TEST_CASES {
         let input = &input_buf[..case];
@@ -223,7 +228,8 @@ fn test_three_chunks() {
         &key_words,
         IsRoot::NotRoot,
         Platform::detect(),
-    );
+    )
+    .read();
 
     let expected_hash: Hash = hash_one_parent(
         &left_parent,
@@ -232,6 +238,7 @@ fn test_three_chunks() {
         IsRoot::Root,
         Platform::detect(),
     )
+    .read()
     .into();
 
     assert_eq!(expected_hash, hash_keyed(&input, &key));
