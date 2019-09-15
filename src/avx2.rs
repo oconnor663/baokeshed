@@ -191,52 +191,6 @@ unsafe fn round(v: &mut [__m256i; 16], m: &[__m256i; 16], r: usize) {
     v[4] = rot7(v[4]);
 }
 
-// TODO: Inlining this seems to blow up build times. Benchmark it.
-#[inline(always)]
-unsafe fn compress8_transposed(
-    h_vecs: &mut [__m256i; 8],
-    msg_vecs: &[__m256i; 16],
-    offset_low: __m256i,
-    offset_high: __m256i,
-    flags: __m256i,
-) {
-    let mut v = [
-        h_vecs[0],
-        h_vecs[1],
-        h_vecs[2],
-        h_vecs[3],
-        h_vecs[4],
-        h_vecs[5],
-        h_vecs[6],
-        h_vecs[7],
-        set1(IV[0]),
-        set1(IV[1]),
-        set1(IV[2]),
-        set1(IV[3]),
-        xor(set1(IV[4]), offset_low),
-        xor(set1(IV[5]), offset_high),
-        xor(set1(IV[6]), set1(BLOCK_BYTES as Word)), // full blocks only
-        xor(set1(IV[7]), flags),
-    ];
-
-    round(&mut v, &msg_vecs, 0);
-    round(&mut v, &msg_vecs, 1);
-    round(&mut v, &msg_vecs, 2);
-    round(&mut v, &msg_vecs, 3);
-    round(&mut v, &msg_vecs, 4);
-    round(&mut v, &msg_vecs, 5);
-    round(&mut v, &msg_vecs, 6);
-
-    h_vecs[0] = xor(v[0], v[8]);
-    h_vecs[1] = xor(v[1], v[9]);
-    h_vecs[2] = xor(v[2], v[10]);
-    h_vecs[3] = xor(v[3], v[11]);
-    h_vecs[4] = xor(v[4], v[12]);
-    h_vecs[5] = xor(v[5], v[13]);
-    h_vecs[6] = xor(v[6], v[14]);
-    h_vecs[7] = xor(v[7], v[15]);
-}
-
 #[inline(always)]
 unsafe fn interleave128(a: __m256i, b: __m256i) -> (__m256i, __m256i) {
     (
@@ -373,13 +327,45 @@ pub unsafe fn compress8_loop(
         }
         let flags_vec = set1(flags);
         let msg_vecs = transpose_msg_vecs(inputs, block * BLOCK_BYTES);
-        compress8_transposed(
-            &mut h_vecs,
-            &msg_vecs,
-            offset_low_vec,
-            offset_high_vec,
-            flags_vec,
-        );
+
+        // The transposed compression function. Note that inlining this
+        // manually here improves compile times by a lot, compared to factoring
+        // it out into its own function and making it #[inline(always)]. Just
+        // guessing, it might have something to do with loop unrolling.
+        let mut v = [
+            h_vecs[0],
+            h_vecs[1],
+            h_vecs[2],
+            h_vecs[3],
+            h_vecs[4],
+            h_vecs[5],
+            h_vecs[6],
+            h_vecs[7],
+            set1(IV[0]),
+            set1(IV[1]),
+            set1(IV[2]),
+            set1(IV[3]),
+            xor(set1(IV[4]), offset_low_vec),
+            xor(set1(IV[5]), offset_high_vec),
+            xor(set1(IV[6]), set1(BLOCK_BYTES as Word)), // full blocks only
+            xor(set1(IV[7]), flags_vec),
+        ];
+        round(&mut v, &msg_vecs, 0);
+        round(&mut v, &msg_vecs, 1);
+        round(&mut v, &msg_vecs, 2);
+        round(&mut v, &msg_vecs, 3);
+        round(&mut v, &msg_vecs, 4);
+        round(&mut v, &msg_vecs, 5);
+        round(&mut v, &msg_vecs, 6);
+        h_vecs[0] = xor(v[0], v[8]);
+        h_vecs[1] = xor(v[1], v[9]);
+        h_vecs[2] = xor(v[2], v[10]);
+        h_vecs[3] = xor(v[3], v[11]);
+        h_vecs[4] = xor(v[4], v[12]);
+        h_vecs[5] = xor(v[5], v[13]);
+        h_vecs[6] = xor(v[6], v[14]);
+        h_vecs[7] = xor(v[7], v[15]);
+
         flags = flags_all;
     }
 
