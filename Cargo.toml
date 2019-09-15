@@ -2,6 +2,7 @@
 name = "baokeshed"
 version = "0.1.0"
 authors = ["Jack O'Connor <oconnor663@gmail.com>"]
+license = "MIT"
 edition = "2018"
 
 [features]

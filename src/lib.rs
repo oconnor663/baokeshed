@@ -26,6 +26,7 @@ use platform::Platform;
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod avx2;
+pub mod copy;
 mod platform;
 mod portable;
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
@@ -861,5 +862,16 @@ impl Hasher {
 impl fmt::Debug for Hasher {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Hasher {{ ... }}")
+    }
+}
+
+impl std::io::Write for Hasher {
+    fn write(&mut self, input: &[u8]) -> std::io::Result<usize> {
+        self.append(input);
+        Ok(input.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
     }
 }
