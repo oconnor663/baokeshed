@@ -92,18 +92,29 @@ fn test_recursive_incremental_same() {
         let key = array_ref!(input_buf, 0, KEY_BYTES);
 
         let recursive_hash = hash_keyed(input, key);
+        let recursive_kdf = kdf(key, input);
 
-        let mut hasher_all = Hasher::new_keyed(key);
-        hasher_all.append(input);
-        let incremental_hash_all = hasher_all.finalize();
+        let incremental_hash_all = Hasher::new_keyed(key).append(input).finalize();
         assert_eq!(recursive_hash, incremental_hash_all);
+
+        // Private APIs currently.
+        let kdf_all = Hasher::new_keyed_flags(key, Flags::KDF)
+            .append(input)
+            .finalize();
+        assert_eq!(&recursive_kdf, kdf_all.as_bytes());
 
         let mut hasher_one_at_a_time = Hasher::new_keyed(key);
         for &byte in input {
             hasher_one_at_a_time.append(&[byte]);
         }
-        let incremental_hash_one_at_a_time = hasher_one_at_a_time.finalize();
-        assert_eq!(recursive_hash, incremental_hash_one_at_a_time);
+        assert_eq!(recursive_hash, hasher_one_at_a_time.finalize());
+
+        // Private APIs currently.
+        let mut kdf_one_at_a_time = Hasher::new_keyed_flags(key, Flags::KDF);
+        for &byte in input {
+            kdf_one_at_a_time.append(&[byte]);
+        }
+        assert_eq!(&recursive_kdf, kdf_one_at_a_time.finalize().as_bytes());
     }
 }
 
@@ -143,109 +154,170 @@ fn test_one_byte() {
     assert_eq!(expected_hash, hasher.finalize());
 }
 
-#[test]
-fn test_three_blocks() {
-    let mut input = [0; 2 * BLOCK_BYTES + 1];
-    paint_test_input(&mut input);
-    let mut key = [0; KEY_BYTES];
-    paint_test_input(&mut key);
+type Construction = fn(&[u8], &[u8; KEY_BYTES], Flags) -> Hash;
+
+fn exercise_construction(construction: Construction, input_len: usize) {
+    let mut input_buf = [0; 65536];
+    paint_test_input(&mut input_buf);
+    let input = &input_buf[..input_len];
+    let key = array_ref!(input, 7, KEY_BYTES);
+
+    // Exercise the default hash.
+    let expected_default_hash = construction(&input, &[0; KEY_BYTES], Flags::empty());
+    assert_eq!(expected_default_hash, hash(&input));
+    assert_eq!(expected_default_hash, hash_keyed(&input, &[0; KEY_BYTES]));
+    assert_eq!(expected_default_hash, hash_xof(&input).read());
+    assert_eq!(
+        expected_default_hash,
+        hash_keyed_xof(&input, &[0; KEY_BYTES]).read(),
+    );
+    assert_eq!(
+        expected_default_hash,
+        Hasher::new().append(&input).finalize(),
+    );
+    assert_eq!(
+        expected_default_hash,
+        Hasher::new_keyed(&[0; KEY_BYTES]).append(&input).finalize(),
+    );
+    assert_eq!(
+        expected_default_hash,
+        Hasher::new().append(&input).finalize_xof().read(),
+    );
+    assert_eq!(
+        expected_default_hash,
+        Hasher::new_keyed(&[0; KEY_BYTES])
+            .append(&input)
+            .finalize_xof()
+            .read(),
+    );
+
+    // Exercise the keyed hash.
+    let expected_keyed_hash = construction(&input, key, Flags::empty());
+    assert_eq!(expected_keyed_hash, hash_keyed(&input, key));
+    assert_eq!(expected_keyed_hash, hash_keyed_xof(&input, key).read(),);
+    assert_eq!(
+        expected_keyed_hash,
+        Hasher::new_keyed(key).append(&input).finalize(),
+    );
+    assert_eq!(
+        expected_keyed_hash,
+        Hasher::new_keyed(key).append(&input).finalize_xof().read(),
+    );
+
+    // Exercise the KDF.
+    let expected_kdf_out = *construction(&input, key, Flags::KDF).as_bytes();
+    assert_eq!(expected_kdf_out, kdf(key, &input));
+    assert_eq!(expected_kdf_out, kdf_xof(key, &input).read());
+    // These are currently private APIs but it's nice to test them anyway.
+    assert_eq!(
+        &expected_kdf_out,
+        Hasher::new_keyed_flags(key, Flags::KDF)
+            .append(&input)
+            .finalize()
+            .as_bytes(),
+    );
+    assert_eq!(
+        expected_kdf_out,
+        Hasher::new_keyed_flags(key, Flags::KDF)
+            .append(&input)
+            .finalize_xof()
+            .read(),
+    );
+}
+
+fn three_blocks_construction(input_buf: &[u8], key: &[u8; KEY_BYTES], flags: Flags) -> Hash {
     let key_words = words_from_key_bytes(&key);
     let mut state = iv(&key_words);
 
-    let block0 = array_ref!(input, 0, BLOCK_BYTES);
+    let block0 = array_ref!(input_buf, 0, BLOCK_BYTES);
     portable::compress(
         &mut state,
         &block0,
         BLOCK_BYTES as Word,
         0,
-        Flags::CHUNK_START.bits(),
+        (flags | Flags::CHUNK_START).bits(),
     );
 
-    let block1 = array_ref!(input, BLOCK_BYTES, BLOCK_BYTES);
+    let block1 = array_ref!(input_buf, BLOCK_BYTES, BLOCK_BYTES);
     portable::compress(
         &mut state,
         &block1,
         BLOCK_BYTES as Word,
         0, // Subsequent blocks keep using the chunk's starting offset.
-        Flags::empty().bits(),
+        flags.bits(),
     );
 
     let mut block2 = [0; BLOCK_BYTES];
-    block2[0] = *input.last().unwrap();
+    block2[0] = input_buf[2 * BLOCK_BYTES];
     portable::compress(
         &mut state,
         &block2,
         1,
         0, // Subsequent blocks keep using the chunk's starting offset.
-        (Flags::CHUNK_END | Flags::ROOT).bits(),
+        (flags | Flags::CHUNK_END | Flags::ROOT).bits(),
     );
 
-    let expected_hash: Hash = bytes_from_state_words(&state).into();
-
-    assert_eq!(expected_hash, hash_keyed(&input, &key));
-
-    let mut hasher = Hasher::new_keyed(&key);
-    hasher.append(&input);
-    assert_eq!(expected_hash, hasher.finalize());
+    bytes_from_state_words(&state).into()
 }
 
 #[test]
-fn test_three_chunks() {
-    let mut input = [0; 2 * CHUNK_BYTES + 1];
-    paint_test_input(&mut input);
-    let mut key = [0; KEY_BYTES];
-    paint_test_input(&mut key);
-    let key_words = words_from_key_bytes(&key);
+fn test_three_blocks() {
+    exercise_construction(three_blocks_construction, 2 * BLOCK_BYTES + 1);
+}
 
+fn three_chunks_construction(input_buf: &[u8], key: &[u8; KEY_BYTES], flags: Flags) -> Hash {
+    let key_words = words_from_key_bytes(&key);
     let chunk0 = hash_one_chunk(
-        &input[..CHUNK_BYTES],
+        &input_buf[..CHUNK_BYTES],
         &key_words,
         0,
+        flags,
         IsRoot::NotRoot,
         Platform::detect(),
     )
     .read();
     let chunk1 = hash_one_chunk(
-        &input[CHUNK_BYTES..][..CHUNK_BYTES],
+        &input_buf[CHUNK_BYTES..][..CHUNK_BYTES],
         &key_words,
         CHUNK_BYTES as u64,
+        flags,
         IsRoot::NotRoot,
         Platform::detect(),
     )
     .read();
     let chunk2 = hash_one_chunk(
-        &input[2 * CHUNK_BYTES..],
+        &input_buf[2 * CHUNK_BYTES..][..1],
         &key_words,
         2 * CHUNK_BYTES as u64,
+        flags,
         IsRoot::NotRoot,
         Platform::detect(),
     )
     .read();
-
     let left_parent = hash_one_parent(
         &chunk0,
         &chunk1,
         &key_words,
+        flags,
         IsRoot::NotRoot,
         Platform::detect(),
     )
     .read();
-
-    let expected_hash: Hash = hash_one_parent(
+    hash_one_parent(
         &left_parent,
         &chunk2,
         &key_words,
+        flags,
         IsRoot::Root,
         Platform::detect(),
     )
     .read()
-    .into();
+    .into()
+}
 
-    assert_eq!(expected_hash, hash_keyed(&input, &key));
-
-    let mut hasher = Hasher::new_keyed(&key);
-    hasher.append(&input);
-    assert_eq!(expected_hash, hasher.finalize());
+#[test]
+fn test_three_chunks() {
+    exercise_construction(three_chunks_construction, 2 * CHUNK_BYTES + 1);
 }
 
 #[test]
