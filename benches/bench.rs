@@ -80,7 +80,7 @@ fn bench_hasher_01_long(b: &mut Bencher) {
     let mut input = RandomInput::new(b, LONG);
     b.iter(|| {
         let mut hasher = Hasher::new();
-        hasher.append(input.get());
+        hasher.update(input.get());
         hasher.finalize()
     });
 }
@@ -90,7 +90,7 @@ fn bench_hasher_02_medium(b: &mut Bencher) {
     let mut input = RandomInput::new(b, MEDIUM);
     b.iter(|| {
         let mut hasher = Hasher::new();
-        hasher.append(input.get());
+        hasher.update(input.get());
         hasher.finalize()
     });
 }
@@ -100,7 +100,7 @@ fn bench_hasher_03_chunk(b: &mut Bencher) {
     let mut input = RandomInput::new(b, CHUNK);
     b.iter(|| {
         let mut hasher = Hasher::new();
-        hasher.append(input.get());
+        hasher.update(input.get());
         hasher.finalize()
     });
 }
@@ -110,7 +110,7 @@ fn bench_hasher_04_block(b: &mut Bencher) {
     let mut input = RandomInput::new(b, BLOCK);
     b.iter(|| {
         let mut hasher = Hasher::new();
-        hasher.append(input.get());
+        hasher.update(input.get());
         hasher.finalize()
     });
 }

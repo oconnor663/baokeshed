@@ -94,25 +94,25 @@ fn test_recursive_incremental_same() {
         let recursive_hash = hash_keyed(input, key);
         let recursive_kdf = kdf(key, input);
 
-        let incremental_hash_all = Hasher::new_keyed(key).append(input).finalize();
+        let incremental_hash_all = Hasher::new_keyed(key).update(input).finalize();
         assert_eq!(recursive_hash, incremental_hash_all);
 
         // Private APIs currently.
         let kdf_all = Hasher::new_keyed_flags(key, Flags::KDF)
-            .append(input)
+            .update(input)
             .finalize();
         assert_eq!(&recursive_kdf, kdf_all.as_bytes());
 
         let mut hasher_one_at_a_time = Hasher::new_keyed(key);
         for &byte in input {
-            hasher_one_at_a_time.append(&[byte]);
+            hasher_one_at_a_time.update(&[byte]);
         }
         assert_eq!(recursive_hash, hasher_one_at_a_time.finalize());
 
         // Private APIs currently.
         let mut kdf_one_at_a_time = Hasher::new_keyed_flags(key, Flags::KDF);
         for &byte in input {
-            kdf_one_at_a_time.append(&[byte]);
+            kdf_one_at_a_time.update(&[byte]);
         }
         assert_eq!(&recursive_kdf, kdf_one_at_a_time.finalize().as_bytes());
     }
@@ -150,7 +150,7 @@ fn test_one_byte() {
     assert_eq!(expected_hash, hash_keyed(&[9], &key));
 
     let mut hasher = Hasher::new_keyed(&key);
-    hasher.append(&[9]);
+    hasher.update(&[9]);
     assert_eq!(expected_hash, hasher.finalize());
 }
 
@@ -173,20 +173,20 @@ fn exercise_construction(construction: Construction, input_len: usize) {
     );
     assert_eq!(
         expected_default_hash,
-        Hasher::new().append(&input).finalize(),
+        Hasher::new().update(&input).finalize(),
     );
     assert_eq!(
         expected_default_hash,
-        Hasher::new_keyed(&[0; KEY_LEN]).append(&input).finalize(),
+        Hasher::new_keyed(&[0; KEY_LEN]).update(&input).finalize(),
     );
     assert_eq!(
         expected_default_hash,
-        Hasher::new().append(&input).finalize_xof().read(),
+        Hasher::new().update(&input).finalize_xof().read(),
     );
     assert_eq!(
         expected_default_hash,
         Hasher::new_keyed(&[0; KEY_LEN])
-            .append(&input)
+            .update(&input)
             .finalize_xof()
             .read(),
     );
@@ -197,11 +197,11 @@ fn exercise_construction(construction: Construction, input_len: usize) {
     assert_eq!(expected_keyed_hash, hash_keyed_xof(&input, key).read(),);
     assert_eq!(
         expected_keyed_hash,
-        Hasher::new_keyed(key).append(&input).finalize(),
+        Hasher::new_keyed(key).update(&input).finalize(),
     );
     assert_eq!(
         expected_keyed_hash,
-        Hasher::new_keyed(key).append(&input).finalize_xof().read(),
+        Hasher::new_keyed(key).update(&input).finalize_xof().read(),
     );
 
     // Exercise the KDF.
@@ -212,14 +212,14 @@ fn exercise_construction(construction: Construction, input_len: usize) {
     assert_eq!(
         &expected_kdf_out,
         Hasher::new_keyed_flags(key, Flags::KDF)
-            .append(&input)
+            .update(&input)
             .finalize()
             .as_bytes(),
     );
     assert_eq!(
         expected_kdf_out,
         Hasher::new_keyed_flags(key, Flags::KDF)
-            .append(&input)
+            .update(&input)
             .finalize_xof()
             .read(),
     );
@@ -329,7 +329,7 @@ fn test_default_key() {
     assert_eq!(expected_hash, hash(b"abc"));
 
     let mut hasher = Hasher::new();
-    hasher.append(b"abc");
+    hasher.update(b"abc");
     assert_eq!(expected_hash, hasher.finalize());
 }
 
@@ -339,7 +339,7 @@ fn test_xof_output() {
     let expected_hash = hash(input);
 
     let mut hasher = Hasher::new();
-    hasher.append(input);
+    hasher.update(input);
     // Pin hasher as immutable for all of the following.
     let hasher = hasher;
 

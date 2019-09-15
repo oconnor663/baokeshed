@@ -581,7 +581,7 @@ impl ChunkState {
         }
     }
 
-    fn append(&mut self, mut input: &[u8], flags: Flags, platform: Platform) {
+    fn update(&mut self, mut input: &[u8], flags: Flags, platform: Platform) {
         if self.buf_len > 0 {
             self.fill_buf(&mut input);
             if !input.is_empty() {
@@ -744,7 +744,7 @@ impl Hasher {
         self.subtree_hashes.push(*hash);
     }
 
-    pub fn append(&mut self, mut input: &[u8]) -> &mut Self {
+    pub fn update(&mut self, mut input: &[u8]) -> &mut Self {
         // When we have whole chunks coming in, hash_chunks_parallel gives the
         // best performance. However, we have to be careful with the very first
         // chunk. If we don't have more input yet, then we don't know whether
@@ -756,7 +756,7 @@ impl Hasher {
         if maybe_root || self.chunk.len() > 0 {
             let want = CHUNK_LEN - self.chunk.len();
             let take = cmp::min(want, input.len());
-            self.chunk.append(&input[..take], self.flags, self.platform);
+            self.chunk.update(&input[..take], self.flags, self.platform);
             input = &input[take..];
             if !input.is_empty() {
                 // We've filled the current chunk, and there's more input
@@ -807,7 +807,7 @@ impl Hasher {
                 // Move the ChunkState's offset forward after each hash. This
                 // is safe because it's clear, and it leaves it in the right
                 // position for any remainder bytes below or subsequent calls
-                // to append.
+                // to update.
                 self.chunk.offset += CHUNK_LEN as u64;
             }
             chunks_array.clear();
@@ -828,7 +828,7 @@ impl Hasher {
                 self.merge_parent();
             }
             self.chunk
-                .append(chunks_exact.remainder(), self.flags, self.platform);
+                .update(chunks_exact.remainder(), self.flags, self.platform);
         }
         self
     }
@@ -847,7 +847,7 @@ impl Hasher {
 
         // If there are any bytes in the ChunkState, finalize that chunk and
         // merge it with everything in the subtree stack. In that case, the
-        // work we did at the end of append above guarantees that the stack
+        // work we did at the end of update above guarantees that the stack
         // doesn't contain any unmerged subtrees that need to be merged first.
         // (This is important, because if there were two chunk hashes sitting
         // on top of the stack, they would need to merge with each other, and
@@ -902,7 +902,7 @@ impl fmt::Debug for Hasher {
 
 impl std::io::Write for Hasher {
     fn write(&mut self, input: &[u8]) -> std::io::Result<usize> {
-        self.append(input);
+        self.update(input);
         Ok(input.len())
     }
 
