@@ -497,6 +497,8 @@ mod test {
             array_ref!(input, 7 * CHUNK_LEN, CHUNK_LEN),
         ];
         let key = [108, 107, 106, 105, 104, 103, 102, 101];
+        // Use an offset with set bits in both 32-bit words.
+        let initial_offset = ((5 * CHUNK_LEN as u64) << WORD_BITS) + 6 * CHUNK_LEN as u64;
 
         let mut portable_out = [0; DEGREE * OUT_LEN];
         for ((chunk_index, chunk), out) in chunks
@@ -517,7 +519,7 @@ mod test {
                     &mut state,
                     array_ref!(block, 0, BLOCK_LEN),
                     BLOCK_LEN as Word,
-                    (chunk_index * CHUNK_LEN) as u64,
+                    initial_offset + (chunk_index * CHUNK_LEN) as u64,
                     flags.bits(),
                 );
             }
@@ -540,7 +542,7 @@ mod test {
                 &inputs,
                 CHUNK_LEN / BLOCK_LEN,
                 &key,
-                0,
+                initial_offset,
                 CHUNK_LEN as u64,
                 Flags::empty().bits(),
                 Flags::CHUNK_START.bits(),
