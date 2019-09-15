@@ -49,10 +49,10 @@ const WORD_BITS: usize = 8 * WORD_BYTES;
 const MAX_DEPTH: usize = 52; // 2^52 * 4096 = 2^64
 const DEFAULT_KEY: &[u8; KEY_LEN] = &[0; KEY_LEN];
 
-/// The default number of bytes in a hash.
+/// The default number of bytes in a hash, 32.
 pub const OUT_LEN: usize = 8 * WORD_BYTES;
 
-/// The number of bytes in a key.
+/// The number of bytes in a key, 32.
 pub const KEY_LEN: usize = 8 * WORD_BYTES;
 
 // These are pub for tests and benchmarks. Callers don't need them.
