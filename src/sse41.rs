@@ -3,7 +3,7 @@ use core::arch::x86::*;
 #[cfg(target_arch = "x86_64")]
 use core::arch::x86_64::*;
 
-use crate::{Word, BLOCK_BYTES, IV, MSG_SCHEDULE, OUT_BYTES, WORD_BITS, WORD_BYTES};
+use crate::{Word, BLOCK_LEN, IV, MSG_SCHEDULE, OUT_LEN, WORD_BITS, WORD_BYTES};
 use arrayref::mut_array_refs;
 
 pub const DEGREE: usize = 4;
@@ -125,7 +125,7 @@ unsafe fn undiagonalize(row1: &mut __m128i, row3: &mut __m128i, row4: &mut __m12
 #[target_feature(enable = "sse4.1")]
 pub unsafe fn compress(
     state: &mut [Word; 8],
-    block: &[u8; BLOCK_BYTES],
+    block: &[u8; BLOCK_LEN],
     block_len: Word,
     offset: u64,
     flags: Word,
@@ -503,7 +503,7 @@ pub unsafe fn compress4_loop(
     flags_all: Word,
     flags_start: Word,
     flags_end: Word,
-    out: &mut [u8; DEGREE * OUT_BYTES],
+    out: &mut [u8; DEGREE * OUT_LEN],
 ) {
     let mut h_vecs = [
         xor(set1(IV[0]), set1(key[0])),
@@ -523,7 +523,7 @@ pub unsafe fn compress4_loop(
             flags |= flags_end;
         }
         let flags_vec = set1(flags);
-        let msg_vecs = transpose_msg_vecs(inputs, block * BLOCK_BYTES);
+        let msg_vecs = transpose_msg_vecs(inputs, block * BLOCK_LEN);
 
         // The transposed compression function. Note that inlining this
         // manually here improves compile times by a lot, compared to factoring
@@ -544,7 +544,7 @@ pub unsafe fn compress4_loop(
             set1(IV[3]),
             xor(set1(IV[4]), offset_low_vec),
             xor(set1(IV[5]), offset_high_vec),
-            xor(set1(IV[6]), set1(BLOCK_BYTES as Word)), // full blocks only
+            xor(set1(IV[6]), set1(BLOCK_LEN as Word)), // full blocks only
             xor(set1(IV[7]), flags_vec),
         ];
         round(&mut v, &msg_vecs, 0);
@@ -626,9 +626,9 @@ mod test {
 
         let initial_state = [1, 2, 3, 4, 5, 6, 7, 8];
         let block_len: Word = 27;
-        let mut block = [0; BLOCK_BYTES];
+        let mut block = [0; BLOCK_LEN];
         crate::test::paint_test_input(&mut block[..block_len as usize]);
-        let offset = 99 * CHUNK_BYTES;
+        let offset = 99 * CHUNK_LEN;
         let flags = crate::Flags::CHUNK_END | crate::Flags::ROOT;
 
         let mut portable_state = initial_state;
@@ -660,30 +660,30 @@ mod test {
             return;
         }
 
-        let mut input = [0; DEGREE * BLOCK_BYTES];
+        let mut input = [0; DEGREE * BLOCK_LEN];
         crate::test::paint_test_input(&mut input);
         let parents = [
-            array_ref!(input, 0 * BLOCK_BYTES, BLOCK_BYTES),
-            array_ref!(input, 1 * BLOCK_BYTES, BLOCK_BYTES),
-            array_ref!(input, 2 * BLOCK_BYTES, BLOCK_BYTES),
-            array_ref!(input, 3 * BLOCK_BYTES, BLOCK_BYTES),
+            array_ref!(input, 0 * BLOCK_LEN, BLOCK_LEN),
+            array_ref!(input, 1 * BLOCK_LEN, BLOCK_LEN),
+            array_ref!(input, 2 * BLOCK_LEN, BLOCK_LEN),
+            array_ref!(input, 3 * BLOCK_LEN, BLOCK_LEN),
         ];
         let key = [99, 98, 97, 96, 95, 94, 93, 92];
 
-        let mut portable_out = [0; DEGREE * OUT_BYTES];
-        for (parent, out) in parents.iter().zip(portable_out.chunks_exact_mut(OUT_BYTES)) {
+        let mut portable_out = [0; DEGREE * OUT_LEN];
+        for (parent, out) in parents.iter().zip(portable_out.chunks_exact_mut(OUT_LEN)) {
             let mut state = iv(&key);
             portable::compress(
                 &mut state,
                 parent,
-                BLOCK_BYTES as Word,
+                BLOCK_LEN as Word,
                 0,
                 Flags::PARENT.bits(),
             );
             out.copy_from_slice(&bytes_from_state_words(&state));
         }
 
-        let mut simd_out = [0; DEGREE * OUT_BYTES];
+        let mut simd_out = [0; DEGREE * OUT_LEN];
         let inputs = [
             parents[0].as_ptr(),
             parents[1].as_ptr(),
@@ -713,43 +713,43 @@ mod test {
             return;
         }
 
-        let mut input = [0; DEGREE * CHUNK_BYTES];
+        let mut input = [0; DEGREE * CHUNK_LEN];
         crate::test::paint_test_input(&mut input);
         let chunks = [
-            array_ref!(input, 0 * CHUNK_BYTES, CHUNK_BYTES),
-            array_ref!(input, 1 * CHUNK_BYTES, CHUNK_BYTES),
-            array_ref!(input, 2 * CHUNK_BYTES, CHUNK_BYTES),
-            array_ref!(input, 3 * CHUNK_BYTES, CHUNK_BYTES),
+            array_ref!(input, 0 * CHUNK_LEN, CHUNK_LEN),
+            array_ref!(input, 1 * CHUNK_LEN, CHUNK_LEN),
+            array_ref!(input, 2 * CHUNK_LEN, CHUNK_LEN),
+            array_ref!(input, 3 * CHUNK_LEN, CHUNK_LEN),
         ];
         let key = [108, 107, 106, 105, 104, 103, 102, 101];
 
-        let mut portable_out = [0; DEGREE * OUT_BYTES];
+        let mut portable_out = [0; DEGREE * OUT_LEN];
         for ((chunk_index, chunk), out) in chunks
             .iter()
             .enumerate()
-            .zip(portable_out.chunks_exact_mut(OUT_BYTES))
+            .zip(portable_out.chunks_exact_mut(OUT_LEN))
         {
             let mut state = iv(&key);
-            for (block_index, block) in chunk.chunks_exact(BLOCK_BYTES).enumerate() {
+            for (block_index, block) in chunk.chunks_exact(BLOCK_LEN).enumerate() {
                 let mut flags = Flags::empty();
                 if block_index == 0 {
                     flags |= Flags::CHUNK_START;
                 }
-                if block_index == CHUNK_BYTES / BLOCK_BYTES - 1 {
+                if block_index == CHUNK_LEN / BLOCK_LEN - 1 {
                     flags |= Flags::CHUNK_END;
                 }
                 portable::compress(
                     &mut state,
-                    array_ref!(block, 0, BLOCK_BYTES),
-                    BLOCK_BYTES as Word,
-                    (chunk_index * CHUNK_BYTES) as u64,
+                    array_ref!(block, 0, BLOCK_LEN),
+                    BLOCK_LEN as Word,
+                    (chunk_index * CHUNK_LEN) as u64,
                     flags.bits(),
                 );
             }
             out.copy_from_slice(&bytes_from_state_words(&state));
         }
 
-        let mut simd_out = [0; DEGREE * OUT_BYTES];
+        let mut simd_out = [0; DEGREE * OUT_LEN];
         let inputs = [
             chunks[0].as_ptr(),
             chunks[1].as_ptr(),
@@ -759,10 +759,10 @@ mod test {
         unsafe {
             compress4_loop(
                 &inputs,
-                CHUNK_BYTES / BLOCK_BYTES,
+                CHUNK_LEN / BLOCK_LEN,
                 &key,
                 0,
-                CHUNK_BYTES as u64,
+                CHUNK_LEN as u64,
                 Flags::empty().bits(),
                 Flags::CHUNK_START.bits(),
                 Flags::CHUNK_END.bits(),

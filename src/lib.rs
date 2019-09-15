@@ -47,19 +47,19 @@ type Word = u32;
 const WORD_BYTES: usize = core::mem::size_of::<Word>();
 const WORD_BITS: usize = 8 * WORD_BYTES;
 const MAX_DEPTH: usize = 52; // 2^52 * 4096 = 2^64
-const DEFAULT_KEY: &[u8; KEY_BYTES] = &[0; KEY_BYTES];
+const DEFAULT_KEY: &[u8; KEY_LEN] = &[0; KEY_LEN];
 
 /// The default number of bytes in a hash.
-pub const OUT_BYTES: usize = 8 * WORD_BYTES;
+pub const OUT_LEN: usize = 8 * WORD_BYTES;
 
 /// The number of bytes in a key.
-pub const KEY_BYTES: usize = 8 * WORD_BYTES;
+pub const KEY_LEN: usize = 8 * WORD_BYTES;
 
 // These are pub for tests and benchmarks. Callers don't need them.
 #[doc(hidden)]
-pub const BLOCK_BYTES: usize = 16 * WORD_BYTES;
+pub const BLOCK_LEN: usize = 16 * WORD_BYTES;
 #[doc(hidden)]
-pub const CHUNK_BYTES: usize = 4096;
+pub const CHUNK_LEN: usize = 4096;
 #[doc(hidden)]
 pub use platform::MAX_SIMD_DEGREE;
 
@@ -101,7 +101,7 @@ impl IsRoot {
     }
 }
 
-fn words_from_key_bytes(bytes: &[u8; KEY_BYTES]) -> [Word; 8] {
+fn words_from_key_bytes(bytes: &[u8; KEY_LEN]) -> [Word; 8] {
     // Parse the message bytes as little endian words.
     let refs = array_refs!(bytes, 4, 4, 4, 4, 4, 4, 4, 4);
     [
@@ -116,8 +116,8 @@ fn words_from_key_bytes(bytes: &[u8; KEY_BYTES]) -> [Word; 8] {
     ]
 }
 
-fn bytes_from_state_words(words: &[Word; 8]) -> [u8; OUT_BYTES] {
-    let mut bytes = [0; OUT_BYTES];
+fn bytes_from_state_words(words: &[Word; 8]) -> [u8; OUT_LEN] {
+    let mut bytes = [0; OUT_LEN];
     {
         let refs = mut_array_refs!(&mut bytes, 4, 4, 4, 4, 4, 4, 4, 4);
         *refs.0 = words[0].to_le_bytes();
@@ -147,14 +147,14 @@ fn iv(key: &[Word; 8]) -> [Word; 8] {
 
 /// A hash output of the default size, providing constant-time equality.
 #[derive(Clone, Copy)]
-pub struct Hash([u8; OUT_BYTES]);
+pub struct Hash([u8; OUT_LEN]);
 
 impl Hash {
-    pub fn as_bytes(&self) -> &[u8; OUT_BYTES] {
+    pub fn as_bytes(&self) -> &[u8; OUT_LEN] {
         &self.0
     }
 
-    pub fn to_hex(&self) -> ArrayString<[u8; 2 * OUT_BYTES]> {
+    pub fn to_hex(&self) -> ArrayString<[u8; 2 * OUT_LEN]> {
         let mut s = ArrayString::new();
         let table = b"0123456789abcdef";
         for &b in self.0.iter() {
@@ -165,8 +165,8 @@ impl Hash {
     }
 }
 
-impl From<[u8; OUT_BYTES]> for Hash {
-    fn from(bytes: [u8; OUT_BYTES]) -> Self {
+impl From<[u8; OUT_LEN]> for Hash {
+    fn from(bytes: [u8; OUT_LEN]) -> Self {
         Self(bytes)
     }
 }
@@ -179,8 +179,8 @@ impl PartialEq for Hash {
 }
 
 /// This implementation is constant-time.
-impl PartialEq<[u8; OUT_BYTES]> for Hash {
-    fn eq(&self, other: &[u8; OUT_BYTES]) -> bool {
+impl PartialEq<[u8; OUT_LEN]> for Hash {
+    fn eq(&self, other: &[u8; OUT_LEN]) -> bool {
         constant_time_eq::constant_time_eq(&self.0[..], other)
     }
 }
@@ -202,7 +202,7 @@ impl fmt::Debug for Hash {
 #[derive(Clone)]
 pub struct Output {
     state: [Word; 8],
-    block: [u8; BLOCK_BYTES],
+    block: [u8; BLOCK_LEN],
     block_len: u8,
     offset: u64,
     flags: Flags,
@@ -210,7 +210,7 @@ pub struct Output {
 }
 
 impl Output {
-    pub fn read(&mut self) -> [u8; OUT_BYTES] {
+    pub fn read(&mut self) -> [u8; OUT_LEN] {
         let mut state_copy = self.state;
         self.platform.compress(
             &mut state_copy,
@@ -219,7 +219,7 @@ impl Output {
             self.offset,
             self.flags.bits(),
         );
-        self.offset += OUT_BYTES as u64;
+        self.offset += OUT_LEN as u64;
         bytes_from_state_words(&state_copy)
     }
 }
@@ -257,12 +257,12 @@ fn hash_one_chunk(
     let mut state = iv(key);
     let mut block_flags = flags | Flags::CHUNK_START;
     let mut block_offset = 0;
-    while block_offset + BLOCK_BYTES <= chunk.len() {
-        if block_offset + BLOCK_BYTES == chunk.len() {
+    while block_offset + BLOCK_LEN <= chunk.len() {
+        if block_offset + BLOCK_LEN == chunk.len() {
             return Output {
                 state,
-                block: *array_ref!(chunk, block_offset, BLOCK_BYTES),
-                block_len: BLOCK_BYTES as u8,
+                block: *array_ref!(chunk, block_offset, BLOCK_LEN),
+                block_len: BLOCK_LEN as u8,
                 offset,
                 flags: block_flags | Flags::CHUNK_END | is_root.flag(),
                 platform,
@@ -270,12 +270,12 @@ fn hash_one_chunk(
         }
         platform.compress(
             &mut state,
-            array_ref!(chunk, block_offset, BLOCK_BYTES),
-            BLOCK_BYTES as Word,
+            array_ref!(chunk, block_offset, BLOCK_LEN),
+            BLOCK_LEN as Word,
             offset,
             block_flags.bits(),
         );
-        block_offset += BLOCK_BYTES;
+        block_offset += BLOCK_LEN;
         block_flags = flags;
     }
 
@@ -283,7 +283,7 @@ fn hash_one_chunk(
     // only happens when the whole message is empty). Pad the last block with
     // zero bytes return it as an Output.
     let block_len = chunk.len() - block_offset;
-    let mut last_block = [0; BLOCK_BYTES];
+    let mut last_block = [0; BLOCK_LEN];
     last_block[..block_len].copy_from_slice(&chunk[block_offset..]);
     Output {
         state,
@@ -308,13 +308,13 @@ fn hash_chunks_parallel(
     out: &mut [u8],
 ) -> usize {
     debug_assert!(!input.is_empty(), "empty chunks below the root");
-    debug_assert!(input.len() <= MAX_SIMD_DEGREE * CHUNK_BYTES);
-    debug_assert_eq!(offset % CHUNK_BYTES as u64, 0, "invalid offset");
+    debug_assert!(input.len() <= MAX_SIMD_DEGREE * CHUNK_LEN);
+    debug_assert_eq!(offset % CHUNK_LEN as u64, 0, "invalid offset");
 
-    let mut chunks_exact = input.chunks_exact(CHUNK_BYTES);
-    let mut chunks_array = ArrayVec::<[&[u8; CHUNK_BYTES]; MAX_SIMD_DEGREE]>::new();
+    let mut chunks_exact = input.chunks_exact(CHUNK_LEN);
+    let mut chunks_array = ArrayVec::<[&[u8; CHUNK_LEN]; MAX_SIMD_DEGREE]>::new();
     for chunk in &mut chunks_exact {
-        chunks_array.push(array_ref!(chunk, 0, CHUNK_BYTES));
+        chunks_array.push(array_ref!(chunk, 0, CHUNK_LEN));
     }
     platform.hash_many_chunks(
         &chunks_array,
@@ -333,12 +333,12 @@ fn hash_chunks_parallel(
         let mut output = hash_one_chunk(
             chunks_exact.remainder(),
             key,
-            offset + chunks_so_far as u64 * CHUNK_BYTES as u64,
+            offset + chunks_so_far as u64 * CHUNK_LEN as u64,
             flags,
             IsRoot::NotRoot,
             platform,
         );
-        *array_mut_ref!(out, chunks_so_far * OUT_BYTES, OUT_BYTES) = output.read();
+        *array_mut_ref!(out, chunks_so_far * OUT_LEN, OUT_LEN) = output.read();
         chunks_so_far + 1
     } else {
         chunks_so_far
@@ -356,15 +356,15 @@ fn hash_parents_parallel(
     platform: Platform,
     out: &mut [u8],
 ) -> usize {
-    debug_assert_eq!(child_hashes.len() % OUT_BYTES, 0, "wacky hash bytes");
-    let num_children = child_hashes.len() / OUT_BYTES;
+    debug_assert_eq!(child_hashes.len() % OUT_LEN, 0, "wacky hash bytes");
+    let num_children = child_hashes.len() / OUT_LEN;
     debug_assert!(num_children >= 2, "not enough children");
     debug_assert!(num_children <= 2 * MAX_SIMD_DEGREE, "too many");
 
-    let mut parents_exact = child_hashes.chunks_exact(BLOCK_BYTES);
-    let mut parents_array = ArrayVec::<[&[u8; BLOCK_BYTES]; MAX_SIMD_DEGREE]>::new();
+    let mut parents_exact = child_hashes.chunks_exact(BLOCK_LEN);
+    let mut parents_array = ArrayVec::<[&[u8; BLOCK_LEN]; MAX_SIMD_DEGREE]>::new();
     for parent in &mut parents_exact {
-        parents_array.push(array_ref!(parent, 0, BLOCK_BYTES));
+        parents_array.push(array_ref!(parent, 0, BLOCK_LEN));
     }
     let parent_flags = flags | Flags::PARENT;
     platform.hash_many_parents(&parents_array, key, parent_flags.bits(), out);
@@ -372,7 +372,7 @@ fn hash_parents_parallel(
     // If there's an odd child left over, it becomes an output.
     let parents_so_far = parents_array.len();
     if !parents_exact.remainder().is_empty() {
-        out[parents_so_far * OUT_BYTES..][..OUT_BYTES].copy_from_slice(parents_exact.remainder());
+        out[parents_so_far * OUT_LEN..][..OUT_LEN].copy_from_slice(parents_exact.remainder());
         parents_so_far + 1
     } else {
         parents_so_far
@@ -388,10 +388,10 @@ fn largest_power_of_two_leq(n: usize) -> usize {
 // Given some input larger than one chunk, find the largest full tree of chunks
 // that can go on the left.
 fn left_len(content_len: usize) -> usize {
-    debug_assert!(content_len > CHUNK_BYTES);
+    debug_assert!(content_len > CHUNK_LEN);
     // Subtract 1 to reserve at least one byte for the right side.
-    let full_chunks = (content_len - 1) / CHUNK_BYTES;
-    largest_power_of_two_leq(full_chunks) * CHUNK_BYTES
+    let full_chunks = (content_len - 1) / CHUNK_LEN;
+    largest_power_of_two_leq(full_chunks) * CHUNK_LEN
 }
 
 fn join<A, B, RA, RB>(oper_a: A, oper_b: B) -> (RA, RB)
@@ -415,7 +415,7 @@ fn hash_recurse(
     platform: Platform,
     out: &mut [u8],
 ) -> usize {
-    if input.len() <= platform.simd_degree() * CHUNK_BYTES {
+    if input.len() <= platform.simd_degree() * CHUNK_LEN {
         return hash_chunks_parallel(input, key, offset, flags, platform, out);
     }
 
@@ -428,8 +428,8 @@ fn hash_recurse(
     let (left, right) = input.split_at(left_len(input.len()));
     let right_off = offset + left.len() as u64;
     debug_assert_eq!(platform.simd_degree().count_ones(), 1, "power of two");
-    let mut children_array = [0; 2 * MAX_SIMD_DEGREE * OUT_BYTES];
-    let (left_out, right_out) = children_array.split_at_mut(platform.simd_degree() * OUT_BYTES);
+    let mut children_array = [0; 2 * MAX_SIMD_DEGREE * OUT_LEN];
+    let (left_out, right_out) = children_array.split_at_mut(platform.simd_degree() * OUT_LEN);
 
     let (left_n, right_n) = join(
         || hash_recurse(left, key, offset, flags, platform, left_out),
@@ -439,7 +439,7 @@ fn hash_recurse(
     debug_assert_eq!(left_n, platform.simd_degree(), "unexpected left children");
     let num_children = left_n + right_n;
     hash_parents_parallel(
-        &children_array[..num_children * OUT_BYTES],
+        &children_array[..num_children * OUT_LEN],
         key,
         flags,
         platform,
@@ -453,32 +453,32 @@ fn condense_root(
     flags: Flags,
     platform: Platform,
 ) -> Output {
-    debug_assert_eq!(children.len() % OUT_BYTES, 0);
-    debug_assert!(children.len() >= BLOCK_BYTES);
-    let mut out_array = [0; MAX_SIMD_DEGREE * OUT_BYTES / 2];
-    while children.len() > BLOCK_BYTES {
+    debug_assert_eq!(children.len() % OUT_LEN, 0);
+    debug_assert!(children.len() >= BLOCK_LEN);
+    let mut out_array = [0; MAX_SIMD_DEGREE * OUT_LEN / 2];
+    while children.len() > BLOCK_LEN {
         let out_n = hash_parents_parallel(children, key, flags, platform, &mut out_array);
-        children[..out_n * OUT_BYTES].copy_from_slice(&out_array[..out_n * OUT_BYTES]);
-        children = &mut children[..out_n * OUT_BYTES];
+        children[..out_n * OUT_LEN].copy_from_slice(&out_array[..out_n * OUT_LEN]);
+        children = &mut children[..out_n * OUT_LEN];
     }
     Output {
         state: iv(key),
-        block: *array_ref!(children, 0, BLOCK_BYTES),
-        block_len: BLOCK_BYTES as u8,
+        block: *array_ref!(children, 0, BLOCK_LEN),
+        block_len: BLOCK_LEN as u8,
         offset: 0,
         flags: flags | Flags::PARENT | Flags::ROOT,
         platform,
     }
 }
 
-fn hash_keyed_flags_xof(input: &[u8], key: &[u8; KEY_BYTES], flags: Flags) -> Output {
+fn hash_keyed_flags_xof(input: &[u8], key: &[u8; KEY_LEN], flags: Flags) -> Output {
     let platform = Platform::detect();
     let key_words = words_from_key_bytes(key);
-    if input.len() <= CHUNK_BYTES {
+    if input.len() <= CHUNK_LEN {
         return hash_one_chunk(input, &key_words, 0, flags, IsRoot::Root, platform);
     }
-    let mut children_array = [0; MAX_SIMD_DEGREE * OUT_BYTES];
-    let num_children = if input.len() <= platform.simd_degree() * CHUNK_BYTES {
+    let mut children_array = [0; MAX_SIMD_DEGREE * OUT_LEN];
+    let num_children = if input.len() <= platform.simd_degree() * CHUNK_LEN {
         // We don't call hash_recurse when there are <= simd_degree children,
         // because in that cases it might need to root/XOF finalize, and we
         // want to do that here instead.
@@ -487,7 +487,7 @@ fn hash_keyed_flags_xof(input: &[u8], key: &[u8; KEY_BYTES], flags: Flags) -> Ou
         hash_recurse(input, &key_words, 0, flags, platform, &mut children_array)
     };
     condense_root(
-        &mut children_array[..num_children * OUT_BYTES],
+        &mut children_array[..num_children * OUT_LEN],
         &key_words,
         flags,
         platform,
@@ -496,9 +496,9 @@ fn hash_keyed_flags_xof(input: &[u8], key: &[u8; KEY_BYTES], flags: Flags) -> Ou
 
 /// The default hash function.
 ///
-/// This is the same as using a key of `&[0u8; KEY_BYTES]` with one of the
+/// This is the same as using a key of `&[0u8; KEY_LEN]` with one of the
 /// keyed variants. The bytes of this hash are the same as the first
-/// `OUT_BYTES` bytes of the extensible-output variants.
+/// `OUT_LEN` bytes of the extensible-output variants.
 pub fn hash(input: &[u8]) -> Hash {
     hash_keyed_flags_xof(input, DEFAULT_KEY, Flags::empty())
         .read()
@@ -506,7 +506,7 @@ pub fn hash(input: &[u8]) -> Hash {
 }
 
 /// The default hash function, with a key argument.
-pub fn hash_keyed(input: &[u8], key: &[u8; KEY_BYTES]) -> Hash {
+pub fn hash_keyed(input: &[u8], key: &[u8; KEY_LEN]) -> Hash {
     hash_keyed_flags_xof(input, key, Flags::empty())
         .read()
         .into()
@@ -514,7 +514,7 @@ pub fn hash_keyed(input: &[u8], key: &[u8; KEY_BYTES]) -> Hash {
 
 /// The default hash function, with a key argument, returning an extensible
 /// output.
-pub fn hash_keyed_xof(input: &[u8], key: &[u8; KEY_BYTES]) -> Output {
+pub fn hash_keyed_xof(input: &[u8], key: &[u8; KEY_LEN]) -> Output {
     hash_keyed_flags_xof(input, key, Flags::empty())
 }
 
@@ -525,12 +525,12 @@ pub fn hash_xof(input: &[u8]) -> Output {
 
 /// The key derivation function, which is domain-separated from the default
 /// hash.
-pub fn kdf(key: &[u8; KEY_BYTES], context: &[u8]) -> [u8; KEY_BYTES] {
+pub fn kdf(key: &[u8; KEY_LEN], context: &[u8]) -> [u8; KEY_LEN] {
     hash_keyed_flags_xof(context, key, Flags::KDF).read()
 }
 
 /// The key derivation function, returning an extensible output.
-pub fn kdf_xof(key: &[u8; KEY_BYTES], context: &[u8]) -> Output {
+pub fn kdf_xof(key: &[u8; KEY_LEN], context: &[u8]) -> Output {
     hash_keyed_flags_xof(context, key, Flags::KDF)
 }
 
@@ -543,18 +543,18 @@ struct ChunkState {
     state: [Word; 8],
     offset: u64,
     count: u16,
-    buf: [u8; BLOCK_BYTES],
+    buf: [u8; BLOCK_LEN],
     buf_len: u8,
 }
 
 impl ChunkState {
     fn new(key: &[Word; 8], offset: u64) -> Self {
-        debug_assert_eq!(offset % CHUNK_BYTES as u64, 0);
+        debug_assert_eq!(offset % CHUNK_LEN as u64, 0);
         Self {
             state: iv(key),
             offset,
             count: 0,
-            buf: [0; BLOCK_BYTES],
+            buf: [0; BLOCK_LEN],
             buf_len: 0,
         }
     }
@@ -565,7 +565,7 @@ impl ChunkState {
     }
 
     fn fill_buf(&mut self, input: &mut &[u8]) {
-        let want = BLOCK_BYTES - self.buf_len as usize;
+        let want = BLOCK_LEN - self.buf_len as usize;
         let take = cmp::min(want, input.len());
         self.buf[self.buf_len as usize..self.buf_len as usize + take]
             .copy_from_slice(&input[..take]);
@@ -585,38 +585,38 @@ impl ChunkState {
         if self.buf_len > 0 {
             self.fill_buf(&mut input);
             if !input.is_empty() {
-                debug_assert_eq!(self.buf_len as usize, BLOCK_BYTES);
+                debug_assert_eq!(self.buf_len as usize, BLOCK_LEN);
                 let block_flags = flags | self.maybe_chunk_start_flag();
                 platform.compress(
                     &mut self.state,
                     &self.buf,
-                    BLOCK_BYTES as Word,
+                    BLOCK_LEN as Word,
                     self.offset,
                     block_flags.bits(),
                 );
-                self.count += BLOCK_BYTES as u16;
+                self.count += BLOCK_LEN as u16;
                 self.buf_len = 0;
-                self.buf = [0; BLOCK_BYTES];
+                self.buf = [0; BLOCK_LEN];
             }
         }
 
-        while input.len() > BLOCK_BYTES {
+        while input.len() > BLOCK_LEN {
             debug_assert_eq!(self.buf_len, 0);
             let block_flags = flags | self.maybe_chunk_start_flag();
             platform.compress(
                 &mut self.state,
-                array_ref!(input, 0, BLOCK_BYTES),
-                BLOCK_BYTES as Word,
+                array_ref!(input, 0, BLOCK_LEN),
+                BLOCK_LEN as Word,
                 self.offset,
                 block_flags.bits(),
             );
-            self.count += BLOCK_BYTES as u16;
-            input = &input[BLOCK_BYTES..];
+            self.count += BLOCK_LEN as u16;
+            input = &input[BLOCK_LEN..];
         }
 
         self.fill_buf(&mut input);
         debug_assert!(input.is_empty());
-        debug_assert!(self.len() <= CHUNK_BYTES);
+        debug_assert!(self.len() <= CHUNK_LEN);
     }
 
     // Note that similar to hash_one_chunk, when we use this function
@@ -647,21 +647,21 @@ impl ChunkState {
 // we might build Output objects without the root flag. But Output objects
 // returned publicly are always root finalizations.
 fn hash_one_parent(
-    left_child: &[u8; OUT_BYTES],
-    right_child: &[u8; OUT_BYTES],
+    left_child: &[u8; OUT_LEN],
+    right_child: &[u8; OUT_LEN],
     key: &[Word; 8],
     flags: Flags,
     is_root: IsRoot,
     platform: Platform,
 ) -> Output {
-    let mut block = [0; BLOCK_BYTES];
-    let refs = mut_array_refs!(&mut block, OUT_BYTES, OUT_BYTES);
+    let mut block = [0; BLOCK_LEN];
+    let refs = mut_array_refs!(&mut block, OUT_LEN, OUT_LEN);
     *refs.0 = *left_child;
     *refs.1 = *right_child;
     Output {
         state: iv(key),
         block,
-        block_len: BLOCK_BYTES as u8,
+        block_len: BLOCK_LEN as u8,
         offset: 0,
         flags: flags | Flags::PARENT | is_root.flag(),
         platform,
@@ -677,7 +677,7 @@ fn hash_one_parent(
 /// [`copy_wide`](copy/fn.copy_wide.html) utility function instead.
 #[derive(Clone)]
 pub struct Hasher {
-    subtree_hashes: ArrayVec<[[u8; OUT_BYTES]; MAX_DEPTH]>,
+    subtree_hashes: ArrayVec<[[u8; OUT_LEN]; MAX_DEPTH]>,
     chunk: ChunkState,
     key: [Word; 8],
     flags: Flags,
@@ -686,14 +686,14 @@ pub struct Hasher {
 
 impl Hasher {
     pub fn new() -> Self {
-        Self::new_keyed(&[0; KEY_BYTES])
+        Self::new_keyed(&[0; KEY_LEN])
     }
 
-    pub fn new_keyed(key: &[u8; KEY_BYTES]) -> Self {
+    pub fn new_keyed(key: &[u8; KEY_LEN]) -> Self {
         Self::new_keyed_flags(key, Flags::empty())
     }
 
-    fn new_keyed_flags(key_bytes: &[u8; KEY_BYTES], flags: Flags) -> Self {
+    fn new_keyed_flags(key_bytes: &[u8; KEY_LEN], flags: Flags) -> Self {
         let key = words_from_key_bytes(key_bytes);
         Self {
             subtree_hashes: ArrayVec::new(),
@@ -713,7 +713,7 @@ impl Hasher {
     // represents a place where two subtrees need to be merged, and the final
     // number of 1 bits is the same as the final number of subtrees.
     fn needs_merge(&self, total_bytes: u64) -> bool {
-        let total_chunks = total_bytes / CHUNK_BYTES as u64;
+        let total_chunks = total_bytes / CHUNK_LEN as u64;
         self.subtree_hashes.len() > total_chunks.count_ones() as usize
     }
 
@@ -735,7 +735,7 @@ impl Hasher {
         self.subtree_hashes.truncate(num_subtrees - 1)
     }
 
-    fn push_chunk_hash(&mut self, hash: &[u8; OUT_BYTES], offset: u64) {
+    fn push_chunk_hash(&mut self, hash: &[u8; OUT_LEN], offset: u64) {
         // Do subtree merging *before* pushing the new hash. That way we know
         // that the merged parent node isn't the root.
         while self.needs_merge(offset) {
@@ -752,9 +752,9 @@ impl Hasher {
         // find out. Also, if we have any partial chunk bytes in the ChunkState
         // already, we need to finish it.
         let is_first_chunk = self.chunk.offset == 0;
-        let maybe_root = is_first_chunk && input.len() == CHUNK_BYTES;
+        let maybe_root = is_first_chunk && input.len() == CHUNK_LEN;
         if maybe_root || self.chunk.len() > 0 {
-            let want = CHUNK_BYTES - self.chunk.len();
+            let want = CHUNK_LEN - self.chunk.len();
             let take = cmp::min(want, input.len());
             self.chunk.append(&input[..take], self.flags, self.platform);
             input = &input[take..];
@@ -762,13 +762,13 @@ impl Hasher {
                 // We've filled the current chunk, and there's more input
                 // coming, so we know it's not the root and we can finalize it.
                 // Then we'll proceed to hashing whole chunks below.
-                debug_assert_eq!(self.chunk.len(), CHUNK_BYTES);
+                debug_assert_eq!(self.chunk.len(), CHUNK_LEN);
                 let chunk_hash = self
                     .chunk
                     .finalize(self.flags, IsRoot::NotRoot, self.platform)
                     .read();
                 self.push_chunk_hash(&chunk_hash, self.chunk.offset);
-                self.chunk = ChunkState::new(&self.key, self.chunk.offset + CHUNK_BYTES as u64);
+                self.chunk = ChunkState::new(&self.key, self.chunk.offset + CHUNK_LEN as u64);
             } else {
                 return self;
             }
@@ -778,13 +778,13 @@ impl Hasher {
         // that we can, using SIMD parallelism. But note that this still
         // single-threaded. (Only the recursive hash functions are
         // multi-threaded.)
-        let mut chunks_exact = input.chunks_exact(CHUNK_BYTES);
+        let mut chunks_exact = input.chunks_exact(CHUNK_LEN);
         let mut fused_chunks = chunks_exact
             .by_ref()
-            .map(|chunk| array_ref!(chunk, 0, CHUNK_BYTES))
+            .map(|chunk| array_ref!(chunk, 0, CHUNK_LEN))
             .fuse();
-        let mut chunks_array = ArrayVec::<[&[u8; CHUNK_BYTES]; MAX_SIMD_DEGREE]>::new();
-        let mut out_array = [0; MAX_SIMD_DEGREE * OUT_BYTES];
+        let mut chunks_array = ArrayVec::<[&[u8; CHUNK_LEN]; MAX_SIMD_DEGREE]>::new();
+        let mut out_array = [0; MAX_SIMD_DEGREE * OUT_LEN];
         debug_assert_eq!(self.chunk.len(), 0);
         loop {
             chunks_array.extend(fused_chunks.by_ref().take(MAX_SIMD_DEGREE));
@@ -802,13 +802,13 @@ impl Hasher {
                 Flags::CHUNK_END.bits(),
                 &mut out_array,
             );
-            for chunk_hash in out_array.chunks_exact(OUT_BYTES).take(chunks_array.len()) {
-                self.push_chunk_hash(array_ref!(chunk_hash, 0, OUT_BYTES), self.chunk.offset);
+            for chunk_hash in out_array.chunks_exact(OUT_LEN).take(chunks_array.len()) {
+                self.push_chunk_hash(array_ref!(chunk_hash, 0, OUT_LEN), self.chunk.offset);
                 // Move the ChunkState's offset forward after each hash. This
                 // is safe because it's clear, and it leaves it in the right
                 // position for any remainder bytes below or subsequent calls
                 // to append.
-                self.chunk.offset += CHUNK_BYTES as u64;
+                self.chunk.offset += CHUNK_LEN as u64;
             }
             chunks_array.clear();
         }
@@ -817,7 +817,7 @@ impl Hasher {
         // any bytes left, add them to the ChunkState. The ChunkState's offset
         // may have been updated above.
         debug_assert_eq!(self.chunk.len(), 0);
-        debug_assert!(chunks_exact.remainder().len() < CHUNK_BYTES);
+        debug_assert!(chunks_exact.remainder().len() < CHUNK_LEN);
         if !chunks_exact.remainder().is_empty() {
             // Working ahead: The subtree_hashes stack might contain subtrees
             // that need to be merged. Normally these would be merged by the

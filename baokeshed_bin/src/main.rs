@@ -59,7 +59,7 @@ fn print_hex(output: &mut baokeshed::Output, byte_length: u64) {
 }
 
 fn hash(args: &Args) -> Result<(), Error> {
-    let byte_length = args.flag_length.unwrap_or(baokeshed::OUT_BYTES as u64);
+    let byte_length = args.flag_length.unwrap_or(baokeshed::OUT_LEN as u64);
     if !args.arg_inputs.is_empty() {
         let mut did_error = false;
         for input in args.arg_inputs.iter() {

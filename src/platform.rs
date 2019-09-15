@@ -1,5 +1,5 @@
 use crate::{
-    avx2, bytes_from_state_words, iv, portable, sse41, Word, BLOCK_BYTES, CHUNK_BYTES, OUT_BYTES,
+    avx2, bytes_from_state_words, iv, portable, sse41, Word, BLOCK_LEN, CHUNK_LEN, OUT_LEN,
 };
 use arrayref::{array_mut_ref, array_ref};
 
@@ -10,7 +10,7 @@ pub const MAX_SIMD_DEGREE: usize = 1;
 
 type CompressionFn = unsafe fn(
     state: &mut [Word; 8],
-    block: &[u8; BLOCK_BYTES],
+    block: &[u8; BLOCK_LEN],
     block_len: Word,
     offset: u64,
     flags: Word,
@@ -68,7 +68,7 @@ impl Platform {
     pub fn compress(
         &self,
         state: &mut [Word; 8],
-        block: &[u8; BLOCK_BYTES],
+        block: &[u8; BLOCK_LEN],
         block_len: Word,
         offset: u64,
         flags: Word,
@@ -81,7 +81,7 @@ impl Platform {
 
     pub fn hash_many_chunks(
         &self,
-        chunks: &[&[u8; CHUNK_BYTES]],
+        chunks: &[&[u8; CHUNK_LEN]],
         key: &[Word; 8],
         offset: u64,
         flags_all: Word,
@@ -89,7 +89,7 @@ impl Platform {
         flags_end: Word,
         out: &mut [u8],
     ) {
-        let blocks = CHUNK_BYTES / BLOCK_BYTES;
+        let blocks = CHUNK_LEN / BLOCK_LEN;
         unsafe {
             // Safe because the layout of arrays is guaranteed, and because the
             // `blocks` count is determined statically from the argument type.
@@ -101,7 +101,7 @@ impl Platform {
                 blocks,
                 key,
                 offset,
-                CHUNK_BYTES as u64,
+                CHUNK_LEN as u64,
                 flags_all,
                 flags_start,
                 flags_end,
@@ -112,7 +112,7 @@ impl Platform {
 
     pub fn hash_many_parents(
         &self,
-        parents: &[&[u8; BLOCK_BYTES]],
+        parents: &[&[u8; BLOCK_LEN]],
         key: &[Word; 8],
         flags: Word,
         out: &mut [u8],
@@ -155,10 +155,10 @@ unsafe fn hash_many_serial(
     mut out: &mut [u8],
     compression_fn: CompressionFn,
 ) {
-    debug_assert!(out.len() >= inputs.len() * OUT_BYTES, "out too short");
-    while inputs.len() >= 1 && out.len() >= OUT_BYTES {
+    debug_assert!(out.len() >= inputs.len() * OUT_LEN, "out too short");
+    while inputs.len() >= 1 && out.len() >= OUT_LEN {
         let mut state = iv(key);
-        let input_blocks = inputs[0] as *const [u8; BLOCK_BYTES];
+        let input_blocks = inputs[0] as *const [u8; BLOCK_LEN];
         let mut flags = flags_all | flags_start;
         for block in 0..blocks {
             if block + 1 == blocks {
@@ -167,16 +167,16 @@ unsafe fn hash_many_serial(
             compression_fn(
                 &mut state,
                 &*input_blocks.add(block),
-                BLOCK_BYTES as Word,
+                BLOCK_LEN as Word,
                 offset,
                 flags,
             );
             flags = flags_all;
         }
-        *array_mut_ref!(out, 0, OUT_BYTES) = bytes_from_state_words(&state);
+        *array_mut_ref!(out, 0, OUT_LEN) = bytes_from_state_words(&state);
         inputs = &inputs[1..];
         offset += offset_delta;
-        out = &mut out[OUT_BYTES..];
+        out = &mut out[OUT_LEN..];
     }
 }
 
@@ -217,8 +217,8 @@ unsafe fn hash_many_sse41(
     flags_end: Word,
     mut out: &mut [u8],
 ) {
-    debug_assert!(out.len() >= inputs.len() * OUT_BYTES, "out too short");
-    while inputs.len() >= sse41::DEGREE && out.len() >= sse41::DEGREE * OUT_BYTES {
+    debug_assert!(out.len() >= inputs.len() * OUT_LEN, "out too short");
+    while inputs.len() >= sse41::DEGREE && out.len() >= sse41::DEGREE * OUT_LEN {
         sse41::compress4_loop(
             array_ref!(inputs, 0, sse41::DEGREE),
             blocks,
@@ -228,11 +228,11 @@ unsafe fn hash_many_sse41(
             flags_all,
             flags_start,
             flags_end,
-            array_mut_ref!(out, 0, sse41::DEGREE * OUT_BYTES),
+            array_mut_ref!(out, 0, sse41::DEGREE * OUT_LEN),
         );
         inputs = &inputs[sse41::DEGREE..];
         offset += sse41::DEGREE as u64 * offset_delta;
-        out = &mut out[sse41::DEGREE * OUT_BYTES..];
+        out = &mut out[sse41::DEGREE * OUT_LEN..];
     }
 
     hash_many_serial(
@@ -261,8 +261,8 @@ unsafe fn hash_many_avx2(
     flags_end: Word,
     mut out: &mut [u8],
 ) {
-    debug_assert!(out.len() >= inputs.len() * OUT_BYTES, "out too short");
-    while inputs.len() >= avx2::DEGREE && out.len() >= avx2::DEGREE * OUT_BYTES {
+    debug_assert!(out.len() >= inputs.len() * OUT_LEN, "out too short");
+    while inputs.len() >= avx2::DEGREE && out.len() >= avx2::DEGREE * OUT_LEN {
         avx2::compress8_loop(
             array_ref!(inputs, 0, avx2::DEGREE),
             blocks,
@@ -272,11 +272,11 @@ unsafe fn hash_many_avx2(
             flags_all,
             flags_start,
             flags_end,
-            array_mut_ref!(out, 0, avx2::DEGREE * OUT_BYTES),
+            array_mut_ref!(out, 0, avx2::DEGREE * OUT_LEN),
         );
         inputs = &inputs[avx2::DEGREE..];
         offset += avx2::DEGREE as u64 * offset_delta;
-        out = &mut out[avx2::DEGREE * OUT_BYTES..];
+        out = &mut out[avx2::DEGREE * OUT_LEN..];
     }
 
     hash_many_sse41(
@@ -307,14 +307,14 @@ mod test {
         // An uneven number of inputs, to trigger all the different loops.
         const NUM_INPUTS: usize = 2 * sse41::DEGREE - 1;
 
-        let mut input_buf = [0; NUM_INPUTS * BLOCK_BYTES];
+        let mut input_buf = [0; NUM_INPUTS * BLOCK_LEN];
         crate::test::paint_test_input(&mut input_buf);
         let mut blocks_array = ArrayVec::<[*const u8; NUM_INPUTS]>::new();
         for i in 0..NUM_INPUTS {
-            blocks_array.push(input_buf[i * BLOCK_BYTES..].as_ptr());
+            blocks_array.push(input_buf[i * BLOCK_LEN..].as_ptr());
         }
 
-        let mut out_portable = [0; NUM_INPUTS * OUT_BYTES];
+        let mut out_portable = [0; NUM_INPUTS * OUT_LEN];
         unsafe {
             hash_many_portable(
                 &blocks_array,
@@ -329,7 +329,7 @@ mod test {
             );
         }
 
-        let mut out_sse41 = [0; NUM_INPUTS * OUT_BYTES];
+        let mut out_sse41 = [0; NUM_INPUTS * OUT_LEN];
         unsafe {
             hash_many_sse41(
                 &blocks_array,
@@ -357,14 +357,14 @@ mod test {
         // An uneven number of inputs, to trigger all the different loops.
         const NUM_INPUTS: usize = 2 * avx2::DEGREE - 1;
 
-        let mut input_buf = [0; NUM_INPUTS * BLOCK_BYTES];
+        let mut input_buf = [0; NUM_INPUTS * BLOCK_LEN];
         crate::test::paint_test_input(&mut input_buf);
         let mut blocks_array = ArrayVec::<[*const u8; NUM_INPUTS]>::new();
         for i in 0..NUM_INPUTS {
-            blocks_array.push(input_buf[i * BLOCK_BYTES..].as_ptr());
+            blocks_array.push(input_buf[i * BLOCK_LEN..].as_ptr());
         }
 
-        let mut out_portable = [0; NUM_INPUTS * OUT_BYTES];
+        let mut out_portable = [0; NUM_INPUTS * OUT_LEN];
         unsafe {
             hash_many_portable(
                 &blocks_array,
@@ -379,7 +379,7 @@ mod test {
             );
         }
 
-        let mut out_avx2 = [0; NUM_INPUTS * OUT_BYTES];
+        let mut out_avx2 = [0; NUM_INPUTS * OUT_LEN];
         unsafe {
             hash_many_avx2(
                 &blocks_array,

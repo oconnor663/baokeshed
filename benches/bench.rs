@@ -6,11 +6,11 @@ use baokeshed::*;
 use rand::prelude::*;
 use test::Bencher;
 
-const BLOCK: usize = baokeshed::BLOCK_BYTES;
+const BLOCK: usize = baokeshed::BLOCK_LEN;
 
-const CHUNK: usize = baokeshed::CHUNK_BYTES;
+const CHUNK: usize = baokeshed::CHUNK_LEN;
 
-const MEDIUM: usize = baokeshed::MAX_SIMD_DEGREE * baokeshed::CHUNK_BYTES;
+const MEDIUM: usize = baokeshed::MAX_SIMD_DEGREE * baokeshed::CHUNK_LEN;
 
 const LONG: usize = 1 << 24; // 16 MiB
 
@@ -117,7 +117,7 @@ fn bench_hasher_04_block(b: &mut Bencher) {
 
 #[bench]
 fn bench_xof(b: &mut Bencher) {
-    b.bytes = OUT_BYTES as u64;
+    b.bytes = OUT_LEN as u64;
     let hasher = Hasher::new();
     let mut xof = hasher.finalize_xof();
     b.iter(|| xof.read());

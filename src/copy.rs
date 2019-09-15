@@ -1,7 +1,7 @@
 //! Utilities for copying from a reader more efficently than with
 //! [`std::io::copy`](https://doc.rust-lang.org/std/io/fn.copy.html).
 
-use crate::{CHUNK_BYTES, MAX_SIMD_DEGREE};
+use crate::{CHUNK_LEN, MAX_SIMD_DEGREE};
 use std::io;
 
 /// An efficient buffer size for [`Hasher`](../struct.Hasher.html).
@@ -21,7 +21,7 @@ use std::io;
 /// If this constant grows above 65536 on any platform, it will be considered a
 /// backwards-incompatible change, and it will be accompanied by a major
 /// version bump.
-pub const WIDE_BUF_LEN: usize = MAX_SIMD_DEGREE * CHUNK_BYTES;
+pub const WIDE_BUF_LEN: usize = MAX_SIMD_DEGREE * CHUNK_LEN;
 
 // This is an implementation detail of libstd, and if it changes there we
 // should update it here. This is covered in the tests.

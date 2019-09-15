@@ -1,8 +1,8 @@
-use crate::{Word, BLOCK_BYTES, IV, MSG_SCHEDULE, WORD_BITS};
+use crate::{Word, BLOCK_LEN, IV, MSG_SCHEDULE, WORD_BITS};
 use arrayref::array_refs;
 
 #[inline(always)]
-fn words_from_block(bytes: &[u8; BLOCK_BYTES]) -> [Word; 16] {
+fn words_from_block(bytes: &[u8; BLOCK_LEN]) -> [Word; 16] {
     let refs = array_refs!(bytes, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4);
     [
         Word::from_le_bytes(*refs.0),
@@ -56,7 +56,7 @@ fn round(state: &mut [Word; 16], msg: &[Word; 16], round: usize) {
 
 pub fn compress(
     state: &mut [Word; 8],
-    block: &[u8; BLOCK_BYTES],
+    block: &[u8; BLOCK_LEN],
     block_len: Word,
     offset: u64,
     flags: Word,
