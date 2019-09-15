@@ -1,5 +1,6 @@
 use failure::Error;
 use serde::Deserialize;
+use std::cmp;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
@@ -8,13 +9,14 @@ use std::path::{Path, PathBuf};
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const USAGE: &str = "
-Usage: baokeshed [<inputs>...]
+Usage: baokeshed [<inputs>...] [--length=<bytes>]
        baokeshed (--help | --version)
 ";
 
 #[derive(Debug, Deserialize)]
 struct Args {
     arg_inputs: Vec<PathBuf>,
+    flag_length: Option<u64>,
     flag_help: bool,
     flag_version: bool,
 }
@@ -35,18 +37,29 @@ fn main() -> Result<(), Error> {
     Ok(())
 }
 
-fn hash_one(maybe_path: &Option<PathBuf>) -> Result<baokeshed::Hash, Error> {
+fn hash_one(maybe_path: &Option<PathBuf>) -> Result<baokeshed::Output, Error> {
     let mut input = open_input(maybe_path)?;
     if let Some(map) = maybe_memmap_input(&input)? {
-        Ok(baokeshed::hash(&map))
+        Ok(baokeshed::hash_xof(&map))
     } else {
         let mut hasher = baokeshed::Hasher::new();
         baokeshed::copy::copy_wide(&mut input, &mut hasher)?;
-        Ok(hasher.finalize())
+        Ok(hasher.finalize_xof())
+    }
+}
+
+fn print_hex(output: &mut baokeshed::Output, byte_length: u64) {
+    let mut hex_bytes_remaining = 2 * byte_length;
+    while hex_bytes_remaining > 0 {
+        let hex = baokeshed::Hash::from(output.read()).to_hex();
+        let take = cmp::min(hex_bytes_remaining, hex.len() as u64);
+        print!("{}", &hex[..take as usize]);
+        hex_bytes_remaining -= take;
     }
 }
 
 fn hash(args: &Args) -> Result<(), Error> {
+    let byte_length = args.flag_length.unwrap_or(baokeshed::OUT_BYTES as u64);
     if !args.arg_inputs.is_empty() {
         let mut did_error = false;
         for input in args.arg_inputs.iter() {
@@ -55,11 +68,12 @@ fn hash(args: &Args) -> Result<(), Error> {
             // This is more convenient for the user in cases like `bao hash *`, where it's common
             // that some of the inputs will error on read e.g. because they're directories.
             match hash_one(&Some(input.clone())) {
-                Ok(hash) => {
+                Ok(mut output) => {
+                    print_hex(&mut output, byte_length);
                     if args.arg_inputs.len() > 1 {
-                        println!("{}  {}", hash.to_hex(), input_str);
+                        println!("  {}", input_str);
                     } else {
-                        println!("{}", hash.to_hex());
+                        println!();
                     }
                 }
                 Err(e) => {
@@ -72,8 +86,9 @@ fn hash(args: &Args) -> Result<(), Error> {
             std::process::exit(1);
         }
     } else {
-        let hash = hash_one(&None)?;
-        println!("{}", hash.to_hex());
+        let mut output = hash_one(&None)?;
+        print_hex(&mut output, byte_length);
+        println!();
     }
     Ok(())
 }

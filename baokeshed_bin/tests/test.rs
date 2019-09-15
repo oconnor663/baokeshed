@@ -38,3 +38,16 @@ fn test_hash_many() {
     );
     assert_eq!(expected, output);
 }
+
+#[test]
+fn test_hash_length() {
+    let mut xof = baokeshed::hash_xof(b"foo");
+    let mut expected = String::new();
+    expected.push_str(baokeshed::Hash::from(xof.read()).to_hex().as_ref());
+    expected.push_str(baokeshed::Hash::from(xof.read()).to_hex().as_ref());
+    let output = cmd!(baokeshed_exe(), "--length=64")
+        .input("foo")
+        .read()
+        .unwrap();
+    assert_eq!(&*expected, &*output);
+}
