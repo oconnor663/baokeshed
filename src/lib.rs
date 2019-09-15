@@ -1,3 +1,10 @@
+//! The standalone functions in this module use both SIMD and
+//! [Rayon](https://github.com/rayon-rs/rayon)-based multithreading. The
+//! streaming [`Hasher`](struct.Hasher.html) implementation uses SIMD but not
+//! threads.
+//!
+//! Encoding and streaming/seeking verification are not yet implemented.
+
 // Design notes:
 //
 // The CHUNK_END and PARENT flags aren't strictly necessary, the former because
@@ -42,7 +49,10 @@ const WORD_BITS: usize = 8 * WORD_BYTES;
 const MAX_DEPTH: usize = 52; // 2^52 * 4096 = 2^64
 const DEFAULT_KEY: &[u8; KEY_BYTES] = &[0; KEY_BYTES];
 
+/// The default number of bytes in a hash.
 pub const OUT_BYTES: usize = 8 * WORD_BYTES;
+
+/// The number of bytes in a key.
 pub const KEY_BYTES: usize = 8 * WORD_BYTES;
 
 // These are pub for tests and benchmarks. Callers don't need them.
@@ -135,6 +145,7 @@ fn iv(key: &[Word; 8]) -> [Word; 8] {
     ]
 }
 
+/// A hash output of the default size, providing constant-time equality.
 #[derive(Clone, Copy)]
 pub struct Hash([u8; OUT_BYTES]);
 
@@ -160,12 +171,14 @@ impl From<[u8; OUT_BYTES]> for Hash {
     }
 }
 
+/// This implementation is constant-time.
 impl PartialEq for Hash {
     fn eq(&self, other: &Hash) -> bool {
         constant_time_eq::constant_time_eq(&self.0[..], &other.0[..])
     }
 }
 
+/// This implementation is constant-time.
 impl PartialEq<[u8; OUT_BYTES]> for Hash {
     fn eq(&self, other: &[u8; OUT_BYTES]) -> bool {
         constant_time_eq::constant_time_eq(&self.0[..], other)
@@ -180,9 +193,12 @@ impl fmt::Debug for Hash {
     }
 }
 
-/// A very simple interface to the XOF, as a proof of concept. A more
-/// fleshed-out implementation would implement `std::io::{Read, Seek}` and
-/// would use SIMD parallelism internally.
+/// An extensible-output hash result, from which you can read any number of
+/// bytes.
+///
+/// This is a simple proof of concept. A more fleshed-out implementation would
+/// implement `std::io::{Read, Seek}` and would use SIMD parallelism
+/// internally.
 #[derive(Clone)]
 pub struct Output {
     state: [Word; 8],
@@ -478,30 +494,42 @@ fn hash_keyed_flags_xof(input: &[u8], key: &[u8; KEY_BYTES], flags: Flags) -> Ou
     )
 }
 
-pub fn hash_keyed_xof(input: &[u8], key: &[u8; KEY_BYTES]) -> Output {
-    hash_keyed_flags_xof(input, key, Flags::empty())
-}
-
-pub fn hash_xof(input: &[u8]) -> Output {
-    hash_keyed_flags_xof(input, DEFAULT_KEY, Flags::empty())
-}
-
-pub fn hash_keyed(input: &[u8], key: &[u8; KEY_BYTES]) -> Hash {
-    hash_keyed_flags_xof(input, key, Flags::empty())
-        .read()
-        .into()
-}
-
+/// The default hash function.
+///
+/// This is the same as using a key of `&[0u8; KEY_BYTES]` with one of the
+/// keyed variants. The bytes of this hash are the same as the first
+/// `OUT_BYTES` bytes of the extensible-output variants.
 pub fn hash(input: &[u8]) -> Hash {
     hash_keyed_flags_xof(input, DEFAULT_KEY, Flags::empty())
         .read()
         .into()
 }
 
+/// The default hash function, with a key argument.
+pub fn hash_keyed(input: &[u8], key: &[u8; KEY_BYTES]) -> Hash {
+    hash_keyed_flags_xof(input, key, Flags::empty())
+        .read()
+        .into()
+}
+
+/// The default hash function, with a key argument, returning an extensible
+/// output.
+pub fn hash_keyed_xof(input: &[u8], key: &[u8; KEY_BYTES]) -> Output {
+    hash_keyed_flags_xof(input, key, Flags::empty())
+}
+
+/// The default hash function, returning an extensible output.
+pub fn hash_xof(input: &[u8]) -> Output {
+    hash_keyed_flags_xof(input, DEFAULT_KEY, Flags::empty())
+}
+
+/// The key derivation function, which is domain-separated from the default
+/// hash.
 pub fn kdf(key: &[u8; KEY_BYTES], context: &[u8]) -> [u8; KEY_BYTES] {
     hash_keyed_flags_xof(context, key, Flags::KDF).read()
 }
 
+/// The key derivation function, returning an extensible output.
 pub fn kdf_xof(key: &[u8; KEY_BYTES], context: &[u8]) -> Output {
     hash_keyed_flags_xof(context, key, Flags::KDF)
 }
@@ -640,6 +668,13 @@ fn hash_one_parent(
     }
 }
 
+/// A streaming hash implementation, which can accept any number of writes.
+///
+/// **Performance note:** Using
+/// [`std::io::copy`](https://doc.rust-lang.org/std/io/fn.copy.html) together
+/// with `Hasher` will generally give poor performance, because it uses a copy
+/// buffer that's too small to drive more than a couple SIMD lanes. Use the
+/// [`copy_wide`](copy/fn.copy_wide.html) utility function instead.
 #[derive(Clone)]
 pub struct Hasher {
     subtree_hashes: ArrayVec<[[u8; OUT_BYTES]; MAX_DEPTH]>,
