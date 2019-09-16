@@ -6,10 +6,6 @@ use baokeshed::*;
 use rand::prelude::*;
 use test::Bencher;
 
-const BLOCK: usize = baokeshed::BLOCK_LEN;
-
-const CHUNK: usize = baokeshed::CHUNK_LEN;
-
 const MEDIUM: usize = baokeshed::MAX_SIMD_DEGREE * baokeshed::CHUNK_LEN;
 
 const LONG: usize = 1 << 24; // 16 MiB
@@ -65,13 +61,13 @@ fn bench_hash_02_medium(b: &mut Bencher) {
 
 #[bench]
 fn bench_hash_03_chunk(b: &mut Bencher) {
-    let mut input = RandomInput::new(b, CHUNK);
+    let mut input = RandomInput::new(b, CHUNK_LEN);
     b.iter(|| baokeshed::hash(input.get()));
 }
 
 #[bench]
 fn bench_hash_04_block(b: &mut Bencher) {
-    let mut input = RandomInput::new(b, BLOCK);
+    let mut input = RandomInput::new(b, BLOCK_LEN);
     b.iter(|| baokeshed::hash(input.get()));
 }
 
@@ -97,7 +93,7 @@ fn bench_hasher_02_medium(b: &mut Bencher) {
 
 #[bench]
 fn bench_hasher_03_chunk(b: &mut Bencher) {
-    let mut input = RandomInput::new(b, CHUNK);
+    let mut input = RandomInput::new(b, CHUNK_LEN);
     b.iter(|| {
         let mut hasher = Hasher::new();
         hasher.update(input.get());
@@ -107,7 +103,7 @@ fn bench_hasher_03_chunk(b: &mut Bencher) {
 
 #[bench]
 fn bench_hasher_04_block(b: &mut Bencher) {
-    let mut input = RandomInput::new(b, BLOCK);
+    let mut input = RandomInput::new(b, BLOCK_LEN);
     b.iter(|| {
         let mut hasher = Hasher::new();
         hasher.update(input.get());
@@ -121,4 +117,19 @@ fn bench_xof(b: &mut Bencher) {
     let hasher = Hasher::new();
     let mut xof = hasher.finalize_xof();
     b.iter(|| xof.read());
+}
+
+#[bench]
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+fn bench_compress(b: &mut Bencher) {
+    if !is_x86_feature_detected!("sse4.1") {
+        return;
+    }
+    let mut state = [0; 8];
+    let mut input = RandomInput::new(b, BLOCK_LEN);
+    b.iter(|| unsafe {
+        let block_ptr = input.get().as_ptr() as *const [u8; BLOCK_LEN];
+        compress_sse41(&mut state, &*block_ptr, BLOCK_LEN as u8, 0, 0, 0);
+        state
+    });
 }

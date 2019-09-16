@@ -256,6 +256,19 @@ impl fmt::Debug for Output {
     }
 }
 
+// Benchmarks only.
+#[doc(hide)]
+pub unsafe fn compress_sse41(
+    state: &mut [Word; 8],
+    block: &[u8; BLOCK_LEN],
+    block_len: u8,
+    offset: u64,
+    internal_flags: u8,
+    app_flags: Word,
+) {
+    sse41::compress(state, block, block_len, offset, internal_flags, app_flags);
+}
+
 // =======================================================================
 // ================== Recursive tree hash implementation =================
 // =======================================================================
