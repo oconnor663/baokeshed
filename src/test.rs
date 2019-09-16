@@ -265,54 +265,100 @@ fn test_three_blocks() {
     exercise_construction(three_blocks_construction, 2 * BLOCK_LEN + 1);
 }
 
+// This is equivalent to lib.rs::hash_one_chunk. Calling that function from
+// tests might hide bugs, so we reimplement a simple version of it here.
+fn hash_whole_chunk_for_testing(
+    chunk: &[u8],
+    key: &[Word; 8],
+    offset: u64,
+    flags: Flags,
+) -> [u8; OUT_LEN] {
+    assert_eq!(chunk.len(), CHUNK_LEN);
+    let blocks = CHUNK_LEN / BLOCK_LEN;
+    let mut state = iv(&key);
+    // First block.
+    portable::compress(
+        &mut state,
+        array_ref!(chunk, 0, BLOCK_LEN),
+        BLOCK_LEN as Word,
+        offset,
+        (flags | Flags::CHUNK_START).bits(),
+    );
+    // Middle blocks.
+    for block_index in 1..blocks - 1 {
+        portable::compress(
+            &mut state,
+            array_ref!(chunk, block_index * BLOCK_LEN, BLOCK_LEN),
+            BLOCK_LEN as Word,
+            offset,
+            flags.bits(),
+        );
+    }
+    // Last block.
+    portable::compress(
+        &mut state,
+        array_ref!(chunk, (blocks - 1) * BLOCK_LEN, BLOCK_LEN),
+        BLOCK_LEN as Word,
+        offset,
+        (flags | Flags::CHUNK_END).bits(),
+    );
+    bytes_from_state_words(&state)
+}
+
 fn three_chunks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], flags: Flags) -> Hash {
     let key_words = words_from_key_bytes(&key);
-    let chunk0 = hash_one_chunk(
-        &input_buf[..CHUNK_LEN],
-        &key_words,
-        0,
-        flags,
-        IsRoot::NotRoot,
-        Platform::detect(),
-    )
-    .read();
-    let chunk1 = hash_one_chunk(
+
+    // The first chunk.
+    let chunk0_out = hash_whole_chunk_for_testing(&input_buf[..CHUNK_LEN], &key_words, 0, flags);
+
+    // The second chunk.
+    let chunk1_out = hash_whole_chunk_for_testing(
         &input_buf[CHUNK_LEN..][..CHUNK_LEN],
         &key_words,
         CHUNK_LEN as u64,
         flags,
-        IsRoot::NotRoot,
-        Platform::detect(),
-    )
-    .read();
-    let chunk2 = hash_one_chunk(
-        &input_buf[2 * CHUNK_LEN..][..1],
-        &key_words,
+    );
+
+    // The third and final chunk is one byte.
+    let mut chunk2_block = [0; BLOCK_LEN];
+    chunk2_block[0] = input_buf[2 * CHUNK_LEN];
+    let mut chunk2_state = iv(&key_words);
+    portable::compress(
+        &mut chunk2_state,
+        &chunk2_block,
+        1,
         2 * CHUNK_LEN as u64,
-        flags,
-        IsRoot::NotRoot,
-        Platform::detect(),
-    )
-    .read();
-    let left_parent = hash_one_parent(
-        &chunk0,
-        &chunk1,
-        &key_words,
-        flags,
-        IsRoot::NotRoot,
-        Platform::detect(),
-    )
-    .read();
-    hash_one_parent(
-        &left_parent,
-        &chunk2,
-        &key_words,
-        flags,
-        IsRoot::Root,
-        Platform::detect(),
-    )
-    .read()
-    .into()
+        (flags | Flags::CHUNK_START | Flags::CHUNK_END).bits(),
+    );
+    let chunk2_out = bytes_from_state_words(&chunk2_state);
+
+    // The parent of the first two chunks.
+    let mut left_parent_state = iv(&key_words);
+    let mut left_parent_block = [0; BLOCK_LEN];
+    left_parent_block[..OUT_LEN].copy_from_slice(&chunk0_out);
+    left_parent_block[OUT_LEN..].copy_from_slice(&chunk1_out);
+    portable::compress(
+        &mut left_parent_state,
+        &left_parent_block,
+        BLOCK_LEN as Word,
+        0,
+        (flags | Flags::PARENT).bits(),
+    );
+    let left_parent_out = bytes_from_state_words(&left_parent_state);
+
+    // The root node.
+    let mut root_state = iv(&key_words);
+    let mut root_block = [0; BLOCK_LEN];
+    root_block[..OUT_LEN].copy_from_slice(&left_parent_out);
+    root_block[OUT_LEN..].copy_from_slice(&chunk2_out);
+    portable::compress(
+        &mut root_state,
+        &root_block,
+        BLOCK_LEN as Word,
+        0,
+        (flags | Flags::PARENT | Flags::ROOT).bits(),
+    );
+    bytes_from_state_words(&root_state).into()
 }
 
 #[test]
