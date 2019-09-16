@@ -41,11 +41,34 @@ fn test_hash_many() {
 
 #[test]
 fn test_hash_length() {
-    let mut xof = baokeshed::hash_xof(b"foo");
+    let mut xof = baokeshed::Hasher::new().update(b"foo").finalize_xof();
     let mut expected = String::new();
     expected.push_str(baokeshed::Hash::from(xof.read()).to_hex().as_ref());
     expected.push_str(baokeshed::Hash::from(xof.read()).to_hex().as_ref());
     let output = cmd!(baokeshed_exe(), "--length=64")
+        .input("foo")
+        .read()
+        .unwrap();
+    assert_eq!(&*expected, &*output);
+}
+
+#[test]
+fn test_hash_key() {
+    let key = [42; baokeshed::KEY_LEN];
+    let expected = baokeshed::hash_keyed(b"foo", &key).to_hex();
+    let output = cmd!(baokeshed_exe(), "--key", hex::encode(&key))
+        .input("foo")
+        .read()
+        .unwrap();
+    assert_eq!(&*expected, &*output);
+}
+
+#[test]
+fn test_hash_app_flags() {
+    let app_flags = 99;
+    let expected =
+        baokeshed::hash_keyed_flagged(b"foo", baokeshed::DEFAULT_KEY, app_flags).to_hex();
+    let output = cmd!(baokeshed_exe(), "--flags", app_flags.to_string())
         .input("foo")
         .read()
         .unwrap();

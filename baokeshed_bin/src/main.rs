@@ -9,15 +9,17 @@ use std::path::{Path, PathBuf};
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const USAGE: &str = "
-Usage: baokeshed [<inputs>...] [--length=<bytes>]
+Usage: baokeshed [<inputs>...] [--length=<bytes>] [--key=<hex>] [--flags=<int>]
        baokeshed (--help | --version)
 ";
 
 #[derive(Debug, Deserialize)]
 struct Args {
     arg_inputs: Vec<PathBuf>,
-    flag_length: Option<u64>,
+    flag_flags: Option<u32>,
     flag_help: bool,
+    flag_key: Option<String>,
+    flag_length: Option<u64>,
     flag_version: bool,
 }
 
@@ -37,12 +39,16 @@ fn main() -> Result<(), Error> {
     Ok(())
 }
 
-fn hash_one(maybe_path: &Option<PathBuf>) -> Result<baokeshed::Output, Error> {
+fn hash_one(
+    maybe_path: &Option<PathBuf>,
+    key: &[u8; baokeshed::KEY_LEN],
+    app_flags: u32,
+) -> Result<baokeshed::Output, Error> {
     let mut input = open_input(maybe_path)?;
     if let Some(map) = maybe_memmap_input(&input)? {
-        Ok(baokeshed::hash_xof(&map))
+        Ok(baokeshed::hash_keyed_flagged_xof(&map, key, app_flags))
     } else {
-        let mut hasher = baokeshed::Hasher::new();
+        let mut hasher = baokeshed::Hasher::new_keyed_flagged(key, app_flags);
         baokeshed::copy::copy_wide(&mut input, &mut hasher)?;
         Ok(hasher.finalize_xof())
     }
@@ -60,6 +66,21 @@ fn print_hex(output: &mut baokeshed::Output, byte_length: u64) {
 
 fn hash(args: &Args) -> Result<(), Error> {
     let byte_length = args.flag_length.unwrap_or(baokeshed::OUT_LEN as u64);
+    let app_flags = args.flag_flags.unwrap_or(baokeshed::DEFAULT_APP_FLAGS);
+    let mut key_array = [0; baokeshed::KEY_LEN];
+    debug_assert_eq!(&key_array, baokeshed::DEFAULT_KEY);
+    if let Some(key_str) = &args.flag_key {
+        let key_bytes = hex::decode(key_str)?;
+        if key_bytes.len() != baokeshed::KEY_LEN {
+            failure::bail!(
+                "keys must be {} bytes, found {}",
+                baokeshed::KEY_LEN,
+                key_bytes.len()
+            );
+        }
+        key_array.copy_from_slice(&key_bytes);
+    }
+
     if !args.arg_inputs.is_empty() {
         let mut did_error = false;
         for input in args.arg_inputs.iter() {
@@ -67,7 +88,7 @@ fn hash(args: &Args) -> Result<(), Error> {
             // As with b2sum or sha1sum, the multi-arg hash loop prints errors and keeps going.
             // This is more convenient for the user in cases like `bao hash *`, where it's common
             // that some of the inputs will error on read e.g. because they're directories.
-            match hash_one(&Some(input.clone())) {
+            match hash_one(&Some(input.clone()), &key_array, app_flags) {
                 Ok(mut output) => {
                     print_hex(&mut output, byte_length);
                     if args.arg_inputs.len() > 1 {
@@ -86,10 +107,11 @@ fn hash(args: &Args) -> Result<(), Error> {
             std::process::exit(1);
         }
     } else {
-        let mut output = hash_one(&None)?;
+        let mut output = hash_one(&None, &key_array, app_flags)?;
         print_hex(&mut output, byte_length);
         println!();
     }
+
     Ok(())
 }
 
