@@ -47,8 +47,12 @@ type Word = u32;
 const WORD_BYTES: usize = core::mem::size_of::<Word>();
 const WORD_BITS: usize = 8 * WORD_BYTES;
 const MAX_DEPTH: usize = 52; // 2^52 * 4096 = 2^64
-const DEFAULT_KEY: &[u8; KEY_LEN] = &[0; KEY_LEN];
-const DEFAULT_APP_FLAGS: Word = 0;
+
+/// The default key, all zero bytes.
+pub const DEFAULT_KEY: &[u8; KEY_LEN] = &[0; KEY_LEN];
+
+/// The default app flags, all zero bits.
+pub const DEFAULT_APP_FLAGS: Word = 0;
 
 /// The default number of bytes in a hash, 32.
 pub const OUT_LEN: usize = 8 * WORD_BYTES;
