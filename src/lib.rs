@@ -488,8 +488,8 @@ fn condense_root(
     }
 }
 
-/// The default hash function, with a key argument and an app flags argument,
-/// returning an extensible output.
+/// The hash function with a key argument and an app flags argument, returning
+/// an extensible output.
 pub fn hash_keyed_flagged_xof(input: &[u8], key: &[u8; KEY_LEN], app_flags: Word) -> Output {
     let platform = Platform::detect();
     let key_words = words_from_key_bytes(key);
@@ -538,14 +538,14 @@ pub fn hash(input: &[u8]) -> Hash {
         .into()
 }
 
-/// The default hash function, with a key argument.
+/// The hash function with a key argument.
 pub fn hash_keyed(input: &[u8], key: &[u8; KEY_LEN]) -> Hash {
     hash_keyed_flagged_xof(input, key, DEFAULT_APP_FLAGS)
         .read()
         .into()
 }
 
-/// The default hash function, with a key argument and an app flags argument.
+/// The hash function with a key argument and an app flags argument.
 pub fn hash_keyed_flagged(input: &[u8], key: &[u8; KEY_LEN], app_flags: Word) -> Hash {
     hash_keyed_flagged_xof(input, key, app_flags).read().into()
 }
@@ -705,14 +705,19 @@ pub struct Hasher {
 }
 
 impl Hasher {
+    /// Construct an incremental hasher for the default hash function.
     pub fn new() -> Self {
         Self::new_keyed(&[0; KEY_LEN])
     }
 
+    /// Construct an incremental hasher for the default hash function with a
+    /// key argument.
     pub fn new_keyed(key: &[u8; KEY_LEN]) -> Self {
         Self::new_keyed_flagged(key, DEFAULT_APP_FLAGS)
     }
 
+    /// Construct an incremental hasher for the default hash function with a
+    /// key argument and an app flags argument.
     pub fn new_keyed_flagged(key_bytes: &[u8; KEY_LEN], app_flags: Word) -> Self {
         let key = words_from_key_bytes(key_bytes);
         Self {
@@ -764,6 +769,12 @@ impl Hasher {
         self.subtree_hashes.push(*hash);
     }
 
+    /// Add input bytes to the hash.
+    ///
+    /// Updating `Hasher` is more efficient when you use a buffer size that's a
+    /// multiple of [`WIDE_BUF_LEN`](copy/constant.WIDE_BUF_LEN.html). The
+    /// [`copy_wide`](copy/fn.copy_wide.html) helper function takes care of
+    /// this.
     pub fn update(&mut self, mut input: &[u8]) -> &mut Self {
         // When we have whole chunks coming in, hash_chunks_parallel gives the
         // best performance. However, we have to be careful with the very first
@@ -852,10 +863,18 @@ impl Hasher {
         self
     }
 
+    /// Finalize the root hash.
+    ///
+    /// This method is idempotent, and calling it multiple times will give the
+    /// same result. It's also possible to add more input and finalize again.
     pub fn finalize(&self) -> Hash {
         self.finalize_xof().read().into()
     }
 
+    /// Finalize the root hash, returning an extensible output.
+    ///
+    /// This method is idempotent, and calling it multiple times will give the
+    /// same result. It's also possible to add more input and finalize again.
     pub fn finalize_xof(&self) -> Output {
         // If the current chunk is the only chunk, that makes it the root node
         // also. Convert it directly into an Output. Otherwise, we need to
