@@ -1,5 +1,5 @@
 use crate::{
-    avx2, bytes_from_state_words, iv, portable, sse41, Word, BLOCK_LEN, CHUNK_LEN, OUT_LEN,
+    avx2, bytes_from_state_words, iv, portable, sse41, Flags, Word, BLOCK_LEN, CHUNK_LEN, OUT_LEN,
 };
 use arrayref::{array_mut_ref, array_ref};
 
@@ -11,9 +11,10 @@ pub const MAX_SIMD_DEGREE: usize = 1;
 type CompressionFn = unsafe fn(
     state: &mut [Word; 8],
     block: &[u8; BLOCK_LEN],
-    block_len: Word,
+    block_len: u8,
     offset: u64,
-    flags: Word,
+    internal_flags: u8,
+    app_flags: Word,
 );
 
 type HashManyFn = unsafe fn(
@@ -22,9 +23,9 @@ type HashManyFn = unsafe fn(
     key: &[Word; 8],
     offset: u64,
     offset_delta: u64,
-    flags_all: Word,
-    flags_start: Word,
-    flags_end: Word,
+    internal_flags_start: u8,
+    internal_flags_end: u8,
+    app_flags: Word,
     out: &mut [u8],
 );
 
@@ -69,24 +70,24 @@ impl Platform {
         &self,
         state: &mut [Word; 8],
         block: &[u8; BLOCK_LEN],
-        block_len: Word,
+        block_len: u8,
         offset: u64,
-        flags: Word,
+        internal_flags: u8,
+        app_flags: Word,
     ) {
         // Safe because detect() checked for platform support.
         unsafe {
-            (self.compression_fn)(state, block, block_len, offset, flags);
+            (self.compression_fn)(state, block, block_len, offset, internal_flags, app_flags);
         }
     }
 
+    // These are never the root.
     pub fn hash_many_chunks(
         &self,
         chunks: &[&[u8; CHUNK_LEN]],
         key: &[Word; 8],
         offset: u64,
-        flags_all: Word,
-        flags_start: Word,
-        flags_end: Word,
+        app_flags: Word,
         out: &mut [u8],
     ) {
         let blocks = CHUNK_LEN / BLOCK_LEN;
@@ -102,26 +103,25 @@ impl Platform {
                 key,
                 offset,
                 CHUNK_LEN as u64,
-                flags_all,
-                flags_start,
-                flags_end,
+                Flags::CHUNK_START.bits(),
+                Flags::CHUNK_END.bits(),
+                app_flags,
                 out,
             );
         }
     }
 
+    // These are never the root.
     pub fn hash_many_parents(
         &self,
         parents: &[&[u8; BLOCK_LEN]],
         key: &[Word; 8],
-        flags: Word,
+        app_flags: Word,
         out: &mut [u8],
     ) {
         let blocks = 1;
         let offset = 0;
         let offset_delta = 0;
-        let flags_start = 0;
-        let flags_end = 0;
         unsafe {
             // Safe because the layout of arrays is guaranteed, and because the
             // `blocks` count is determined statically from the argument type.
@@ -134,9 +134,9 @@ impl Platform {
                 key,
                 offset,
                 offset_delta,
-                flags,
-                flags_start,
-                flags_end,
+                Flags::PARENT.bits(),
+                Flags::empty().bits(), // Only one block, no need for end flags.
+                app_flags,
                 out,
             );
         }
@@ -149,9 +149,9 @@ unsafe fn hash_many_serial(
     key: &[Word; 8],
     mut offset: u64,
     offset_delta: u64,
-    flags_all: Word,
-    flags_start: Word,
-    flags_end: Word,
+    internal_flags_start: u8,
+    internal_flags_end: u8,
+    app_flags: Word,
     mut out: &mut [u8],
     compression_fn: CompressionFn,
 ) {
@@ -159,19 +159,20 @@ unsafe fn hash_many_serial(
     while inputs.len() >= 1 && out.len() >= OUT_LEN {
         let mut state = iv(key);
         let input_blocks = inputs[0] as *const [u8; BLOCK_LEN];
-        let mut flags = flags_all | flags_start;
+        let mut internal_flags = internal_flags_start;
         for block in 0..blocks {
             if block + 1 == blocks {
-                flags |= flags_end;
+                internal_flags |= internal_flags_end;
             }
             compression_fn(
                 &mut state,
                 &*input_blocks.add(block),
-                BLOCK_LEN as Word,
+                BLOCK_LEN as u8,
                 offset,
-                flags,
+                internal_flags,
+                app_flags,
             );
-            flags = flags_all;
+            internal_flags = 0;
         }
         *array_mut_ref!(out, 0, OUT_LEN) = bytes_from_state_words(&state);
         inputs = &inputs[1..];
@@ -186,9 +187,9 @@ unsafe fn hash_many_portable(
     key: &[Word; 8],
     offset: u64,
     offset_delta: u64,
-    flags_all: Word,
-    flags_start: Word,
-    flags_end: Word,
+    internal_flags_start: u8,
+    internal_flags_end: u8,
+    app_flags: Word,
     out: &mut [u8],
 ) {
     hash_many_serial(
@@ -197,9 +198,9 @@ unsafe fn hash_many_portable(
         key,
         offset,
         offset_delta,
-        flags_all,
-        flags_start,
-        flags_end,
+        internal_flags_start,
+        internal_flags_end,
+        app_flags,
         out,
         portable::compress,
     );
@@ -212,9 +213,9 @@ unsafe fn hash_many_sse41(
     key: &[Word; 8],
     mut offset: u64,
     offset_delta: u64,
-    flags_all: Word,
-    flags_start: Word,
-    flags_end: Word,
+    internal_flags_start: u8,
+    internal_flags_end: u8,
+    app_flags: Word,
     mut out: &mut [u8],
 ) {
     debug_assert!(out.len() >= inputs.len() * OUT_LEN, "out too short");
@@ -225,9 +226,9 @@ unsafe fn hash_many_sse41(
             key,
             offset,
             offset_delta,
-            flags_all,
-            flags_start,
-            flags_end,
+            internal_flags_start,
+            internal_flags_end,
+            app_flags,
             array_mut_ref!(out, 0, sse41::DEGREE * OUT_LEN),
         );
         inputs = &inputs[sse41::DEGREE..];
@@ -241,9 +242,9 @@ unsafe fn hash_many_sse41(
         key,
         offset,
         offset_delta,
-        flags_all,
-        flags_start,
-        flags_end,
+        internal_flags_start,
+        internal_flags_end,
+        app_flags,
         out,
         sse41::compress,
     );
@@ -256,9 +257,9 @@ unsafe fn hash_many_avx2(
     key: &[Word; 8],
     mut offset: u64,
     offset_delta: u64,
-    flags_all: Word,
-    flags_start: Word,
-    flags_end: Word,
+    internal_flags_start: u8,
+    internal_flags_end: u8,
+    app_flags: Word,
     mut out: &mut [u8],
 ) {
     debug_assert!(out.len() >= inputs.len() * OUT_LEN, "out too short");
@@ -269,9 +270,9 @@ unsafe fn hash_many_avx2(
             key,
             offset,
             offset_delta,
-            flags_all,
-            flags_start,
-            flags_end,
+            internal_flags_start,
+            internal_flags_end,
+            app_flags,
             array_mut_ref!(out, 0, avx2::DEGREE * OUT_LEN),
         );
         inputs = &inputs[avx2::DEGREE..];
@@ -285,9 +286,9 @@ unsafe fn hash_many_avx2(
         key,
         offset,
         offset_delta,
-        flags_all,
-        flags_start,
-        flags_end,
+        internal_flags_start,
+        internal_flags_end,
+        app_flags,
         out,
     );
 }

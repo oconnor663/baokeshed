@@ -1,6 +1,24 @@
 use crate::*;
 
 #[test]
+fn test_offset_words() {
+    let offset: u64 = (1 << 32) + 2;
+    assert_eq!(offset_low(offset), 2);
+    assert_eq!(offset_high(offset), 1);
+}
+
+#[test]
+fn test_block_flags() {
+    let block_len: u8 = 0b1110;
+    let root_flag: u8 = Flags::ROOT.bits();
+    assert_eq!(root_flag, 0b10000000);
+    assert_eq!(
+        block_flags(block_len, root_flag),
+        0b10000000000000000000000000001110
+    );
+}
+
+#[test]
 fn test_largest_power_of_two_leq() {
     let input_output = &[
         // The zero case is nonsensical, but it does work.
@@ -90,86 +108,79 @@ fn test_recursive_incremental_same() {
     for &case in TEST_CASES {
         let input = &input_buf[..case];
         let key = array_ref!(input_buf, 0, KEY_LEN);
+        let app_flags = 23;
 
-        let recursive_hash = hash_keyed(input, key);
-        let recursive_kdf = kdf(key, input);
+        let recursive_hash = hash_keyed_flagged(input, key, app_flags);
 
-        let incremental_hash_all = Hasher::new_keyed(key).update(input).finalize();
-        assert_eq!(recursive_hash, incremental_hash_all);
-
-        // Private APIs currently.
-        let kdf_all = Hasher::new_keyed_flags(key, Flags::KDF)
+        let incremental_hash_all = Hasher::new_keyed_flagged(key, app_flags)
             .update(input)
             .finalize();
-        assert_eq!(&recursive_kdf, kdf_all.as_bytes());
+        assert_eq!(recursive_hash, incremental_hash_all);
 
-        let mut hasher_one_at_a_time = Hasher::new_keyed(key);
+        let mut hasher_one_at_a_time = Hasher::new_keyed_flagged(key, app_flags);
         for &byte in input {
             hasher_one_at_a_time.update(&[byte]);
         }
         assert_eq!(recursive_hash, hasher_one_at_a_time.finalize());
-
-        // Private APIs currently.
-        let mut kdf_one_at_a_time = Hasher::new_keyed_flags(key, Flags::KDF);
-        for &byte in input {
-            kdf_one_at_a_time.update(&[byte]);
-        }
-        assert_eq!(&recursive_kdf, kdf_one_at_a_time.finalize().as_bytes());
     }
 }
 
 #[test]
 fn test_zero_bytes() {
-    let mut key = [0; KEY_LEN];
+    let mut key = [42; KEY_LEN];
     paint_test_input(&mut key);
     let key_words = words_from_key_bytes(&key);
     let mut state = iv(&key_words);
     let block = [0; BLOCK_LEN];
-    let flags = Flags::CHUNK_START | Flags::CHUNK_END | Flags::ROOT;
-    portable::compress(&mut state, &block, 0, 0, flags.bits());
+    let internal_flags = Flags::CHUNK_START | Flags::CHUNK_END | Flags::ROOT;
+    let app_flags = 23;
+    portable::compress(&mut state, &block, 0, 0, internal_flags.bits(), app_flags);
     let expected_hash: Hash = bytes_from_state_words(&state).into();
 
-    assert_eq!(expected_hash, hash_keyed(&[], &key));
+    assert_eq!(expected_hash, hash_keyed_flagged(&[], &key, app_flags));
 
-    let hasher = Hasher::new_keyed(&key);
+    let hasher = Hasher::new_keyed_flagged(&key, app_flags);
     assert_eq!(expected_hash, hasher.finalize());
 }
 
 #[test]
 fn test_one_byte() {
-    let mut key = [0; KEY_LEN];
+    let mut key = [42; KEY_LEN];
     paint_test_input(&mut key);
     let key_words = words_from_key_bytes(&key);
     let mut state = iv(&key_words);
     let mut block = [0; BLOCK_LEN];
     block[0] = 9;
-    let flags = Flags::CHUNK_START | Flags::CHUNK_END | Flags::ROOT;
-    portable::compress(&mut state, &block, 1, 0, flags.bits());
+    let internal_flags = Flags::CHUNK_START | Flags::CHUNK_END | Flags::ROOT;
+    let app_flags = 23;
+    portable::compress(&mut state, &block, 1, 0, internal_flags.bits(), app_flags);
     let expected_hash: Hash = bytes_from_state_words(&state).into();
 
-    assert_eq!(expected_hash, hash_keyed(&[9], &key));
+    assert_eq!(expected_hash, hash_keyed_flagged(&[9], &key, app_flags));
 
-    let mut hasher = Hasher::new_keyed(&key);
+    let mut hasher = Hasher::new_keyed_flagged(&key, app_flags);
     hasher.update(&[9]);
     assert_eq!(expected_hash, hasher.finalize());
 }
 
-type Construction = fn(&[u8], &[u8; KEY_LEN], Flags) -> Hash;
+type Construction = fn(input_buf: &[u8], key: &[u8; KEY_LEN], flags: Word) -> Hash;
 
 fn exercise_construction(construction: Construction, input_len: usize) {
     let mut input_buf = [0; 65536];
     paint_test_input(&mut input_buf);
     let input = &input_buf[..input_len];
-    let key = array_ref!(input, 7, KEY_LEN);
 
-    // Exercise the default hash.
-    let expected_default_hash = construction(&input, &[0; KEY_LEN], Flags::empty());
+    // Check the default parameters.
+    let expected_default_hash = construction(&input, &[0; KEY_LEN], 0);
     assert_eq!(expected_default_hash, hash(&input));
     assert_eq!(expected_default_hash, hash_keyed(&input, &[0; KEY_LEN]));
-    assert_eq!(expected_default_hash, hash_xof(&input).read());
     assert_eq!(
         expected_default_hash,
-        hash_keyed_xof(&input, &[0; KEY_LEN]).read(),
+        hash_keyed_flagged(&input, &[0; KEY_LEN], 0)
+    );
+    assert_eq!(
+        expected_default_hash,
+        hash_keyed_flagged_xof(&input, &[0; KEY_LEN], 0).read()
     );
     assert_eq!(
         expected_default_hash,
@@ -181,51 +192,43 @@ fn exercise_construction(construction: Construction, input_len: usize) {
     );
     assert_eq!(
         expected_default_hash,
-        Hasher::new().update(&input).finalize_xof().read(),
+        Hasher::new_keyed_flagged(&[0; KEY_LEN], 0)
+            .update(&input)
+            .finalize(),
     );
     assert_eq!(
         expected_default_hash,
-        Hasher::new_keyed(&[0; KEY_LEN])
-            .update(&input)
-            .finalize_xof()
-            .read(),
+        Hasher::new().update(&input).finalize_xof().read(),
     );
 
-    // Exercise the keyed hash.
-    let expected_keyed_hash = construction(&input, key, Flags::empty());
-    assert_eq!(expected_keyed_hash, hash_keyed(&input, key));
-    assert_eq!(expected_keyed_hash, hash_keyed_xof(&input, key).read(),);
+    // Check non-default parameters.
+    let key = array_ref!(input, 7, KEY_LEN);
+    let app_flags = 23;
+    let expected_nondefault_hash = construction(&input, key, app_flags);
     assert_eq!(
-        expected_keyed_hash,
-        Hasher::new_keyed(key).update(&input).finalize(),
+        expected_nondefault_hash,
+        hash_keyed_flagged(&input, key, app_flags)
     );
     assert_eq!(
-        expected_keyed_hash,
-        Hasher::new_keyed(key).update(&input).finalize_xof().read(),
+        expected_nondefault_hash,
+        hash_keyed_flagged_xof(&input, key, app_flags).read(),
     );
-
-    // Exercise the KDF.
-    let expected_kdf_out = *construction(&input, key, Flags::KDF).as_bytes();
-    assert_eq!(expected_kdf_out, kdf(key, &input));
-    assert_eq!(expected_kdf_out, kdf_xof(key, &input).read());
-    // These are currently private APIs but it's nice to test them anyway.
     assert_eq!(
-        &expected_kdf_out,
-        Hasher::new_keyed_flags(key, Flags::KDF)
+        expected_nondefault_hash,
+        Hasher::new_keyed_flagged(key, app_flags)
             .update(&input)
-            .finalize()
-            .as_bytes(),
+            .finalize(),
     );
     assert_eq!(
-        expected_kdf_out,
-        Hasher::new_keyed_flags(key, Flags::KDF)
+        expected_nondefault_hash,
+        Hasher::new_keyed_flagged(key, app_flags)
             .update(&input)
             .finalize_xof()
             .read(),
     );
 }
 
-fn three_blocks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], flags: Flags) -> Hash {
+fn three_blocks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], app_flags: Word) -> Hash {
     let key_words = words_from_key_bytes(&key);
     let mut state = iv(&key_words);
 
@@ -233,18 +236,20 @@ fn three_blocks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], flags: Flags
     portable::compress(
         &mut state,
         &block0,
-        BLOCK_LEN as Word,
+        BLOCK_LEN as u8,
         0,
-        (flags | Flags::CHUNK_START).bits(),
+        Flags::CHUNK_START.bits(),
+        app_flags,
     );
 
     let block1 = array_ref!(input_buf, BLOCK_LEN, BLOCK_LEN);
     portable::compress(
         &mut state,
         &block1,
-        BLOCK_LEN as Word,
+        BLOCK_LEN as u8,
         0, // Subsequent blocks keep using the chunk's starting offset.
-        flags.bits(),
+        0, // Middle blocks have no internal flags.
+        app_flags,
     );
 
     let mut block2 = [0; BLOCK_LEN];
@@ -254,7 +259,8 @@ fn three_blocks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], flags: Flags
         &block2,
         1,
         0, // Subsequent blocks keep using the chunk's starting offset.
-        (flags | Flags::CHUNK_END | Flags::ROOT).bits(),
+        (Flags::CHUNK_END | Flags::ROOT).bits(),
+        app_flags,
     );
 
     bytes_from_state_words(&state).into()
@@ -271,7 +277,7 @@ fn hash_whole_chunk_for_testing(
     chunk: &[u8],
     key: &[Word; 8],
     offset: u64,
-    flags: Flags,
+    app_flags: Word,
 ) -> [u8; OUT_LEN] {
     assert_eq!(chunk.len(), CHUNK_LEN);
     let blocks = CHUNK_LEN / BLOCK_LEN;
@@ -280,43 +286,47 @@ fn hash_whole_chunk_for_testing(
     portable::compress(
         &mut state,
         array_ref!(chunk, 0, BLOCK_LEN),
-        BLOCK_LEN as Word,
+        BLOCK_LEN as u8,
         offset,
-        (flags | Flags::CHUNK_START).bits(),
+        Flags::CHUNK_START.bits(),
+        app_flags,
     );
     // Middle blocks.
     for block_index in 1..blocks - 1 {
         portable::compress(
             &mut state,
             array_ref!(chunk, block_index * BLOCK_LEN, BLOCK_LEN),
-            BLOCK_LEN as Word,
+            BLOCK_LEN as u8,
             offset,
-            flags.bits(),
+            0,
+            app_flags,
         );
     }
     // Last block.
     portable::compress(
         &mut state,
         array_ref!(chunk, (blocks - 1) * BLOCK_LEN, BLOCK_LEN),
-        BLOCK_LEN as Word,
+        BLOCK_LEN as u8,
         offset,
-        (flags | Flags::CHUNK_END).bits(),
+        Flags::CHUNK_END.bits(),
+        app_flags,
     );
     bytes_from_state_words(&state)
 }
 
-fn three_chunks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], flags: Flags) -> Hash {
+fn three_chunks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], app_flags: Word) -> Hash {
     let key_words = words_from_key_bytes(&key);
 
     // The first chunk.
-    let chunk0_out = hash_whole_chunk_for_testing(&input_buf[..CHUNK_LEN], &key_words, 0, flags);
+    let chunk0_out =
+        hash_whole_chunk_for_testing(&input_buf[..CHUNK_LEN], &key_words, 0, app_flags);
 
     // The second chunk.
     let chunk1_out = hash_whole_chunk_for_testing(
         &input_buf[CHUNK_LEN..][..CHUNK_LEN],
         &key_words,
         CHUNK_LEN as u64,
-        flags,
+        app_flags,
     );
 
     // The third and final chunk is one byte.
@@ -328,7 +338,8 @@ fn three_chunks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], flags: Flags
         &chunk2_block,
         1,
         2 * CHUNK_LEN as u64,
-        (flags | Flags::CHUNK_START | Flags::CHUNK_END).bits(),
+        (Flags::CHUNK_START | Flags::CHUNK_END).bits(),
+        app_flags,
     );
     let chunk2_out = bytes_from_state_words(&chunk2_state);
 
@@ -340,9 +351,10 @@ fn three_chunks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], flags: Flags
     portable::compress(
         &mut left_parent_state,
         &left_parent_block,
-        BLOCK_LEN as Word,
+        BLOCK_LEN as u8,
         0,
-        (flags | Flags::PARENT).bits(),
+        Flags::PARENT.bits(),
+        app_flags,
     );
     let left_parent_out = bytes_from_state_words(&left_parent_state);
 
@@ -354,9 +366,10 @@ fn three_chunks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], flags: Flags
     portable::compress(
         &mut root_state,
         &root_block,
-        BLOCK_LEN as Word,
+        BLOCK_LEN as u8,
         0,
-        (flags | Flags::PARENT | Flags::ROOT).bits(),
+        (Flags::PARENT | Flags::ROOT).bits(),
+        app_flags,
     );
     bytes_from_state_words(&root_state).into()
 }
@@ -382,36 +395,25 @@ fn test_default_key() {
 #[test]
 fn test_xof_output() {
     let input = b"abc";
-    let expected_hash = hash(input);
+    let key = &[42; KEY_LEN];
+    let app_flags = 23;
+    let expected_hash = hash_keyed_flagged(input, key, app_flags);
 
-    let mut hasher = Hasher::new();
-    hasher.update(input);
-    // Pin hasher as immutable for all of the following.
-    let hasher = hasher;
+    let mut xof = hash_keyed_flagged_xof(input, key, app_flags);
+    let mut hasher_xof = Hasher::new_keyed_flagged(key, app_flags)
+        .update(input)
+        .finalize_xof();
 
-    assert_eq!(expected_hash, hasher.finalize());
-
-    let mut xof = hasher.finalize_xof();
     let first_bytes = xof.read();
-    assert_eq!(expected_hash.as_bytes(), &first_bytes);
+    assert_eq!(first_bytes, hasher_xof.read());
+    assert_eq!(&first_bytes, expected_hash.as_bytes());
 
     let second_bytes = xof.read();
+    assert_eq!(second_bytes, hasher_xof.read());
     assert!(first_bytes != second_bytes);
 
     let third_bytes = xof.read();
+    assert_eq!(third_bytes, hasher_xof.read());
     assert!(first_bytes != third_bytes);
     assert!(second_bytes != third_bytes);
-}
-
-#[test]
-fn test_keyed_xof_wrappers() {
-    let input = b"abc";
-    let expected_hash = hash(input);
-    let mut xof = hash_xof(input);
-    assert!(expected_hash == xof.read());
-
-    let key = [42; KEY_LEN];
-    let expected_keyed_hash = hash_keyed(input, &key);
-    let mut keyed_xof = hash_keyed_xof(input, &key);
-    assert_eq!(expected_keyed_hash, keyed_xof.read());
 }

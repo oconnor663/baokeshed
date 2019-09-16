@@ -3,7 +3,9 @@ use core::arch::x86::*;
 #[cfg(target_arch = "x86_64")]
 use core::arch::x86_64::*;
 
-use crate::{Word, BLOCK_LEN, IV, MSG_SCHEDULE, OUT_LEN, WORD_BITS, WORD_BYTES};
+use crate::{
+    block_flags, offset_high, offset_low, Word, BLOCK_LEN, IV, MSG_SCHEDULE, OUT_LEN, WORD_BYTES,
+};
 use arrayref::mut_array_refs;
 
 pub const DEGREE: usize = 4;
@@ -126,18 +128,19 @@ unsafe fn undiagonalize(row1: &mut __m128i, row3: &mut __m128i, row4: &mut __m12
 pub unsafe fn compress(
     state: &mut [Word; 8],
     block: &[u8; BLOCK_LEN],
-    block_len: Word,
+    block_len: u8,
     offset: u64,
-    flags: Word,
+    internal_flags: u8,
+    app_flags: Word,
 ) {
     let row1 = &mut loadu(state.as_ptr().add(0) as _);
     let row2 = &mut loadu(state.as_ptr().add(4) as _);
     let row3 = &mut set4(IV[0], IV[1], IV[2], IV[3]);
     let row4 = &mut set4(
-        IV[4] ^ offset as Word,
-        IV[5] ^ (offset >> WORD_BITS) as Word,
-        IV[6] ^ block_len,
-        IV[7] ^ flags,
+        IV[4] ^ offset_low(offset),
+        IV[5] ^ offset_high(offset),
+        IV[6] ^ block_flags(block_len, internal_flags),
+        IV[7] ^ app_flags,
     );
 
     let m0 = loadu(block.as_ptr().add(0 * WORD_BYTES * DEGREE));
@@ -478,16 +481,16 @@ unsafe fn transpose_msg_vecs(inputs: &[*const u8; DEGREE], block_offset: usize) 
 unsafe fn load_offsets(offset: u64, offset_delta: u64) -> (__m128i, __m128i) {
     (
         set4(
-            (offset + 0 * offset_delta) as Word,
-            (offset + 1 * offset_delta) as Word,
-            (offset + 2 * offset_delta) as Word,
-            (offset + 3 * offset_delta) as Word,
+            offset_low(offset + 0 * offset_delta),
+            offset_low(offset + 1 * offset_delta),
+            offset_low(offset + 2 * offset_delta),
+            offset_low(offset + 3 * offset_delta),
         ),
         set4(
-            ((offset + 0 * offset_delta) >> WORD_BITS) as Word,
-            ((offset + 1 * offset_delta) >> WORD_BITS) as Word,
-            ((offset + 2 * offset_delta) >> WORD_BITS) as Word,
-            ((offset + 3 * offset_delta) >> WORD_BITS) as Word,
+            offset_high(offset + 0 * offset_delta),
+            offset_high(offset + 1 * offset_delta),
+            offset_high(offset + 2 * offset_delta),
+            offset_high(offset + 3 * offset_delta),
         ),
     )
 }
@@ -499,10 +502,9 @@ pub unsafe fn compress4_loop(
     key: &[Word; 8],
     offset: u64,
     offset_delta: u64,
-    // flags_start and flags_end get OR'ed into flags_all when applicable.
-    flags_all: Word,
-    flags_start: Word,
-    flags_end: Word,
+    internal_flags_start: u8,
+    internal_flags_end: u8,
+    app_flags: Word,
     out: &mut [u8; DEGREE * OUT_LEN],
 ) {
     let mut h_vecs = [
@@ -516,13 +518,15 @@ pub unsafe fn compress4_loop(
         xor(set1(IV[7]), set1(key[7])),
     ];
     let (offset_low_vec, offset_high_vec) = load_offsets(offset, offset_delta);
-    let mut flags = flags_all | flags_start;
+    let app_flags_vec = set1(app_flags);
+    let mut internal_flags = internal_flags_start;
 
     for block in 0..blocks {
         if block + 1 == blocks {
-            flags |= flags_end;
+            internal_flags |= internal_flags_end;
         }
-        let flags_vec = set1(flags);
+        let block_len = BLOCK_LEN as u8; // full blocks only
+        let block_flags_vec = set1(block_flags(block_len, internal_flags));
         let msg_vecs = transpose_msg_vecs(inputs, block * BLOCK_LEN);
 
         // The transposed compression function. Note that inlining this
@@ -544,8 +548,8 @@ pub unsafe fn compress4_loop(
             set1(IV[3]),
             xor(set1(IV[4]), offset_low_vec),
             xor(set1(IV[5]), offset_high_vec),
-            xor(set1(IV[6]), set1(BLOCK_LEN as Word)), // full blocks only
-            xor(set1(IV[7]), flags_vec),
+            xor(set1(IV[6]), block_flags_vec),
+            xor(set1(IV[7]), app_flags_vec),
         ];
         round(&mut v, &msg_vecs, 0);
         round(&mut v, &msg_vecs, 1);
@@ -563,7 +567,7 @@ pub unsafe fn compress4_loop(
         h_vecs[6] = xor(v[6], v[14]);
         h_vecs[7] = xor(v[7], v[15]);
 
-        flags = flags_all;
+        internal_flags = 0;
     }
 
     let squares = mut_array_refs!(&mut h_vecs, DEGREE, DEGREE);
@@ -625,12 +629,13 @@ mod test {
         }
 
         let initial_state = [1, 2, 3, 4, 5, 6, 7, 8];
-        let block_len: Word = 27;
+        let block_len: u8 = 27;
         let mut block = [0; BLOCK_LEN];
         crate::test::paint_test_input(&mut block[..block_len as usize]);
         // Use an offset with set bits in both 32-bit words.
         let offset = ((5 * CHUNK_LEN as u64) << WORD_BITS) + 6 * CHUNK_LEN as u64;
         let flags = crate::Flags::CHUNK_END | crate::Flags::ROOT;
+        let app_flags = 23;
 
         let mut portable_state = initial_state;
         portable::compress(
@@ -639,6 +644,7 @@ mod test {
             block_len,
             offset as u64,
             flags.bits(),
+            app_flags,
         );
 
         let mut simd_state = initial_state;
@@ -649,6 +655,7 @@ mod test {
                 block_len,
                 offset as u64,
                 flags.bits(),
+                app_flags,
             );
         }
 
@@ -670,6 +677,7 @@ mod test {
             array_ref!(input, 3 * BLOCK_LEN, BLOCK_LEN),
         ];
         let key = [99, 98, 97, 96, 95, 94, 93, 92];
+        let app_flags = 23;
 
         let mut portable_out = [0; DEGREE * OUT_LEN];
         for (parent, out) in parents.iter().zip(portable_out.chunks_exact_mut(OUT_LEN)) {
@@ -677,9 +685,10 @@ mod test {
             portable::compress(
                 &mut state,
                 parent,
-                BLOCK_LEN as Word,
+                BLOCK_LEN as u8,
                 0,
                 Flags::PARENT.bits(),
+                app_flags,
             );
             out.copy_from_slice(&bytes_from_state_words(&state));
         }
@@ -700,7 +709,7 @@ mod test {
                 0,
                 Flags::PARENT.bits(),
                 Flags::empty().bits(),
-                Flags::empty().bits(),
+                app_flags,
                 &mut simd_out,
             );
         }
@@ -725,6 +734,7 @@ mod test {
         let key = [108, 107, 106, 105, 104, 103, 102, 101];
         // Use an offset with set bits in both 32-bit words.
         let initial_offset = ((5 * CHUNK_LEN as u64) << WORD_BITS) + 6 * CHUNK_LEN as u64;
+        let app_flags = 23;
 
         let mut portable_out = [0; DEGREE * OUT_LEN];
         for ((chunk_index, chunk), out) in chunks
@@ -744,9 +754,10 @@ mod test {
                 portable::compress(
                     &mut state,
                     array_ref!(block, 0, BLOCK_LEN),
-                    BLOCK_LEN as Word,
+                    BLOCK_LEN as u8,
                     initial_offset + (chunk_index * CHUNK_LEN) as u64,
                     flags.bits(),
+                    app_flags,
                 );
             }
             out.copy_from_slice(&bytes_from_state_words(&state));
@@ -766,9 +777,9 @@ mod test {
                 &key,
                 initial_offset,
                 CHUNK_LEN as u64,
-                Flags::empty().bits(),
                 Flags::CHUNK_START.bits(),
                 Flags::CHUNK_END.bits(),
+                app_flags,
                 &mut simd_out,
             );
         }

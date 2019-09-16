@@ -1,4 +1,4 @@
-use crate::{Word, BLOCK_LEN, IV, MSG_SCHEDULE, WORD_BITS};
+use crate::{block_flags, offset_high, offset_low, Word, BLOCK_LEN, IV, MSG_SCHEDULE};
 use arrayref::array_refs;
 
 #[inline(always)]
@@ -57,9 +57,10 @@ fn round(state: &mut [Word; 16], msg: &[Word; 16], round: usize) {
 pub fn compress(
     state: &mut [Word; 8],
     block: &[u8; BLOCK_LEN],
-    block_len: Word,
+    block_len: u8,
     offset: u64,
-    flags: Word,
+    internal_flags: u8,
+    app_flags: Word,
 ) {
     let block_words = words_from_block(block);
     let mut full_state = [
@@ -75,10 +76,10 @@ pub fn compress(
         IV[1],
         IV[2],
         IV[3],
-        IV[4] ^ offset as Word,
-        IV[5] ^ (offset >> WORD_BITS) as Word,
-        IV[6] ^ block_len,
-        IV[7] ^ flags,
+        IV[4] ^ offset_low(offset),
+        IV[5] ^ offset_high(offset),
+        IV[6] ^ block_flags(block_len, internal_flags),
+        IV[7] ^ app_flags,
     ];
 
     round(&mut full_state, &block_words, 0);
