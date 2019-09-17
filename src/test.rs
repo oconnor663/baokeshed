@@ -1,5 +1,7 @@
 use crate::*;
 
+use core::usize;
+
 #[test]
 fn test_offset_words() {
     let offset: u64 = (1 << 32) + 2;
@@ -31,8 +33,8 @@ fn test_largest_power_of_two_leq() {
         (6, 4),
         (7, 4),
         (8, 8),
-        // the largest possible u64
-        (0xffffffffffffffff, 0x8000000000000000),
+        // the largest possible usize
+        (usize::MAX, (usize::MAX >> 1) + 1),
     ];
     for &(input, output) in input_output {
         assert_eq!(

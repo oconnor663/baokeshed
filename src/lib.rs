@@ -29,7 +29,7 @@ use arrayref::{array_mut_ref, array_ref, array_refs, mut_array_refs};
 use arrayvec::{ArrayString, ArrayVec};
 use core::cmp;
 use core::fmt;
-use platform::Platform;
+use platform::{Platform, MAX_SIMD_DEGREE_OR_2};
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod avx2;
@@ -264,6 +264,7 @@ impl fmt::Debug for Output {
 
 // Benchmarks only.
 #[doc(hidden)]
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 pub unsafe fn compress_sse41(
     state: &mut [Word; 8],
     block: &[u8; BLOCK_LEN],
@@ -405,10 +406,10 @@ fn hash_parents_parallel(
     debug_assert_eq!(child_hashes.len() % OUT_LEN, 0, "wacky hash bytes");
     let num_children = child_hashes.len() / OUT_LEN;
     debug_assert!(num_children >= 2, "not enough children");
-    debug_assert!(num_children <= 2 * MAX_SIMD_DEGREE, "too many");
+    debug_assert!(num_children <= 2 * MAX_SIMD_DEGREE_OR_2, "too many");
 
     let mut parents_exact = child_hashes.chunks_exact(BLOCK_LEN);
-    let mut parents_array = ArrayVec::<[&[u8; BLOCK_LEN]; MAX_SIMD_DEGREE]>::new();
+    let mut parents_array = ArrayVec::<[&[u8; BLOCK_LEN]; MAX_SIMD_DEGREE_OR_2]>::new();
     for parent in &mut parents_exact {
         parents_array.push(array_ref!(parent, 0, BLOCK_LEN));
     }
@@ -474,15 +475,39 @@ fn hash_recurse(
     let (left, right) = input.split_at(left_len(input.len()));
     let right_off = offset + left.len() as u64;
     debug_assert_eq!(platform.simd_degree().count_ones(), 1, "power of two");
-    let mut children_array = [0; 2 * MAX_SIMD_DEGREE * OUT_LEN];
-    let (left_out, right_out) = children_array.split_at_mut(platform.simd_degree() * OUT_LEN);
 
+    // Arrange space for the child outputs. Note that parent hashing uses a
+    // minimum simd_degree of 2, to make sure that root finalization doesn't
+    // need to happen. See the short-circuit case below that makes this work.
+    // (We don't define MAX_SIMD_DEGREE to be 2 in general, because that would
+    // restrict multithreading for medium-length inputs.)
+    let mut children_array = [0; 2 * MAX_SIMD_DEGREE_OR_2 * OUT_LEN];
+    let degree = if left.len() == CHUNK_LEN {
+        1 // the "simd_degree=1 and we're at the leaf nodes" case
+    } else {
+        cmp::max(platform.simd_degree(), 2)
+    };
+    let (left_out, right_out) = children_array.split_at_mut(degree * OUT_LEN);
+
+    // Recurse! This uses multiple threads if Rayon is enabled.
     let (left_n, right_n) = join(
         || hash_recurse(left, key, offset, context_flag, platform, left_out),
         || hash_recurse(right, key, right_off, context_flag, platform, right_out),
     );
 
-    debug_assert_eq!(left_n, platform.simd_degree(), "unexpected left children");
+    // If simd_degree=1, then we'll have left_n=1 and right_n=1. We don't want
+    // to combine them into a single parent node, because that might be the
+    // root, and this function doesn't do root finalization. In that case,
+    // return the children directly, skipping one level of parent hashing.
+    // Callers above will behave as though simd_degree=2, and the root caller
+    // will have two children to finalize.
+    debug_assert_eq!(left_n, degree);
+    debug_assert!(right_n >= 1 && right_n <= left_n);
+    if left_n == 1 {
+        out[..2 * OUT_LEN].copy_from_slice(&children_array[..2 * OUT_LEN]);
+        return 2;
+    }
+
     let num_children = left_n + right_n;
     hash_parents_parallel(
         &children_array[..num_children * OUT_LEN],
@@ -526,7 +551,8 @@ pub fn hash_keyed_flagged_xof(input: &[u8], key: &[u8; KEY_LEN], context_flag: W
     if input.len() <= CHUNK_LEN {
         return hash_one_chunk(input, &key_words, 0, IsRoot::Root, context_flag, platform);
     }
-    let mut children_array = [0; MAX_SIMD_DEGREE * OUT_LEN];
+    // See comments in hash_recurse about the _OR_2 here.
+    let mut children_array = [0; MAX_SIMD_DEGREE_OR_2 * OUT_LEN];
     let num_children = if input.len() <= platform.simd_degree() * CHUNK_LEN {
         // We don't call hash_recurse when there are <= simd_degree children,
         // because in that cases it might need to root/XOF finalize, and we
