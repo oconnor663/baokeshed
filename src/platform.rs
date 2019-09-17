@@ -14,7 +14,7 @@ type CompressionFn = unsafe fn(
     block_len: u8,
     offset: u64,
     internal_flags: u8,
-    app_flags: Word,
+    context_flag: Word,
 );
 
 type HashManyFn = unsafe fn(
@@ -25,7 +25,7 @@ type HashManyFn = unsafe fn(
     offset_delta: u64,
     internal_flags_start: u8,
     internal_flags_end: u8,
-    app_flags: Word,
+    context_flag: Word,
     out: &mut [u8],
 );
 
@@ -73,11 +73,18 @@ impl Platform {
         block_len: u8,
         offset: u64,
         internal_flags: u8,
-        app_flags: Word,
+        context_flag: Word,
     ) {
         // Safe because detect() checked for platform support.
         unsafe {
-            (self.compression_fn)(state, block, block_len, offset, internal_flags, app_flags);
+            (self.compression_fn)(
+                state,
+                block,
+                block_len,
+                offset,
+                internal_flags,
+                context_flag,
+            );
         }
     }
 
@@ -87,7 +94,7 @@ impl Platform {
         chunks: &[&[u8; CHUNK_LEN]],
         key: &[Word; 8],
         offset: u64,
-        app_flags: Word,
+        context_flag: Word,
         out: &mut [u8],
     ) {
         let blocks = CHUNK_LEN / BLOCK_LEN;
@@ -105,7 +112,7 @@ impl Platform {
                 CHUNK_LEN as u64,
                 Flags::CHUNK_START.bits(),
                 Flags::CHUNK_END.bits(),
-                app_flags,
+                context_flag,
                 out,
             );
         }
@@ -116,7 +123,7 @@ impl Platform {
         &self,
         parents: &[&[u8; BLOCK_LEN]],
         key: &[Word; 8],
-        app_flags: Word,
+        context_flag: Word,
         out: &mut [u8],
     ) {
         let blocks = 1;
@@ -136,7 +143,7 @@ impl Platform {
                 offset_delta,
                 Flags::PARENT.bits(),
                 Flags::empty().bits(), // Only one block, no need for end flags.
-                app_flags,
+                context_flag,
                 out,
             );
         }
@@ -151,7 +158,7 @@ unsafe fn hash_many_serial(
     offset_delta: u64,
     internal_flags_start: u8,
     internal_flags_end: u8,
-    app_flags: Word,
+    context_flag: Word,
     mut out: &mut [u8],
     compression_fn: CompressionFn,
 ) {
@@ -170,7 +177,7 @@ unsafe fn hash_many_serial(
                 BLOCK_LEN as u8,
                 offset,
                 internal_flags,
-                app_flags,
+                context_flag,
             );
             internal_flags = 0;
         }
@@ -189,7 +196,7 @@ unsafe fn hash_many_portable(
     offset_delta: u64,
     internal_flags_start: u8,
     internal_flags_end: u8,
-    app_flags: Word,
+    context_flag: Word,
     out: &mut [u8],
 ) {
     hash_many_serial(
@@ -200,7 +207,7 @@ unsafe fn hash_many_portable(
         offset_delta,
         internal_flags_start,
         internal_flags_end,
-        app_flags,
+        context_flag,
         out,
         portable::compress,
     );
@@ -215,7 +222,7 @@ unsafe fn hash_many_sse41(
     offset_delta: u64,
     internal_flags_start: u8,
     internal_flags_end: u8,
-    app_flags: Word,
+    context_flag: Word,
     mut out: &mut [u8],
 ) {
     debug_assert!(out.len() >= inputs.len() * OUT_LEN, "out too short");
@@ -228,7 +235,7 @@ unsafe fn hash_many_sse41(
             offset_delta,
             internal_flags_start,
             internal_flags_end,
-            app_flags,
+            context_flag,
             array_mut_ref!(out, 0, sse41::DEGREE * OUT_LEN),
         );
         inputs = &inputs[sse41::DEGREE..];
@@ -244,7 +251,7 @@ unsafe fn hash_many_sse41(
         offset_delta,
         internal_flags_start,
         internal_flags_end,
-        app_flags,
+        context_flag,
         out,
         sse41::compress,
     );
@@ -259,7 +266,7 @@ unsafe fn hash_many_avx2(
     offset_delta: u64,
     internal_flags_start: u8,
     internal_flags_end: u8,
-    app_flags: Word,
+    context_flag: Word,
     mut out: &mut [u8],
 ) {
     debug_assert!(out.len() >= inputs.len() * OUT_LEN, "out too short");
@@ -272,7 +279,7 @@ unsafe fn hash_many_avx2(
             offset_delta,
             internal_flags_start,
             internal_flags_end,
-            app_flags,
+            context_flag,
             array_mut_ref!(out, 0, avx2::DEGREE * OUT_LEN),
         );
         inputs = &inputs[avx2::DEGREE..];
@@ -288,7 +295,7 @@ unsafe fn hash_many_avx2(
         offset_delta,
         internal_flags_start,
         internal_flags_end,
-        app_flags,
+        context_flag,
         out,
     );
 }

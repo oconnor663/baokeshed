@@ -42,13 +42,13 @@ fn main() -> Result<(), Error> {
 fn hash_one(
     maybe_path: &Option<PathBuf>,
     key: &[u8; baokeshed::KEY_LEN],
-    app_flags: u32,
+    context_flag: u32,
 ) -> Result<baokeshed::Output, Error> {
     let mut input = open_input(maybe_path)?;
     if let Some(map) = maybe_memmap_input(&input)? {
-        Ok(baokeshed::hash_keyed_flagged_xof(&map, key, app_flags))
+        Ok(baokeshed::hash_keyed_flagged_xof(&map, key, context_flag))
     } else {
-        let mut hasher = baokeshed::Hasher::new_keyed_flagged(key, app_flags);
+        let mut hasher = baokeshed::Hasher::new_keyed_flagged(key, context_flag);
         baokeshed::copy::copy_wide(&mut input, &mut hasher)?;
         Ok(hasher.finalize_xof())
     }
@@ -66,7 +66,7 @@ fn print_hex(output: &mut baokeshed::Output, byte_length: u64) {
 
 fn hash(args: &Args) -> Result<(), Error> {
     let byte_length = args.flag_length.unwrap_or(baokeshed::OUT_LEN as u64);
-    let app_flags = args.flag_flags.unwrap_or(baokeshed::DEFAULT_APP_FLAGS);
+    let context_flag = args.flag_flags.unwrap_or(baokeshed::DEFAULT_CONTEXT_FLAG);
     let mut key_array = [0; baokeshed::KEY_LEN];
     debug_assert_eq!(&key_array, baokeshed::DEFAULT_KEY);
     if let Some(key_str) = &args.flag_key {
@@ -88,7 +88,7 @@ fn hash(args: &Args) -> Result<(), Error> {
             // As with b2sum or sha1sum, the multi-arg hash loop prints errors and keeps going.
             // This is more convenient for the user in cases like `bao hash *`, where it's common
             // that some of the inputs will error on read e.g. because they're directories.
-            match hash_one(&Some(input.clone()), &key_array, app_flags) {
+            match hash_one(&Some(input.clone()), &key_array, context_flag) {
                 Ok(mut output) => {
                     print_hex(&mut output, byte_length);
                     if args.arg_inputs.len() > 1 {
@@ -107,7 +107,7 @@ fn hash(args: &Args) -> Result<(), Error> {
             std::process::exit(1);
         }
     } else {
-        let mut output = hash_one(&None, &key_array, app_flags)?;
+        let mut output = hash_one(&None, &key_array, context_flag)?;
         print_hex(&mut output, byte_length);
         println!();
     }
