@@ -68,7 +68,7 @@ fn test_hash_context_flag() {
     let context_flag = 99;
     let expected =
         baokeshed::hash_keyed_flagged(b"foo", baokeshed::DEFAULT_KEY, context_flag).to_hex();
-    let output = cmd!(baokeshed_exe(), "--flags", context_flag.to_string())
+    let output = cmd!(baokeshed_exe(), "--context", context_flag.to_string())
         .input("foo")
         .read()
         .unwrap();

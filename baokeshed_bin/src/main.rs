@@ -9,14 +9,14 @@ use std::path::{Path, PathBuf};
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const USAGE: &str = "
-Usage: baokeshed [<inputs>...] [--length=<bytes>] [--key=<hex>] [--flags=<int>]
+Usage: baokeshed [<inputs>...] [--length=<bytes>] [--key=<hex>] [--context=<int>]
        baokeshed (--help | --version)
 ";
 
 #[derive(Debug, Deserialize)]
 struct Args {
     arg_inputs: Vec<PathBuf>,
-    flag_flags: Option<u32>,
+    flag_context: Option<u32>,
     flag_help: bool,
     flag_key: Option<String>,
     flag_length: Option<u64>,
@@ -66,7 +66,7 @@ fn print_hex(output: &mut baokeshed::Output, byte_length: u64) {
 
 fn hash(args: &Args) -> Result<(), Error> {
     let byte_length = args.flag_length.unwrap_or(baokeshed::OUT_LEN as u64);
-    let context_flag = args.flag_flags.unwrap_or(baokeshed::DEFAULT_CONTEXT_FLAG);
+    let context_flag = args.flag_context.unwrap_or(baokeshed::DEFAULT_CONTEXT_FLAG);
     let mut key_array = [0; baokeshed::KEY_LEN];
     debug_assert_eq!(&key_array, baokeshed::DEFAULT_KEY);
     if let Some(key_str) = &args.flag_key {
