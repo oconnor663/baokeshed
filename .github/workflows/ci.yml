@@ -24,3 +24,18 @@ jobs:
     - name: binary
       working-directory: ./baokeshed_bin
       run: cargo test --all-features
+
+  cross:
+    name: cross test on mips
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v1
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+    - name: install cross
+      run: cargo install cross
+    - name: cross test
+      run: cross test --all-features --target mips-unknown-linux-gnu
