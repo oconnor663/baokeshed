@@ -1,0 +1,26 @@
+name: CI tests
+
+on: [push]
+
+jobs:
+  test:
+    name: Rust ${{ matrix.rust_version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        rust_version: [stable, beta, nightly]
+        os: [ubuntu-latest, windows-latest, macOS-latest]
+
+    steps:
+    - uses: actions/checkout@v1
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ matrix.rust_version }}
+        override: true
+    - name: all features
+      run: cargo test --all-features
+    - name: no features
+      run: cargo test --no-default-features
+    - name: binary
+      working-directory: ./baokeshed_bin
+      run: cargo test --all-features
