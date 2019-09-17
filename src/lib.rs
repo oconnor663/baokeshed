@@ -4,6 +4,8 @@
 //! threads.
 //!
 //! Encoding and streaming/seeking verification are not yet implemented.
+//!
+//! - [GitHub repo](https://github.com/oconnor663/baokeshed)
 
 // Design notes:
 //
