@@ -194,6 +194,12 @@ impl From<[u8; OUT_LEN]> for Hash {
     }
 }
 
+impl From<Hash> for [u8; OUT_LEN] {
+    fn from(hash: Hash) -> Self {
+        hash.0
+    }
+}
+
 /// This implementation is constant-time.
 impl PartialEq for Hash {
     fn eq(&self, other: &Hash) -> bool {
