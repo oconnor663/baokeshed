@@ -555,28 +555,14 @@ pub fn hash_keyed_flagged_xof(input: &[u8], key: &[u8; KEY_LEN], context_flag: W
     }
     // See comments in hash_recurse about the _OR_2 here.
     let mut children_array = [0; MAX_SIMD_DEGREE_OR_2 * OUT_LEN];
-    let num_children = if input.len() <= platform.simd_degree() * CHUNK_LEN {
-        // We don't call hash_recurse when there are <= simd_degree children,
-        // because in that cases it might need to root/XOF finalize, and we
-        // want to do that here instead.
-        hash_chunks_parallel(
-            input,
-            &key_words,
-            0,
-            context_flag,
-            platform,
-            &mut children_array,
-        )
-    } else {
-        hash_recurse(
-            input,
-            &key_words,
-            0,
-            context_flag,
-            platform,
-            &mut children_array,
-        )
-    };
+    let num_children = hash_recurse(
+        input,
+        &key_words,
+        0,
+        context_flag,
+        platform,
+        &mut children_array,
+    );
     condense_root(
         &mut children_array[..num_children * OUT_LEN],
         &key_words,
