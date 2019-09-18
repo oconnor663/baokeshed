@@ -1,4 +1,4 @@
-# Baokeshed [![Actions Status](https://github.com/oconnor663/baokeshed/workflows/CI%20tests/badge.svg)](https://github.com/oconnor663/baokeshed/actions)
+# Baokeshed [![Actions Status](https://github.com/oconnor663/baokeshed/workflows/tests/badge.svg)](https://github.com/oconnor663/baokeshed/actions)
 
 To build the command line utility:
 
