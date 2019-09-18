@@ -60,7 +60,7 @@ pub fn compress(
     block_len: u8,
     offset: u64,
     internal_flags: u8,
-    context_flag: Word,
+    context: Word,
 ) {
     let block_words = words_from_block(block);
     let mut full_state = [
@@ -79,7 +79,7 @@ pub fn compress(
         IV[4] ^ offset_low(offset),
         IV[5] ^ offset_high(offset),
         IV[6] ^ block_flags(block_len, internal_flags),
-        IV[7] ^ context_flag,
+        IV[7] ^ context,
     ];
 
     round(&mut full_state, &block_words, 0);

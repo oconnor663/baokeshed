@@ -306,7 +306,7 @@ pub unsafe fn compress8_loop(
     offset_delta: u64,
     internal_flags_start: u8,
     internal_flags_end: u8,
-    context_flag: Word,
+    context: Word,
     out: &mut [u8; DEGREE * OUT_LEN],
 ) {
     let mut h_vecs = [
@@ -320,7 +320,7 @@ pub unsafe fn compress8_loop(
         xor(set1(IV[7]), set1(key[7])),
     ];
     let (offset_low_vec, offset_high_vec) = load_offsets(offset, offset_delta);
-    let context_flag_vec = set1(context_flag);
+    let context_vec = set1(context);
     let mut internal_flags = internal_flags_start;
 
     for block in 0..blocks {
@@ -351,7 +351,7 @@ pub unsafe fn compress8_loop(
             xor(set1(IV[4]), offset_low_vec),
             xor(set1(IV[5]), offset_high_vec),
             xor(set1(IV[6]), block_flags_vec),
-            xor(set1(IV[7]), context_flag_vec),
+            xor(set1(IV[7]), context_vec),
         ];
         round(&mut v, &msg_vecs, 0);
         round(&mut v, &msg_vecs, 1);
@@ -439,7 +439,7 @@ mod test {
             array_ref!(input, 7 * BLOCK_LEN, BLOCK_LEN),
         ];
         let key = [99, 98, 97, 96, 95, 94, 93, 92];
-        let context_flag = 23;
+        let context = 23;
 
         let mut portable_out = [0; DEGREE * OUT_LEN];
         for (parent, out) in parents.iter().zip(portable_out.chunks_exact_mut(OUT_LEN)) {
@@ -450,7 +450,7 @@ mod test {
                 BLOCK_LEN as u8,
                 0,
                 Flags::PARENT.bits(),
-                context_flag,
+                context,
             );
             out.copy_from_slice(&bytes_from_state_words(&state));
         }
@@ -475,7 +475,7 @@ mod test {
                 0,
                 Flags::PARENT.bits(),
                 Flags::empty().bits(),
-                context_flag,
+                context,
                 &mut simd_out,
             );
         }
@@ -504,7 +504,7 @@ mod test {
         let key = [108, 107, 106, 105, 104, 103, 102, 101];
         // Use an offset with set bits in both 32-bit words.
         let initial_offset = ((5 * CHUNK_LEN as u64) << WORD_BITS) + 6 * CHUNK_LEN as u64;
-        let context_flag = 23;
+        let context = 23;
 
         let mut portable_out = [0; DEGREE * OUT_LEN];
         for ((chunk_index, chunk), out) in chunks
@@ -527,7 +527,7 @@ mod test {
                     BLOCK_LEN as u8,
                     initial_offset + (chunk_index * CHUNK_LEN) as u64,
                     flags.bits(),
-                    context_flag,
+                    context,
                 );
             }
             out.copy_from_slice(&bytes_from_state_words(&state));
@@ -553,7 +553,7 @@ mod test {
                 CHUNK_LEN as u64,
                 Flags::CHUNK_START.bits(),
                 Flags::CHUNK_END.bits(),
-                context_flag,
+                context,
                 &mut simd_out,
             );
         }

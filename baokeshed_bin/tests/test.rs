@@ -64,11 +64,11 @@ fn test_hash_key() {
 }
 
 #[test]
-fn test_hash_context_flag() {
-    let context_flag = 99;
+fn test_hash_context() {
+    let context = 99;
     let expected =
-        baokeshed::hash_keyed_flagged(b"foo", baokeshed::DEFAULT_KEY, context_flag).to_hex();
-    let output = cmd!(baokeshed_exe(), "--context", context_flag.to_string())
+        baokeshed::hash_keyed_contextified(b"foo", baokeshed::DEFAULT_KEY, context).to_hex();
+    let output = cmd!(baokeshed_exe(), "--context", context.to_string())
         .input("foo")
         .read()
         .unwrap();
