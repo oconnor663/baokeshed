@@ -10,7 +10,7 @@ pub fn baokeshed_exe() -> PathBuf {
 #[test]
 fn test_hash_one() {
     let expected = baokeshed::hash(b"foo").to_hex();
-    let output = cmd!(baokeshed_exe()).input("foo").read().unwrap();
+    let output = cmd!(baokeshed_exe()).stdin_bytes("foo").read().unwrap();
     assert_eq!(&*expected, &*output);
 }
 
@@ -22,7 +22,7 @@ fn test_hash_many() {
     let file2 = dir.path().join("file2");
     fs::write(&file2, b"bar").unwrap();
     let output = cmd!(baokeshed_exe(), &file1, &file2, "-")
-        .input("baz")
+        .stdin_bytes("baz")
         .read()
         .unwrap();
     let foo_hash = baokeshed::hash(b"foo");
@@ -46,7 +46,7 @@ fn test_hash_length() {
     expected.push_str(baokeshed::Hash::from(xof.read()).to_hex().as_ref());
     expected.push_str(baokeshed::Hash::from(xof.read()).to_hex().as_ref());
     let output = cmd!(baokeshed_exe(), "--length=64")
-        .input("foo")
+        .stdin_bytes("foo")
         .read()
         .unwrap();
     assert_eq!(&*expected, &*output);
@@ -57,7 +57,7 @@ fn test_hash_key() {
     let key = [42; baokeshed::KEY_LEN];
     let expected = baokeshed::hash_keyed(b"foo", &key).to_hex();
     let output = cmd!(baokeshed_exe(), "--key", hex::encode(&key))
-        .input("foo")
+        .stdin_bytes("foo")
         .read()
         .unwrap();
     assert_eq!(&*expected, &*output);
@@ -69,7 +69,7 @@ fn test_hash_context() {
     let expected =
         baokeshed::hash_keyed_contextified(b"foo", baokeshed::DEFAULT_KEY, context).to_hex();
     let output = cmd!(baokeshed_exe(), "--context", context.to_string())
-        .input("foo")
+        .stdin_bytes("foo")
         .read()
         .unwrap();
     assert_eq!(&*expected, &*output);
