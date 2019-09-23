@@ -1,14 +1,27 @@
 // NB: This is only for benchmarking. The guy who wrote this file hasn't
 // touched C since college. Please don't use this code in production.
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
-static const uint32_t IV[8] = {0x6A09E667UL, 0xBB67AE85UL, 0x3C6EF372UL,
-                               0xA54FF53AUL, 0x510E527FUL, 0x9B05688CUL,
-                               0x1F83D9ABUL, 0x5BE0CD19UL};
+// size constants
+#define BLOCK_LEN 64
+#define CHUNK_LEN 4096
+#define KEY_LEN 32
+#define OUT_LEN 32
 
-static const uint8_t MSG_SCHEDULE[7][16] = {
+// internal flags
+#define ROOT 128
+#define PARENT 64
+#define CHUNK_END 32
+#define CHUNK_START 16
+
+const uint32_t IV[8] = {0x6A09E667UL, 0xBB67AE85UL, 0x3C6EF372UL, 0xA54FF53AUL,
+                        0x510E527FUL, 0x9B05688CUL, 0x1F83D9ABUL, 0x5BE0CD19UL};
+
+const uint8_t MSG_SCHEDULE[7][16] = {
     {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
     {14, 10, 4, 8, 9, 15, 13, 6, 1, 12, 0, 2, 11, 7, 5, 3},
     {11, 8, 12, 0, 5, 2, 15, 13, 10, 14, 3, 6, 7, 1, 9, 4},
@@ -79,25 +92,55 @@ static inline uint32_t block_flags(uint8_t block_len, uint8_t internal_flags) {
   return ((uint32_t)block_len) | (((uint32_t)internal_flags) << 24);
 }
 
-void compress(uint32_t *state, const uint8_t *block, uint8_t block_len,
-              uint64_t offset, uint8_t internal_flags, uint32_t context) {
+static inline void load_msg_words(const uint8_t block[BLOCK_LEN],
+                                  uint32_t words[8]) {
+  words[0] = load32(block + 4 * 0);
+  words[1] = load32(block + 4 * 1);
+  words[2] = load32(block + 4 * 2);
+  words[3] = load32(block + 4 * 3);
+  words[4] = load32(block + 4 * 4);
+  words[5] = load32(block + 4 * 5);
+  words[6] = load32(block + 4 * 6);
+  words[7] = load32(block + 4 * 7);
+  words[8] = load32(block + 4 * 8);
+  words[9] = load32(block + 4 * 9);
+  words[10] = load32(block + 4 * 10);
+  words[11] = load32(block + 4 * 11);
+  words[12] = load32(block + 4 * 12);
+  words[13] = load32(block + 4 * 13);
+  words[14] = load32(block + 4 * 14);
+  words[15] = load32(block + 4 * 15);
+}
+
+static inline void load_key_words(const uint8_t key[KEY_LEN],
+                                  uint32_t words[8]) {
+  words[0] = load32(key + 4 * 0);
+  words[1] = load32(key + 4 * 1);
+  words[2] = load32(key + 4 * 2);
+  words[3] = load32(key + 4 * 3);
+  words[4] = load32(key + 4 * 4);
+  words[5] = load32(key + 4 * 5);
+  words[6] = load32(key + 4 * 6);
+  words[7] = load32(key + 4 * 7);
+}
+
+static inline void write_state_bytes(const uint32_t state[8],
+                                     uint8_t out[OUT_LEN]) {
+  store32(&out[4 * 0], state[0]);
+  store32(&out[4 * 1], state[1]);
+  store32(&out[4 * 2], state[2]);
+  store32(&out[4 * 3], state[3]);
+  store32(&out[4 * 4], state[4]);
+  store32(&out[4 * 5], state[5]);
+  store32(&out[4 * 6], state[6]);
+  store32(&out[4 * 7], state[7]);
+}
+
+void compress(uint32_t state[8], const uint8_t block[BLOCK_LEN],
+              uint8_t block_len, uint64_t offset, uint8_t internal_flags,
+              uint32_t context) {
   uint32_t block_words[16];
-  block_words[0] = load32(block + 4 * 0);
-  block_words[1] = load32(block + 4 * 1);
-  block_words[2] = load32(block + 4 * 2);
-  block_words[3] = load32(block + 4 * 3);
-  block_words[4] = load32(block + 4 * 4);
-  block_words[5] = load32(block + 4 * 5);
-  block_words[6] = load32(block + 4 * 6);
-  block_words[7] = load32(block + 4 * 7);
-  block_words[8] = load32(block + 4 * 8);
-  block_words[9] = load32(block + 4 * 9);
-  block_words[10] = load32(block + 4 * 10);
-  block_words[11] = load32(block + 4 * 11);
-  block_words[12] = load32(block + 4 * 12);
-  block_words[13] = load32(block + 4 * 13);
-  block_words[14] = load32(block + 4 * 14);
-  block_words[15] = load32(block + 4 * 15);
+  load_msg_words(block, block_words);
 
   uint32_t full_state[16] = {
       state[0],
@@ -134,4 +177,96 @@ void compress(uint32_t *state, const uint8_t *block, uint8_t block_len,
   state[5] = full_state[5] ^ full_state[13];
   state[6] = full_state[6] ^ full_state[14];
   state[7] = full_state[7] ^ full_state[15];
+}
+
+static inline void iv(const uint32_t *key_words, uint32_t *state) {
+  state[0] = IV[0] ^ key_words[0];
+  state[1] = IV[1] ^ key_words[1];
+  state[2] = IV[2] ^ key_words[2];
+  state[3] = IV[3] ^ key_words[3];
+  state[4] = IV[4] ^ key_words[4];
+  state[5] = IV[5] ^ key_words[5];
+  state[6] = IV[6] ^ key_words[6];
+  state[7] = IV[7] ^ key_words[7];
+}
+
+typedef struct {
+  uint32_t state[8];
+  uint64_t offset;
+  uint16_t count;
+  uint8_t buf[BLOCK_LEN];
+  uint8_t buf_len;
+} chunk_state;
+
+void chunk_state_init(chunk_state *self, const uint32_t key_words[8],
+                      uint64_t offset) {
+  iv(key_words, self->state);
+  self->offset = offset;
+  self->count = 0;
+  self->buf_len = 0;
+  memset(self->buf, 0, BLOCK_LEN);
+}
+
+size_t chunk_state_len(const chunk_state *self) {
+  return ((size_t)self->count) + ((size_t)self->buf);
+}
+
+size_t chunk_state_fill_buf(chunk_state *self, const uint8_t *input,
+                            size_t input_len) {
+  size_t take = BLOCK_LEN - ((size_t)self->buf_len);
+  if (take > input_len) {
+    take = input_len;
+  }
+  uint8_t *dest = self->buf + ((size_t)self->buf_len);
+  memcpy(dest, input, take);
+  self->buf_len += (uint8_t)take;
+  return take;
+}
+
+uint8_t chunk_state_maybe_start_flag(const chunk_state *self) {
+  if (self->count == 0) {
+    return CHUNK_START;
+  } else {
+    return 0;
+  }
+}
+
+void chunk_state_update(chunk_state *self, const uint8_t *input,
+                        size_t input_len, uint32_t context) {
+  if (self->buf_len > 0) {
+    size_t take = chunk_state_fill_buf(self, input, input_len);
+    input += take;
+    input_len -= take;
+    if (input_len > 0) {
+      compress(self->state, self->buf, BLOCK_LEN, self->offset,
+               chunk_state_maybe_start_flag(self), context);
+      self->count += (uint16_t)BLOCK_LEN;
+      self->buf_len = 0;
+      memset(self->buf, 0, BLOCK_LEN);
+    }
+  }
+
+  while (input_len > BLOCK_LEN) {
+    compress(self->state, input, BLOCK_LEN, self->offset,
+             chunk_state_maybe_start_flag(self), context);
+    self->count += (uint16_t)BLOCK_LEN;
+    input += BLOCK_LEN;
+    input_len -= BLOCK_LEN;
+  }
+
+  size_t take = chunk_state_fill_buf(self, input, input_len);
+  input += take;
+  input_len -= take;
+}
+
+void chunk_state_finalize(const chunk_state *self, uint32_t context,
+                          bool is_root, uint8_t out[OUT_LEN]) {
+  uint32_t state_copy[8];
+  memcpy(state_copy, self->state, sizeof(state_copy));
+  uint8_t flags = chunk_state_maybe_start_flag(self) | CHUNK_END;
+  if (is_root) {
+    flags |= ROOT;
+  }
+  compress(state_copy, self->buf, self->buf_len, self->offset, flags, context);
+  write_state_bytes(state_copy, out);
 }

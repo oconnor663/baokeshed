@@ -1,4 +1,5 @@
-use crate::{Word, BLOCK_LEN};
+use crate::{Word, BLOCK_LEN, OUT_LEN};
+use std::mem::MaybeUninit;
 
 pub fn compress(
     state: &mut [Word; 8],
@@ -20,7 +21,43 @@ pub fn compress(
     }
 }
 
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct ChunkState {
+    state: [u32; 8usize],
+    offset: u64,
+    count: u16,
+    buf: [u8; 64usize],
+    buf_len: u8,
+}
+
+impl ChunkState {
+    pub fn new(key_words: &[Word; 8], offset: u64) -> ChunkState {
+        let mut state: MaybeUninit<ChunkState> = MaybeUninit::uninit();
+        unsafe {
+            ffi::chunk_state_init(state.as_mut_ptr(), key_words.as_ptr(), offset);
+            state.assume_init()
+        }
+    }
+
+    pub fn update(&mut self, input: &[u8], context: Word) {
+        unsafe {
+            ffi::chunk_state_update(self, input.as_ptr(), input.len(), context);
+        }
+    }
+
+    pub fn finalize(&self, context: Word, is_root: bool) -> [u8; OUT_LEN] {
+        let mut out = [0; OUT_LEN];
+        unsafe {
+            ffi::chunk_state_finalize(self, context, is_root, out.as_mut_ptr());
+        }
+        out
+    }
+}
+
 mod ffi {
+    use super::ChunkState;
+
     extern "C" {
         pub fn compress(
             state: *mut u32,
@@ -30,16 +67,28 @@ mod ffi {
             internal_flags: u8,
             context: u32,
         );
+        pub fn chunk_state_init(state: *mut ChunkState, key_words: *const u32, offset: u64);
+        pub fn chunk_state_update(
+            state: *mut ChunkState,
+            input: *const u8,
+            input_len: usize,
+            context: u32,
+        );
+        pub fn chunk_state_finalize(
+            state: *const ChunkState,
+            context: u32,
+            is_root: bool,
+            out: *mut u8,
+        );
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use crate::{CHUNK_LEN, WORD_BITS};
+    use crate::{BLOCK_LEN, CHUNK_LEN, WORD_BITS};
 
     #[test]
-    fn compare_portable() {
+    fn test_compare_compress() {
         let initial_state = [1, 2, 3, 4, 5, 6, 7, 8];
         let block_len: u8 = 27;
         let mut block = [0; BLOCK_LEN];
@@ -49,9 +98,9 @@ mod test {
         let flags = crate::Flags::CHUNK_END | crate::Flags::ROOT;
         let context = 23;
 
-        let mut portable_state = initial_state;
+        let mut rust_state = initial_state;
         crate::portable::compress(
-            &mut portable_state,
+            &mut rust_state,
             &block,
             block_len,
             offset as u64,
@@ -59,9 +108,9 @@ mod test {
             context,
         );
 
-        let mut ffi_state = initial_state;
+        let mut c_state = initial_state;
         super::compress(
-            &mut ffi_state,
+            &mut c_state,
             &block,
             block_len,
             offset as u64,
@@ -69,6 +118,52 @@ mod test {
             context,
         );
 
-        assert_eq!(portable_state, ffi_state);
+        assert_eq!(rust_state, c_state);
+    }
+
+    #[test]
+    fn test_compare_hash_chunk() {
+        const CASES: &[usize] = &[
+            0,
+            1,
+            BLOCK_LEN - 1,
+            BLOCK_LEN,
+            BLOCK_LEN + 1,
+            CHUNK_LEN - 1,
+            CHUNK_LEN,
+        ];
+        let mut input_buf = [0; CHUNK_LEN];
+        crate::test::paint_test_input(&mut input_buf);
+        let key_words = [10, 11, 12, 13, 14, 15, 16, 17];
+        let offset = 0;
+        let context = 100;
+        for &is_root in &[crate::IsRoot::NotRoot, crate::IsRoot::Root] {
+            dbg!(is_root);
+            for &case in CASES {
+                dbg!(case);
+                let input = &input_buf[..case];
+
+                let mut rust_chunk = crate::ChunkState::new(&key_words, offset);
+                let platform = crate::platform::Platform::detect();
+                rust_chunk.update(input, context, platform);
+                let rust_out = rust_chunk.finalize(is_root, context, platform).read();
+
+                // First test at once.
+                let is_root_bool = is_root.flag().bits() > 0;
+                let mut c_chunk = super::ChunkState::new(&key_words, offset);
+                c_chunk.update(input, context);
+                let c_out = c_chunk.finalize(context, is_root_bool);
+                assert_eq!(rust_out, c_out);
+
+                // Then test one byte at a time.
+                let is_root_bool = is_root.flag().bits() > 0;
+                let mut c_chunk = super::ChunkState::new(&key_words, offset);
+                for &byte in input {
+                    c_chunk.update(&[byte], context);
+                }
+                let c_out = c_chunk.finalize(context, is_root_bool);
+                assert_eq!(rust_out, c_out);
+            }
+        }
     }
 }

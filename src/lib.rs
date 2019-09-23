@@ -106,6 +106,7 @@ bitflags::bitflags! {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
 enum IsRoot {
     NotRoot,
     Root,
