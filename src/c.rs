@@ -1,6 +1,7 @@
-use crate::{Word, BLOCK_LEN, OUT_LEN};
+use crate::{Word, BLOCK_LEN, KEY_LEN, OUT_LEN};
 use std::mem::MaybeUninit;
 
+// A wrapper function for unit testing and benchmarking.
 pub fn compress(
     state: &mut [Word; 8],
     block: &[u8; BLOCK_LEN],
@@ -31,6 +32,8 @@ pub struct ChunkState {
     buf_len: u8,
 }
 
+// These safe wrapper methods are just for unit testing. The real callers for
+// these functions are in C.
 impl ChunkState {
     pub fn new(key_words: &[Word; 8], offset: u64) -> ChunkState {
         let mut state: MaybeUninit<ChunkState> = MaybeUninit::uninit();
@@ -55,8 +58,43 @@ impl ChunkState {
     }
 }
 
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct Hasher {
+    pub chunk: ChunkState,
+    pub key_words: [u32; 8usize],
+    pub context: u32,
+    pub subtree_hashes_len: u8,
+    pub subtree_hashes: [u8; 1664usize],
+}
+
+impl Hasher {
+    pub fn new(key: &[u8; KEY_LEN], context: u32) -> Hasher {
+        let mut hasher: MaybeUninit<Hasher> = MaybeUninit::uninit();
+        unsafe {
+            ffi::hasher_init(hasher.as_mut_ptr(), key.as_ptr(), context);
+            hasher.assume_init()
+        }
+    }
+
+    pub fn update(&mut self, input: &[u8]) {
+        unsafe {
+            ffi::hasher_update(self, input.as_ptr() as _, input.len());
+        }
+    }
+
+    pub fn finalize(&self) -> [u8; OUT_LEN] {
+        let mut out = [0; OUT_LEN];
+        unsafe {
+            ffi::hasher_finalize(self, out.as_mut_ptr());
+        }
+        out
+    }
+}
+
 mod ffi {
     use super::ChunkState;
+    use super::Hasher;
 
     extern "C" {
         pub fn compress(
@@ -80,12 +118,19 @@ mod ffi {
             is_root: bool,
             out: *mut u8,
         );
+        pub fn hasher_init(hasher: *mut Hasher, key: *const u8, context: u32);
+        pub fn hasher_update(
+            hasher: *mut Hasher,
+            input: *const ::std::os::raw::c_void,
+            input_len: usize,
+        );
+        pub fn hasher_finalize(hasher: *const Hasher, out: *mut u8);
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::{BLOCK_LEN, CHUNK_LEN, WORD_BITS};
+    use crate::{BLOCK_LEN, CHUNK_LEN, KEY_LEN, WORD_BITS};
 
     #[test]
     fn test_compare_compress() {
@@ -164,6 +209,35 @@ mod test {
                 let c_out = c_chunk.finalize(context, is_root_bool);
                 assert_eq!(rust_out, c_out);
             }
+        }
+    }
+
+    #[test]
+    fn test_compare_hash_tree() {
+        let mut input_buf = [0; crate::test::TEST_CASES_MAX];
+        crate::test::paint_test_input(&mut input_buf);
+        let key = [5; KEY_LEN];
+        let context = 999;
+
+        for &case in crate::test::TEST_CASES {
+            dbg!(case);
+            let input = &input_buf[..case];
+
+            let rust_hash = crate::hash_keyed_contextified_xof(input, &key, context).read();
+
+            // First test at once.
+            let mut c_hasher = super::Hasher::new(&key, context);
+            c_hasher.update(input);
+            let c_hash = c_hasher.finalize();
+            assert_eq!(rust_hash, c_hash);
+
+            // Then test one byte at a time.
+            let mut c_hasher = super::Hasher::new(&key, context);
+            for &byte in input {
+                c_hasher.update(&[byte]);
+            }
+            let c_hash = c_hasher.finalize();
+            assert_eq!(rust_hash, c_hash);
         }
     }
 }

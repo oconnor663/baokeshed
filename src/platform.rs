@@ -87,14 +87,7 @@ impl Platform {
     ) {
         // Safe because detect() checked for platform support.
         unsafe {
-            (self.compression_fn)(
-                state,
-                block,
-                block_len,
-                offset,
-                internal_flags,
-                context,
-            );
+            (self.compression_fn)(state, block, block_len, offset, internal_flags, context);
         }
     }
 

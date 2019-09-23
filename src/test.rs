@@ -85,6 +85,8 @@ pub const TEST_CASES: &[usize] = &[
     8 * CHUNK_LEN + 1,
 ];
 
+pub const TEST_CASES_MAX: usize = 8 * CHUNK_LEN + 1;
+
 // Paint a byte pattern that won't repeat, so that we don't accidentally
 // miss buffer offset bugs.
 pub fn paint_test_input(buf: &mut [u8]) {
@@ -105,7 +107,7 @@ fn test_recursive_incremental_same() {
     // because these tests need to be no_std compatible. If this becomes a
     // problem, we can make this one an integration test instead, which would
     // let it use std:: even when the crate doesn't.
-    let mut input_buf = [0; 100 * CHUNK_LEN];
+    let mut input_buf = [0; TEST_CASES_MAX];
     paint_test_input(&mut input_buf);
     for &case in TEST_CASES {
         let input = &input_buf[..case];
@@ -136,14 +138,7 @@ fn test_zero_bytes() {
     let block = [0; BLOCK_LEN];
     let internal_flags = Flags::CHUNK_START | Flags::CHUNK_END | Flags::ROOT;
     let context = 23;
-    portable::compress(
-        &mut state,
-        &block,
-        0,
-        0,
-        internal_flags.bits(),
-        context,
-    );
+    portable::compress(&mut state, &block, 0, 0, internal_flags.bits(), context);
     let expected_hash: Hash = bytes_from_state_words(&state).into();
 
     assert_eq!(expected_hash, hash_keyed_contextified(&[], &key, context));
@@ -162,14 +157,7 @@ fn test_one_byte() {
     block[0] = 9;
     let internal_flags = Flags::CHUNK_START | Flags::CHUNK_END | Flags::ROOT;
     let context = 23;
-    portable::compress(
-        &mut state,
-        &block,
-        1,
-        0,
-        internal_flags.bits(),
-        context,
-    );
+    portable::compress(&mut state, &block, 1, 0, internal_flags.bits(), context);
     let expected_hash: Hash = bytes_from_state_words(&state).into();
 
     assert_eq!(expected_hash, hash_keyed_contextified(&[9], &key, context));
@@ -334,8 +322,7 @@ fn three_chunks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], context: Wor
     let key_words = words_from_key_bytes(&key);
 
     // The first chunk.
-    let chunk0_out =
-        hash_whole_chunk_for_testing(&input_buf[..CHUNK_LEN], &key_words, 0, context);
+    let chunk0_out = hash_whole_chunk_for_testing(&input_buf[..CHUNK_LEN], &key_words, 0, context);
 
     // The second chunk.
     let chunk1_out = hash_whole_chunk_for_testing(

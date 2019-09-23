@@ -1,6 +1,7 @@
 // NB: This is only for benchmarking. The guy who wrote this file hasn't
 // touched C since college. Please don't use this code in production.
 
+#include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -11,6 +12,7 @@
 #define CHUNK_LEN 4096
 #define KEY_LEN 32
 #define OUT_LEN 32
+#define MAX_DEPTH 52
 
 // internal flags
 #define ROOT 128
@@ -47,6 +49,16 @@ static inline void store32(void *dst, uint32_t w) {
 
 static inline uint32_t rotr32(uint32_t w, uint32_t c) {
   return (w >> c) | (w << (32 - c));
+}
+
+// Count the number of 1 bits.
+static inline uint8_t popcnt(uint64_t x) {
+  uint8_t count = 0;
+  while (x > 0) {
+    count += ((uint8_t)x) & 1;
+    x >>= 1;
+  }
+  return count;
 }
 
 static inline void g(uint32_t *state, size_t a, size_t b, size_t c, size_t d,
@@ -179,7 +191,7 @@ void compress(uint32_t state[8], const uint8_t block[BLOCK_LEN],
   state[7] = full_state[7] ^ full_state[15];
 }
 
-static inline void iv(const uint32_t *key_words, uint32_t *state) {
+static inline void init_iv(const uint32_t key_words[8], uint32_t state[8]) {
   state[0] = IV[0] ^ key_words[0];
   state[1] = IV[1] ^ key_words[1];
   state[2] = IV[2] ^ key_words[2];
@@ -200,7 +212,7 @@ typedef struct {
 
 void chunk_state_init(chunk_state *self, const uint32_t key_words[8],
                       uint64_t offset) {
-  iv(key_words, self->state);
+  init_iv(key_words, self->state);
   self->offset = offset;
   self->count = 0;
   self->buf_len = 0;
@@ -208,7 +220,7 @@ void chunk_state_init(chunk_state *self, const uint32_t key_words[8],
 }
 
 size_t chunk_state_len(const chunk_state *self) {
-  return ((size_t)self->count) + ((size_t)self->buf);
+  return ((size_t)self->count) + ((size_t)self->buf_len);
 }
 
 size_t chunk_state_fill_buf(chunk_state *self, const uint8_t *input,
@@ -269,4 +281,104 @@ void chunk_state_finalize(const chunk_state *self, uint32_t context,
   }
   compress(state_copy, self->buf, self->buf_len, self->offset, flags, context);
   write_state_bytes(state_copy, out);
+}
+
+void hash_one_parent(const uint8_t block[BLOCK_LEN],
+                     const uint32_t key_words[8], bool is_root,
+                     uint32_t context, uint8_t out[OUT_LEN]) {
+  uint8_t flags = PARENT;
+  if (is_root) {
+    flags |= ROOT;
+  }
+  uint32_t state[8];
+  init_iv(key_words, state);
+  compress(state, block, BLOCK_LEN, 0, flags, context);
+  write_state_bytes(state, out);
+}
+
+typedef struct {
+  chunk_state chunk;
+  uint32_t key_words[8];
+  uint32_t context;
+  uint8_t subtree_hashes_len;
+  uint8_t subtree_hashes[MAX_DEPTH * OUT_LEN];
+} hasher;
+
+void hasher_init(hasher *self, const uint8_t key[KEY_LEN], uint32_t context) {
+  load_key_words(key, self->key_words);
+  chunk_state_init(&self->chunk, self->key_words, 0);
+  self->context = context;
+  self->subtree_hashes_len = 0;
+}
+
+bool hasher_needs_merge(const hasher *self, uint64_t total_bytes) {
+  uint64_t total_chunks = total_bytes / CHUNK_LEN;
+  return self->subtree_hashes_len > popcnt(total_chunks);
+}
+
+void hasher_merge_parent(hasher *self) {
+  size_t parent_block_start =
+      (((size_t)self->subtree_hashes_len) - 2) * OUT_LEN;
+  uint8_t out[OUT_LEN];
+  hash_one_parent(&self->subtree_hashes[parent_block_start], self->key_words,
+                  false, self->context, out);
+  memcpy(&self->subtree_hashes[parent_block_start], out, OUT_LEN);
+  self->subtree_hashes_len -= 1;
+}
+
+void hasher_push_chunk_hash(hasher *self, uint8_t hash[OUT_LEN],
+                            uint64_t offset) {
+  assert(self->subtree_hashes_len < MAX_DEPTH);
+  while (hasher_needs_merge(self, offset)) {
+    hasher_merge_parent(self);
+  }
+  memcpy(&self->subtree_hashes[self->subtree_hashes_len * OUT_LEN], hash,
+         OUT_LEN);
+  self->subtree_hashes_len += 1;
+}
+
+void hasher_update(hasher *self, const void *input, size_t input_len) {
+  uint8_t *input_bytes = (uint8_t *)input;
+  while (input_len > 0) {
+    if (chunk_state_len(&self->chunk) == CHUNK_LEN) {
+      uint8_t hash[OUT_LEN];
+      chunk_state_finalize(&self->chunk, self->context, false, hash);
+      hasher_push_chunk_hash(self, hash, self->chunk.offset);
+      uint64_t new_offset = self->chunk.offset + CHUNK_LEN;
+      chunk_state_init(&self->chunk, self->key_words, new_offset);
+      // Work ahead, to simplify finalize().
+      while (hasher_needs_merge(self, new_offset)) {
+        hasher_merge_parent(self);
+      }
+    }
+    size_t take = CHUNK_LEN - chunk_state_len(&self->chunk);
+    if (take > input_len) {
+      take = input_len;
+    }
+    chunk_state_update(&self->chunk, input_bytes, take, self->context);
+    input_bytes += take;
+    input_len -= take;
+  }
+}
+
+void hasher_finalize(const hasher *self, uint8_t out[OUT_LEN]) {
+  if (self->subtree_hashes_len == 0) {
+    chunk_state_finalize(&self->chunk, self->context, true, out);
+    return;
+  }
+  uint8_t working_hash[OUT_LEN];
+  chunk_state_finalize(&self->chunk, self->context, false, working_hash);
+  size_t next_subtree_start =
+      (((size_t)self->subtree_hashes_len) - 1) * OUT_LEN;
+  while (true) {
+    uint8_t block[BLOCK_LEN];
+    memcpy(block, &self->subtree_hashes[next_subtree_start], OUT_LEN);
+    memcpy(&block[OUT_LEN], working_hash, OUT_LEN);
+    if (next_subtree_start == 0) {
+      hash_one_parent(block, self->key_words, true, self->context, out);
+      return;
+    }
+    hash_one_parent(block, self->key_words, false, self->context, working_hash);
+    next_subtree_start -= OUT_LEN;
+  }
 }
