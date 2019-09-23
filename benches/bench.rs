@@ -111,6 +111,47 @@ fn bench_hasher_04_block(b: &mut Bencher) {
     });
 }
 
+// This one is slow.
+// #[bench]
+// fn bench_ffihasher_01_long(b: &mut Bencher) {
+//     let mut input = RandomInput::new(b, LONG);
+//     b.iter(|| {
+//         let mut hasher = c::Hasher::new(DEFAULT_KEY, DEFAULT_CONTEXT);
+//         hasher.update(input.get());
+//         hasher.finalize()
+//     });
+// }
+
+#[bench]
+fn bench_ffihasher_02_medium(b: &mut Bencher) {
+    let mut input = RandomInput::new(b, MEDIUM);
+    b.iter(|| {
+        let mut hasher = c::Hasher::new(DEFAULT_KEY, DEFAULT_CONTEXT);
+        hasher.update(input.get());
+        hasher.finalize()
+    });
+}
+
+#[bench]
+fn bench_ffihasher_03_chunk(b: &mut Bencher) {
+    let mut input = RandomInput::new(b, CHUNK_LEN);
+    b.iter(|| {
+        let mut hasher = c::Hasher::new(DEFAULT_KEY, DEFAULT_CONTEXT);
+        hasher.update(input.get());
+        hasher.finalize()
+    });
+}
+
+#[bench]
+fn bench_ffihasher_04_block(b: &mut Bencher) {
+    let mut input = RandomInput::new(b, BLOCK_LEN);
+    b.iter(|| {
+        let mut hasher = c::Hasher::new(DEFAULT_KEY, DEFAULT_CONTEXT);
+        hasher.update(input.get());
+        hasher.finalize()
+    });
+}
+
 #[bench]
 fn bench_xof(b: &mut Bencher) {
     b.bytes = OUT_LEN as u64;
