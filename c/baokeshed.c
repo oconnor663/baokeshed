@@ -7,49 +7,6 @@
 
 #include "baokeshed_impl.h"
 
-void compress(uint32_t state[8], const uint8_t block[BLOCK_LEN],
-              uint8_t block_len, uint64_t offset, uint8_t internal_flags,
-              uint32_t context) {
-  uint32_t block_words[16];
-  load_msg_words(block, block_words);
-
-  uint32_t full_state[16] = {
-      state[0],
-      state[1],
-      state[2],
-      state[3],
-      state[4],
-      state[5],
-      state[6],
-      state[7],
-      IV[0],
-      IV[1],
-      IV[2],
-      IV[3],
-      IV[4] ^ offset_low(offset),
-      IV[5] ^ offset_high(offset),
-      IV[6] ^ block_flags(block_len, internal_flags),
-      IV[7] ^ context,
-  };
-
-  round_fn(&full_state[0], &block_words[0], 0);
-  round_fn(&full_state[0], &block_words[0], 1);
-  round_fn(&full_state[0], &block_words[0], 2);
-  round_fn(&full_state[0], &block_words[0], 3);
-  round_fn(&full_state[0], &block_words[0], 4);
-  round_fn(&full_state[0], &block_words[0], 5);
-  round_fn(&full_state[0], &block_words[0], 6);
-
-  state[0] = full_state[0] ^ full_state[8];
-  state[1] = full_state[1] ^ full_state[9];
-  state[2] = full_state[2] ^ full_state[10];
-  state[3] = full_state[3] ^ full_state[11];
-  state[4] = full_state[4] ^ full_state[12];
-  state[5] = full_state[5] ^ full_state[13];
-  state[6] = full_state[6] ^ full_state[14];
-  state[7] = full_state[7] ^ full_state[15];
-}
-
 typedef struct {
   uint32_t state[8];
   uint64_t offset;

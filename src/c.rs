@@ -1,3 +1,8 @@
+//! FFI wrappers of the C implementation
+//!
+//! This module is intended mainly for benchmarking, and we also test that it
+//! produces the same output.
+
 use crate::{Word, BLOCK_LEN, KEY_LEN, OUT_LEN};
 use std::mem::MaybeUninit;
 
