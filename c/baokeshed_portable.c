@@ -1,4 +1,5 @@
 #include "baokeshed_impl.h"
+#include <string.h>
 
 INLINE void g(uint32_t *state, size_t a, size_t b, size_t c, size_t d,
               uint32_t x, uint32_t y) {
@@ -29,9 +30,9 @@ INLINE void round_fn(uint32_t *state, const uint32_t *msg, size_t round) {
   g(state, 3, 4, 9, 14, msg[schedule[14]], msg[schedule[15]]);
 }
 
-void compress(uint32_t state[8], const uint8_t block[BLOCK_LEN],
-              uint8_t block_len, uint64_t offset, uint8_t internal_flags,
-              uint32_t context) {
+void compress_portable(uint32_t state[8], const uint8_t block[BLOCK_LEN],
+                       uint8_t block_len, uint64_t offset,
+                       uint8_t internal_flags, uint32_t context) {
   uint32_t block_words[16];
   load_msg_words(block, block_words);
 
@@ -70,4 +71,40 @@ void compress(uint32_t state[8], const uint8_t block[BLOCK_LEN],
   state[5] = full_state[5] ^ full_state[13];
   state[6] = full_state[6] ^ full_state[14];
   state[7] = full_state[7] ^ full_state[15];
+}
+
+INLINE void hash_one_portable(const uint8_t *input, size_t blocks,
+                              const uint32_t key_words[8], uint64_t offset,
+                              uint8_t internal_flags_start,
+                              uint8_t internal_flags_end, uint32_t context,
+                              uint8_t out[OUT_LEN]) {
+  uint32_t state[8];
+  init_iv(key_words, state);
+  uint8_t flags = internal_flags_start;
+  while (blocks > 0) {
+    if (blocks == 1) {
+      flags |= internal_flags_end;
+    }
+    compress_portable(state, input, BLOCK_LEN, offset, flags, context);
+    input = &input[BLOCK_LEN];
+    blocks -= 1;
+    flags = 0;
+  }
+  memcpy(out, state, OUT_LEN);
+}
+
+void hash_many_portable(const uint8_t *const *inputs, size_t num_inputs,
+                        size_t blocks, const uint32_t key_words[8],
+                        uint64_t offset, uint64_t offset_delta,
+                        uint8_t internal_flags_start,
+                        uint8_t internal_flags_end, uint32_t context,
+                        uint8_t *out) {
+  while (num_inputs > 0) {
+    hash_one_portable(inputs[0], blocks, key_words, offset,
+                      internal_flags_start, internal_flags_end, context, out);
+    inputs += 1;
+    num_inputs -= 1;
+    offset += offset_delta;
+    out = &out[OUT_LEN];
+  }
 }

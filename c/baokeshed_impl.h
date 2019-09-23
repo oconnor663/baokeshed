@@ -20,9 +20,12 @@
 #define INLINE __attribute__((always_inline)) static inline
 
 // Declarations for implementation-specific functions.
-void compress(uint32_t state[8], const uint8_t block[BLOCK_LEN],
-              uint8_t block_len, uint64_t offset, uint8_t internal_flags,
-              uint32_t context);
+void compress_portable(uint32_t state[8], const uint8_t block[BLOCK_LEN],
+                       uint8_t block_len, uint64_t offset,
+                       uint8_t internal_flags, uint32_t context);
+void compress_sse41(uint32_t state[8], const uint8_t block[BLOCK_LEN],
+                    uint8_t block_len, uint64_t offset, uint8_t internal_flags,
+                    uint32_t context);
 
 static const uint32_t IV[8] = {0x6A09E667UL, 0xBB67AE85UL, 0x3C6EF372UL,
                                0xA54FF53AUL, 0x510E527FUL, 0x9B05688CUL,

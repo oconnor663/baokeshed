@@ -3,30 +3,11 @@
 //! This module is intended mainly for benchmarking, and we also test that it
 //! produces the same output.
 
-use crate::{Word, BLOCK_LEN, KEY_LEN, OUT_LEN};
+use crate::{KEY_LEN, OUT_LEN};
 use std::mem::MaybeUninit;
 
-// A wrapper function for unit testing and benchmarking.
-pub fn compress(
-    state: &mut [Word; 8],
-    block: &[u8; BLOCK_LEN],
-    block_len: u8,
-    offset: u64,
-    internal_flags: u8,
-    context: Word,
-) {
-    unsafe {
-        ffi::compress(
-            state.as_mut_ptr(),
-            block.as_ptr(),
-            block_len,
-            offset,
-            internal_flags,
-            context,
-        );
-    }
-}
-
+// Methods on this chunk state are only used for testing. They're defined in
+// the `test` module below.
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct ChunkState {
@@ -35,32 +16,6 @@ pub struct ChunkState {
     count: u16,
     buf: [u8; 64usize],
     buf_len: u8,
-}
-
-// These safe wrapper methods are just for unit testing. The real callers for
-// these functions are in C.
-impl ChunkState {
-    pub fn new(key_words: &[Word; 8], offset: u64) -> ChunkState {
-        let mut state: MaybeUninit<ChunkState> = MaybeUninit::uninit();
-        unsafe {
-            ffi::chunk_state_init(state.as_mut_ptr(), key_words.as_ptr(), offset);
-            state.assume_init()
-        }
-    }
-
-    pub fn update(&mut self, input: &[u8], context: Word) {
-        unsafe {
-            ffi::chunk_state_update(self, input.as_ptr(), input.len(), context);
-        }
-    }
-
-    pub fn finalize(&self, context: Word, is_root: bool) -> [u8; OUT_LEN] {
-        let mut out = [0; OUT_LEN];
-        unsafe {
-            ffi::chunk_state_finalize(self, context, is_root, out.as_mut_ptr());
-        }
-        out
-    }
 }
 
 #[repr(C)]
@@ -98,47 +53,122 @@ impl Hasher {
 }
 
 mod ffi {
-    use super::ChunkState;
-    use super::Hasher;
-
     extern "C" {
-        pub fn compress(
-            state: *mut u32,
-            block: *const u8,
-            block_len: u8,
-            offset: u64,
-            internal_flags: u8,
-            context: u32,
-        );
-        pub fn chunk_state_init(state: *mut ChunkState, key_words: *const u32, offset: u64);
-        pub fn chunk_state_update(
-            state: *mut ChunkState,
-            input: *const u8,
-            input_len: usize,
-            context: u32,
-        );
-        pub fn chunk_state_finalize(
-            state: *const ChunkState,
-            context: u32,
-            is_root: bool,
-            out: *mut u8,
-        );
-        pub fn hasher_init(hasher: *mut Hasher, key: *const u8, context: u32);
+        pub fn hasher_init(hasher: *mut super::Hasher, key: *const u8, context: u32);
         pub fn hasher_update(
-            hasher: *mut Hasher,
+            hasher: *mut super::Hasher,
             input: *const ::std::os::raw::c_void,
             input_len: usize,
         );
-        pub fn hasher_finalize(hasher: *const Hasher, out: *mut u8);
+        pub fn hasher_finalize(hasher: *const super::Hasher, out: *mut u8);
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::{BLOCK_LEN, CHUNK_LEN, KEY_LEN, WORD_BITS};
+    use super::*;
+    use crate::{Word, BLOCK_LEN, CHUNK_LEN, WORD_BITS};
+    use arrayref::array_ref;
 
-    #[test]
-    fn test_compare_compress() {
+    // FFI functions that we only call in tests.
+    mod ffi {
+        extern "C" {
+            pub fn compress_portable(
+                state: *mut u32,
+                block: *const u8,
+                block_len: u8,
+                offset: u64,
+                internal_flags: u8,
+                context: u32,
+            );
+            pub fn hash_many_portable(
+                inputs: *const *const u8,
+                num_inputs: usize,
+                blocks: usize,
+                key_words: *const u32,
+                offset: u64,
+                offset_delta: u64,
+                internal_flags_start: u8,
+                internal_flags_end: u8,
+                context: u32,
+                out: *mut u8,
+            );
+            // TODO arch check
+            pub fn compress_sse41(
+                state: *mut u32,
+                block: *const u8,
+                block_len: u8,
+                offset: u64,
+                internal_flags: u8,
+                context: u32,
+            );
+            // TODO arch check
+            pub fn hash_many_sse41(
+                inputs: *const *const u8,
+                num_inputs: usize,
+                blocks: usize,
+                key_words: *const u32,
+                offset: u64,
+                offset_delta: u64,
+                internal_flags_start: u8,
+                internal_flags_end: u8,
+                context: u32,
+                out: *mut u8,
+            );
+            pub fn chunk_state_init(
+                state: *mut super::ChunkState,
+                key_words: *const u32,
+                offset: u64,
+            );
+            pub fn chunk_state_update(
+                state: *mut super::ChunkState,
+                input: *const u8,
+                input_len: usize,
+                context: u32,
+            );
+            pub fn chunk_state_finalize(
+                state: *const super::ChunkState,
+                context: u32,
+                is_root: bool,
+                out: *mut u8,
+            );
+        }
+    }
+
+    impl ChunkState {
+        pub fn new(key_words: &[Word; 8], offset: u64) -> ChunkState {
+            let mut state: MaybeUninit<ChunkState> = MaybeUninit::uninit();
+            unsafe {
+                ffi::chunk_state_init(state.as_mut_ptr(), key_words.as_ptr(), offset);
+                state.assume_init()
+            }
+        }
+
+        pub fn update(&mut self, input: &[u8], context: Word) {
+            unsafe {
+                ffi::chunk_state_update(self, input.as_ptr(), input.len(), context);
+            }
+        }
+
+        pub fn finalize(&self, context: Word, is_root: bool) -> [u8; OUT_LEN] {
+            let mut out = [0; OUT_LEN];
+            unsafe {
+                ffi::chunk_state_finalize(self, context, is_root, out.as_mut_ptr());
+            }
+            out
+        }
+    }
+
+    type CompressFn = unsafe extern "C" fn(
+        state: *mut u32,
+        block: *const u8,
+        block_len: u8,
+        offset: u64,
+        internal_flags: u8,
+        context: u32,
+    );
+
+    fn compare_compress_fn(compress_fn: CompressFn) {
         let initial_state = [1, 2, 3, 4, 5, 6, 7, 8];
         let block_len: u8 = 27;
         let mut block = [0; BLOCK_LEN];
@@ -159,16 +189,115 @@ mod test {
         );
 
         let mut c_state = initial_state;
-        super::compress(
-            &mut c_state,
-            &block,
-            block_len,
-            offset as u64,
-            flags.bits(),
-            context,
-        );
+        unsafe {
+            compress_fn(
+                c_state.as_mut_ptr(),
+                block.as_ptr(),
+                block_len,
+                offset as u64,
+                flags.bits(),
+                context,
+            );
+        }
 
         assert_eq!(rust_state, c_state);
+    }
+
+    #[test]
+    fn test_compress_portable() {
+        compare_compress_fn(ffi::compress_portable);
+    }
+
+    // TODO arch check
+    #[test]
+    fn test_compress_sse41() {
+        compare_compress_fn(ffi::compress_sse41);
+    }
+
+    type HashManyFn = unsafe extern "C" fn(
+        inputs: *const *const u8,
+        num_inputs: usize,
+        blocks: usize,
+        key_words: *const u32,
+        offset: u64,
+        offset_delta: u64,
+        internal_flags_start: u8,
+        internal_flags_end: u8,
+        context: u32,
+        out: *mut u8,
+    );
+
+    fn compare_hash_many_fn(hash_many_fn: HashManyFn) {
+        // 31 (16 + 8 + 4 + 2 + 1) inputs
+        const NUM_INPUTS: usize = 31;
+        let mut input_buf = [0; CHUNK_LEN * NUM_INPUTS];
+        crate::test::paint_test_input(&mut input_buf);
+        let key_words = [21, 22, 23, 24, 25, 26, 27, 28];
+        let offset = 99 * CHUNK_LEN as u64;
+        let context = 255;
+
+        // First hash chunks.
+        let mut chunks = Vec::new();
+        for i in 0..NUM_INPUTS {
+            chunks.push(array_ref!(input_buf, i * CHUNK_LEN, CHUNK_LEN));
+        }
+        let platform = crate::platform::Platform::detect();
+        let mut rust_out = [0; NUM_INPUTS * OUT_LEN];
+        platform.hash_many_chunks(&chunks, &key_words, offset, context, &mut rust_out);
+
+        let mut c_out = [0; NUM_INPUTS * OUT_LEN];
+        unsafe {
+            hash_many_fn(
+                chunks.as_ptr() as _,
+                NUM_INPUTS,
+                CHUNK_LEN / BLOCK_LEN,
+                key_words.as_ptr(),
+                offset,
+                CHUNK_LEN as u64,
+                crate::Flags::CHUNK_START.bits(),
+                crate::Flags::CHUNK_END.bits(),
+                context,
+                c_out.as_mut_ptr(),
+            );
+        }
+        assert_eq!(&rust_out[..], &c_out[..]);
+
+        // Then hash parents.
+        let mut parents = Vec::new();
+        for i in 0..NUM_INPUTS {
+            parents.push(array_ref!(input_buf, i * BLOCK_LEN, BLOCK_LEN));
+        }
+        let platform = crate::platform::Platform::detect();
+        let mut rust_out = [0; NUM_INPUTS * OUT_LEN];
+        platform.hash_many_parents(&parents, &key_words, context, &mut rust_out);
+
+        let mut c_out = [0; NUM_INPUTS * OUT_LEN];
+        unsafe {
+            hash_many_fn(
+                parents.as_ptr() as _,
+                NUM_INPUTS,
+                1,
+                key_words.as_ptr(),
+                0,
+                0,
+                crate::Flags::PARENT.bits(),
+                0,
+                context,
+                c_out.as_mut_ptr(),
+            );
+        }
+        assert_eq!(&rust_out[..], &c_out[..]);
+    }
+
+    #[test]
+    fn test_hash_many_portable() {
+        compare_hash_many_fn(ffi::hash_many_portable);
+    }
+
+    // TODO arch check
+    #[test]
+    fn test_hash_many_sse41() {
+        compare_hash_many_fn(ffi::hash_many_sse41);
     }
 
     #[test]

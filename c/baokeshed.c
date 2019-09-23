@@ -7,6 +7,16 @@
 
 #include "baokeshed_impl.h"
 
+void compress(uint32_t state[8], const uint8_t block[BLOCK_LEN],
+              uint8_t block_len, uint64_t offset, uint8_t internal_flags,
+              uint32_t context) {
+#ifdef __SSE4_1__
+  compress_sse41(state, block, block_len, offset, internal_flags, context);
+#else
+  compress_portable(state, block, block_len, offset, internal_flags, context);
+#endif
+}
+
 typedef struct {
   uint32_t state[8];
   uint64_t offset;
