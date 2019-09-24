@@ -9,6 +9,7 @@
 #define KEY_LEN 32
 #define OUT_LEN 32
 #define MAX_DEPTH 52
+#define MAX_SIMD_DEGREE 4 // TODO: increase when adding AVX2/AVX512
 
 // internal flags
 #define ROOT 128
@@ -18,14 +19,6 @@
 
 // This isn't portable. Not production code!
 #define INLINE __attribute__((always_inline)) static inline
-
-// Declarations for implementation-specific functions.
-void compress_portable(uint32_t state[8], const uint8_t block[BLOCK_LEN],
-                       uint8_t block_len, uint64_t offset,
-                       uint8_t internal_flags, uint32_t context);
-void compress_sse41(uint32_t state[8], const uint8_t block[BLOCK_LEN],
-                    uint8_t block_len, uint64_t offset, uint8_t internal_flags,
-                    uint32_t context);
 
 static const uint32_t IV[8] = {0x6A09E667UL, 0xBB67AE85UL, 0x3C6EF372UL,
                                0xA54FF53AUL, 0x510E527FUL, 0x9B05688CUL,
@@ -133,3 +126,22 @@ INLINE void init_iv(const uint32_t key_words[8], uint32_t state[8]) {
   state[6] = IV[6] ^ key_words[6];
   state[7] = IV[7] ^ key_words[7];
 }
+
+// Declarations for implementation-specific functions.
+void compress_portable(uint32_t state[8], const uint8_t block[BLOCK_LEN],
+                       uint8_t block_len, uint64_t offset,
+                       uint8_t internal_flags, uint32_t context);
+void compress_sse41(uint32_t state[8], const uint8_t block[BLOCK_LEN],
+                    uint8_t block_len, uint64_t offset, uint8_t internal_flags,
+                    uint32_t context);
+void hash_many_portable(const uint8_t *const *inputs, size_t num_inputs,
+                        size_t blocks, const uint32_t key_words[8],
+                        uint64_t offset, uint64_t offset_delta,
+                        uint8_t internal_flags_start,
+                        uint8_t internal_flags_end, uint32_t context,
+                        uint8_t *out);
+void hash_many_sse41(const uint8_t *const *inputs, size_t num_inputs,
+                     size_t blocks, const uint32_t key_words[8],
+                     uint64_t offset, uint64_t offset_delta,
+                     uint8_t internal_flags_start, uint8_t internal_flags_end,
+                     uint32_t context, uint8_t *out);
