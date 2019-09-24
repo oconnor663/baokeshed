@@ -61,11 +61,11 @@ jobs:
     # different CC settings will do a recompilation.
     - name: GCC
       env:
-        CC=gcc
+        CC: gcc
       run: cargo test -vv --features c_native
     - name: Clang
       env:
-        CC=clang
+        CC: clang
       run: cargo test -vv --features c_native
     # The Rust tests do runtime feature detection to avoid running
     # feature-specific tests on a platform that doesn't support them. Depending
