@@ -21,11 +21,11 @@ pub struct ChunkState {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct Hasher {
-    pub chunk: ChunkState,
-    pub key_words: [u32; 8usize],
-    pub context: u32,
-    pub subtree_hashes_len: u8,
-    pub subtree_hashes: [u8; 1664usize],
+    chunk: ChunkState,
+    key_words: [u32; 8usize],
+    context: u32,
+    subtree_hashes_len: u8,
+    subtree_hashes: [u8; 1664usize],
 }
 
 impl Hasher {
