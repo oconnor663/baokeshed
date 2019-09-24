@@ -17,13 +17,13 @@ jobs:
       with:
         toolchain: ${{ matrix.rust_version }}
         override: true
-    - name: all features
-      run: cargo test --all-features
-    - name: no features
+    - name: cargo test
+      run: cargo test
+    - name: cargo test --no-default-features
       run: cargo test --no-default-features
-    - name: binary
+    - name: binary tests
       working-directory: ./baokeshed_bin
-      run: cargo test --all-features
+      run: cargo test
 
   cross:
     name: cross test on mips
@@ -38,4 +38,41 @@ jobs:
     - name: install cross
       run: cargo install cross
     - name: cross test
-      run: cross test --all-features --target mips-unknown-linux-gnu
+      run: cross test --target mips-unknown-linux-gnu
+
+  cross:
+    name: C implementation on Linux
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v1
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+    - name: cpuinfo
+      run: cat /proc/cpuinfo
+    # We want to see compiler flags in the build output, which requires
+    # building at high verbosity. To avoid seeing a flood of output, do an
+    # initial build at low verbosity.
+    - name: pre-build test dependencies
+      run: cargo build --tests --features c_native
+    # The rerun-if-env-changed directives in build.rs mean that each of these
+    # different CC settings will do a recompilation.
+    - name: GCC
+      env:
+        CC=gcc
+      run: cargo test -vv --features c_native
+    - name: Clang
+      env:
+        CC=clang
+      run: cargo test -vv --features c_native
+    # The Rust tests do runtime feature detection to avoid running
+    # feature-specific tests on a platform that doesn't support them. Depending
+    # on what features are supported in cpuinfo above, these feature-specific
+    # tests might not actually execute.
+    - name: explicit SSE4.1
+      run: cargo test -vv --features c_sse41
+    - name: explicit AVX2
+      run: cargo test -vv --features c_avx2
+    # TODO: explicit AVX512

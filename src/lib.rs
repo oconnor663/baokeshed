@@ -43,6 +43,7 @@ use platform::{Platform, MAX_SIMD_DEGREE_OR_2};
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod avx2;
+#[cfg(feature = "c")]
 pub mod c;
 pub mod copy;
 mod platform;

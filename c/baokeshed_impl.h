@@ -17,7 +17,8 @@
 #define CHUNK_END 32
 #define CHUNK_START 16
 
-// This isn't portable. Not production code!
+// This C implementation currently only supports recent versions of GCC and
+// Clang.
 #define INLINE __attribute__((always_inline)) static inline
 
 static const uint32_t IV[8] = {0x6A09E667UL, 0xBB67AE85UL, 0x3C6EF372UL,

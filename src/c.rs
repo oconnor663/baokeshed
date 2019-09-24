@@ -81,6 +81,7 @@ mod test {
                 internal_flags: u8,
                 context: u32,
             );
+            #[cfg(any(feature = "c_sse41", feature = "c_native"))]
             pub fn compress_sse41(
                 state: *mut u32,
                 block: *const u8,
@@ -101,6 +102,7 @@ mod test {
                 context: u32,
                 out: *mut u8,
             );
+            #[cfg(any(feature = "c_sse41", feature = "c_native"))]
             pub fn hash_many_sse41(
                 inputs: *const *const u8,
                 num_inputs: usize,
@@ -113,6 +115,7 @@ mod test {
                 context: u32,
                 out: *mut u8,
             );
+            #[cfg(any(feature = "c_avx2", feature = "c_native"))]
             pub fn hash_many_avx2(
                 inputs: *const *const u8,
                 num_inputs: usize,
@@ -219,6 +222,7 @@ mod test {
     }
 
     #[test]
+    #[cfg(any(feature = "c_sse41", feature = "c_native"))]
     fn test_compress_sse41() {
         if !is_x86_feature_detected!("sse4.1") {
             return;
@@ -307,6 +311,7 @@ mod test {
     }
 
     #[test]
+    #[cfg(any(feature = "c_sse41", feature = "c_native"))]
     fn test_hash_many_sse41() {
         if !is_x86_feature_detected!("sse4.1") {
             return;
@@ -315,6 +320,7 @@ mod test {
     }
 
     #[test]
+    #[cfg(any(feature = "c_avx2", feature = "c_native"))]
     fn test_hash_many_avx2() {
         if !is_x86_feature_detected!("avx2") {
             return;
