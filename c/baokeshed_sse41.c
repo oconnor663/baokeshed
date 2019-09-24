@@ -1,9 +1,12 @@
+#include "baokeshed_impl.h"
+#include <assert.h>
 #include <emmintrin.h>
 #include <smmintrin.h>
+#include <stdbool.h>
 #include <string.h>
 #include <tmmintrin.h>
 
-#include "baokeshed_impl.h"
+#ifdef __SSE4_1__
 
 #define DEGREE 4
 
@@ -547,3 +550,45 @@ void hash_many_sse41(const uint8_t *const *inputs, size_t num_inputs,
     out = &out[OUT_LEN];
   }
 }
+
+#else // __SSE4_1__ not defined
+
+// When SSE4.1 isn't enabled in the build (e.g. with -march=native, depending
+// on the platform), other C code doesn't call into this file at all. But the
+// Rust test framework links against these functions unconditionally, and then
+// does runtime feature detection to decide whether to run tests. So we need to
+// provide empty stubs in the not-supported case, to avoid breaking the build.
+
+void compress_sse41(uint32_t state[8], const uint8_t block[BLOCK_LEN],
+                    uint8_t block_len, uint64_t offset, uint8_t internal_flags,
+                    uint32_t context) {
+  // Suppress unused parameter warnings.
+  (void)state;
+  (void)block;
+  (void)block_len;
+  (void)offset;
+  (void)internal_flags;
+  (void)context;
+  assert(false);
+}
+
+void hash_many_sse41(const uint8_t *const *inputs, size_t num_inputs,
+                     size_t blocks, const uint32_t key_words[8],
+                     uint64_t offset, uint64_t offset_delta,
+                     uint8_t internal_flags_start, uint8_t internal_flags_end,
+                     uint32_t context, uint8_t *out) {
+  // Suppress unused parameter warnings.
+  (void)inputs;
+  (void)num_inputs;
+  (void)blocks;
+  (void)key_words;
+  (void)offset;
+  (void)offset_delta;
+  (void)internal_flags_start;
+  (void)internal_flags_end;
+  (void)context;
+  (void)out;
+  assert(false);
+}
+
+#endif

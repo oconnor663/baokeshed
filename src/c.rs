@@ -93,7 +93,6 @@ mod test {
                 context: u32,
                 out: *mut u8,
             );
-            // TODO arch check
             pub fn compress_sse41(
                 state: *mut u32,
                 block: *const u8,
@@ -102,7 +101,6 @@ mod test {
                 internal_flags: u8,
                 context: u32,
             );
-            // TODO arch check
             pub fn hash_many_sse41(
                 inputs: *const *const u8,
                 num_inputs: usize,
@@ -208,9 +206,11 @@ mod test {
         compare_compress_fn(ffi::compress_portable);
     }
 
-    // TODO arch check
     #[test]
     fn test_compress_sse41() {
+        if !is_x86_feature_detected!("sse4.1") {
+            return;
+        }
         compare_compress_fn(ffi::compress_sse41);
     }
 
@@ -294,9 +294,11 @@ mod test {
         compare_hash_many_fn(ffi::hash_many_portable);
     }
 
-    // TODO arch check
     #[test]
     fn test_hash_many_sse41() {
+        if !is_x86_feature_detected!("sse4.1") {
+            return;
+        }
         compare_hash_many_fn(ffi::hash_many_sse41);
     }
 
