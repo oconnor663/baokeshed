@@ -55,24 +55,26 @@ jobs:
     # We want to see compiler flags in the build output, which requires
     # building at high verbosity. To avoid seeing a flood of output, do an
     # initial build at low verbosity.
-    - name: pre-build test dependencies
-      run: cargo build --tests --features c_native
+    - name: pre-build tests
+      run: cargo build --tests --all-features
+    - name: pre-build tests --release
+      run: cargo build --tests --all-features --release
+    # The Rust tests do runtime feature detection to avoid running
+    # feature-specific tests on a platform that doesn't support them.
+    - name: test portable
+      run: cargo test -vv --features=c
+    - name: test SSE4.1
+      run: cargo test -vv --features=c_sse41
+    - name: test AVX2
+      run: cargo test -vv --features=c_avx2
+    # TODO: explicit AVX512
     # The rerun-if-env-changed directives in build.rs mean that each of these
     # different CC settings will do a recompilation.
-    - name: GCC
+    - name: test native GCC
       env:
         CC: gcc
-      run: cargo test -vv --features c_native
-    - name: Clang
+      run: cargo test -vv --features=c_native --release
+    - name: test native Clang
       env:
         CC: clang
-      run: cargo test -vv --features c_native
-    # The Rust tests do runtime feature detection to avoid running
-    # feature-specific tests on a platform that doesn't support them. Depending
-    # on what features are supported in cpuinfo above, these feature-specific
-    # tests might not actually execute.
-    - name: explicit SSE4.1
-      run: cargo test -vv --features c_sse41
-    - name: explicit AVX2
-      run: cargo test -vv --features c_avx2
-    # TODO: explicit AVX512
+      run: cargo test -vv --features=c_native --release
