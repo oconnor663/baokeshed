@@ -1,10 +1,8 @@
 #include "baokeshed_impl.h"
 #include <assert.h>
-#include <emmintrin.h>
-#include <smmintrin.h>
+#include <immintrin.h>
 #include <stdbool.h>
 #include <string.h>
-#include <tmmintrin.h>
 
 #ifdef __SSE4_1__
 
@@ -429,11 +427,10 @@ INLINE void load_offsets(uint64_t offset, uint64_t offset_delta,
                    offset_high(offset + 3 * offset_delta));
 }
 
-void compress4_loop(const uint8_t *const *inputs, size_t blocks,
-                    const uint32_t key_words[8], uint64_t offset,
-                    uint64_t offset_delta, uint8_t internal_flags_start,
-                    uint8_t internal_flags_end, uint32_t context,
-                    uint8_t *out) {
+void hash4_sse41(const uint8_t *const *inputs, size_t blocks,
+                 const uint32_t key_words[8], uint64_t offset,
+                 uint64_t offset_delta, uint8_t internal_flags_start,
+                 uint8_t internal_flags_end, uint32_t context, uint8_t *out) {
   __m128i h_vecs[8] = {
       xorv(set1(IV[0]), set1(key_words[0])),
       xorv(set1(IV[1]), set1(key_words[1])),
@@ -534,8 +531,8 @@ void hash_many_sse41(const uint8_t *const *inputs, size_t num_inputs,
                      uint8_t internal_flags_start, uint8_t internal_flags_end,
                      uint32_t context, uint8_t *out) {
   while (num_inputs >= DEGREE) {
-    compress4_loop(inputs, blocks, key_words, offset, offset_delta,
-                   internal_flags_start, internal_flags_end, context, out);
+    hash4_sse41(inputs, blocks, key_words, offset, offset_delta,
+                internal_flags_start, internal_flags_end, context, out);
     inputs += DEGREE;
     num_inputs -= DEGREE;
     offset += DEGREE * offset_delta;

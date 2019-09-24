@@ -81,6 +81,14 @@ mod test {
                 internal_flags: u8,
                 context: u32,
             );
+            pub fn compress_sse41(
+                state: *mut u32,
+                block: *const u8,
+                block_len: u8,
+                offset: u64,
+                internal_flags: u8,
+                context: u32,
+            );
             pub fn hash_many_portable(
                 inputs: *const *const u8,
                 num_inputs: usize,
@@ -93,15 +101,19 @@ mod test {
                 context: u32,
                 out: *mut u8,
             );
-            pub fn compress_sse41(
-                state: *mut u32,
-                block: *const u8,
-                block_len: u8,
-                offset: u64,
-                internal_flags: u8,
-                context: u32,
-            );
             pub fn hash_many_sse41(
+                inputs: *const *const u8,
+                num_inputs: usize,
+                blocks: usize,
+                key_words: *const u32,
+                offset: u64,
+                offset_delta: u64,
+                internal_flags_start: u8,
+                internal_flags_end: u8,
+                context: u32,
+                out: *mut u8,
+            );
+            pub fn hash_many_avx2(
                 inputs: *const *const u8,
                 num_inputs: usize,
                 blocks: usize,
@@ -300,6 +312,14 @@ mod test {
             return;
         }
         compare_hash_many_fn(ffi::hash_many_sse41);
+    }
+
+    #[test]
+    fn test_hash_many_avx2() {
+        if !is_x86_feature_detected!("avx2") {
+            return;
+        }
+        compare_hash_many_fn(ffi::hash_many_avx2);
     }
 
     #[test]

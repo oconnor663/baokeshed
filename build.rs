@@ -6,6 +6,7 @@ fn main() {
         .file("c/baokeshed.c")
         .file("c/baokeshed_portable.c")
         .file("c/baokeshed_sse41.c")
+        .file("c/baokeshed_avx2.c")
         .flag("-O3")
         .flag("-march=native")
         .compile("cbaokeshed");

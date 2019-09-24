@@ -160,7 +160,10 @@ INLINE void hash_many(const uint8_t *const *inputs, size_t num_inputs,
                       uint64_t offset, uint64_t offset_delta,
                       uint8_t internal_flags_start, uint8_t internal_flags_end,
                       uint32_t context, uint8_t *out) {
-#ifdef __SSE4_1__
+#ifdef __AVX2__
+  hash_many_avx2(inputs, num_inputs, blocks, key_words, offset, offset_delta,
+                 internal_flags_start, internal_flags_end, context, out);
+#elif __SSE4_1__
   hash_many_sse41(inputs, num_inputs, blocks, key_words, offset, offset_delta,
                   internal_flags_start, internal_flags_end, context, out);
 #else
