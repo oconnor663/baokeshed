@@ -1184,6 +1184,14 @@ void hash16_avx512(const uint8_t *const *inputs, size_t blocks,
   storeu_256(_mm512_castsi512_si256(h_vecs[5]), &out[5 * sizeof(__m256i)]);
   storeu_256(_mm512_castsi512_si256(h_vecs[6]), &out[6 * sizeof(__m256i)]);
   storeu_256(_mm512_castsi512_si256(h_vecs[7]), &out[7 * sizeof(__m256i)]);
+  storeu_256(_mm512_castsi512_si256(h_vecs[8]), &out[8 * sizeof(__m256i)]);
+  storeu_256(_mm512_castsi512_si256(h_vecs[9]), &out[9 * sizeof(__m256i)]);
+  storeu_256(_mm512_castsi512_si256(h_vecs[10]), &out[10 * sizeof(__m256i)]);
+  storeu_256(_mm512_castsi512_si256(h_vecs[11]), &out[11 * sizeof(__m256i)]);
+  storeu_256(_mm512_castsi512_si256(h_vecs[12]), &out[12 * sizeof(__m256i)]);
+  storeu_256(_mm512_castsi512_si256(h_vecs[13]), &out[13 * sizeof(__m256i)]);
+  storeu_256(_mm512_castsi512_si256(h_vecs[14]), &out[14 * sizeof(__m256i)]);
+  storeu_256(_mm512_castsi512_si256(h_vecs[15]), &out[15 * sizeof(__m256i)]);
 }
 
 /*
