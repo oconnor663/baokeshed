@@ -9,7 +9,7 @@
 #define KEY_LEN 32
 #define OUT_LEN 32
 #define MAX_DEPTH 52
-#define MAX_SIMD_DEGREE 8 // TODO: increase when adding AVX512
+#define MAX_SIMD_DEGREE 16
 
 // internal flags
 #define ROOT 128
@@ -135,14 +135,14 @@ void compress_portable(uint32_t state[8], const uint8_t block[BLOCK_LEN],
 void compress_sse41(uint32_t state[8], const uint8_t block[BLOCK_LEN],
                     uint8_t block_len, uint64_t offset, uint8_t internal_flags,
                     uint32_t context);
+void compress_avx512(uint32_t state[8], const uint8_t block[BLOCK_LEN],
+                     uint8_t block_len, uint64_t offset, uint8_t internal_flags,
+                     uint32_t context);
+// Used by hash_many_avx2.
 void hash4_sse41(const uint8_t *const *inputs, size_t blocks,
                  const uint32_t key_words[8], uint64_t offset,
                  uint64_t offset_delta, uint8_t internal_flags_start,
                  uint8_t internal_flags_end, uint32_t context, uint8_t *out);
-void hash8_avx2(const uint8_t *const *inputs, size_t blocks,
-                const uint32_t key_words[8], uint64_t offset,
-                uint64_t offset_delta, uint8_t internal_flags_start,
-                uint8_t internal_flags_end, uint32_t context, uint8_t *out);
 void hash_many_portable(const uint8_t *const *inputs, size_t num_inputs,
                         size_t blocks, const uint32_t key_words[8],
                         uint64_t offset, uint64_t offset_delta,
@@ -158,3 +158,8 @@ void hash_many_avx2(const uint8_t *const *inputs, size_t num_inputs,
                     size_t blocks, const uint32_t key_words[8], uint64_t offset,
                     uint64_t offset_delta, uint8_t internal_flags_start,
                     uint8_t internal_flags_end, uint32_t context, uint8_t *out);
+void hash_many_avx512(const uint8_t *const *inputs, size_t num_inputs,
+                      size_t blocks, const uint32_t key_words[8],
+                      uint64_t offset, uint64_t offset_delta,
+                      uint8_t internal_flags_start, uint8_t internal_flags_end,
+                      uint32_t context, uint8_t *out);

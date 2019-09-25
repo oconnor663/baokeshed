@@ -90,6 +90,15 @@ mod test {
                 internal_flags: u8,
                 context: u32,
             );
+            #[cfg(any(feature = "c_avx512", feature = "c_native"))]
+            pub fn compress_avx512(
+                state: *mut u32,
+                block: *const u8,
+                block_len: u8,
+                offset: u64,
+                internal_flags: u8,
+                context: u32,
+            );
             pub fn hash_many_portable(
                 inputs: *const *const u8,
                 num_inputs: usize,
@@ -117,6 +126,19 @@ mod test {
             );
             #[cfg(any(feature = "c_avx2", feature = "c_native"))]
             pub fn hash_many_avx2(
+                inputs: *const *const u8,
+                num_inputs: usize,
+                blocks: usize,
+                key_words: *const u32,
+                offset: u64,
+                offset_delta: u64,
+                internal_flags_start: u8,
+                internal_flags_end: u8,
+                context: u32,
+                out: *mut u8,
+            );
+            #[cfg(any(feature = "c_avx512", feature = "c_native"))]
+            pub fn hash_many_avx512(
                 inputs: *const *const u8,
                 num_inputs: usize,
                 blocks: usize,
@@ -230,6 +252,15 @@ mod test {
         compare_compress_fn(ffi::compress_sse41);
     }
 
+    #[test]
+    #[cfg(any(feature = "c_avx512", feature = "c_native"))]
+    fn test_compress_avx512() {
+        if !is_x86_feature_detected!("avx512f") || !is_x86_feature_detected!("avx512vl") {
+            return;
+        }
+        compare_compress_fn(ffi::compress_avx512);
+    }
+
     type HashManyFn = unsafe extern "C" fn(
         inputs: *const *const u8,
         num_inputs: usize,
@@ -326,6 +357,15 @@ mod test {
             return;
         }
         compare_hash_many_fn(ffi::hash_many_avx2);
+    }
+
+    #[test]
+    #[cfg(any(feature = "c_avx512", feature = "c_native"))]
+    fn test_hash_many_avx512() {
+        if !is_x86_feature_detected!("avx512f") || !is_x86_feature_detected!("avx512vl") {
+            return;
+        }
+        compare_hash_many_fn(ffi::hash_many_avx512);
     }
 
     #[test]

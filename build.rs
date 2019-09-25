@@ -15,14 +15,19 @@ fn main() {
     build.file("c/baokeshed_portable.c");
     build.file("c/baokeshed_sse41.c");
     build.file("c/baokeshed_avx2.c");
+    build.file("c/baokeshed_avx512.c");
     if defined("CARGO_FEATURE_C_SSE41") {
-        build.flag_if_supported("-msse4.1");
+        build.flag("-msse4.1");
     }
     if defined("CARGO_FEATURE_C_AVX2") {
-        build.flag_if_supported("-mavx2");
+        build.flag("-mavx2");
+    }
+    if defined("CARGO_FEATURE_C_AVX512") {
+        build.flag("-mavx512f");
+        build.flag("-mavx512vl");
     }
     if defined("CARGO_FEATURE_C_NATIVE") {
-        build.flag_if_supported("-march=native");
+        build.flag("-march=native");
     }
     build.compile("cbaokeshed");
 

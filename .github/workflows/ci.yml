@@ -52,6 +52,7 @@ jobs:
         override: true
     - name: cpuinfo
       run: cat /proc/cpuinfo
+
     # We want to see compiler flags in the build output, which requires
     # building at high verbosity. To avoid seeing a flood of output, do an
     # initial build at low verbosity.
@@ -59,6 +60,7 @@ jobs:
       run: cargo build --tests --all-features
     - name: pre-build tests --release
       run: cargo build --tests --all-features --release
+
     # The Rust tests do runtime feature detection to avoid running
     # feature-specific tests on a platform that doesn't support them.
     - name: test portable
@@ -67,7 +69,10 @@ jobs:
       run: cargo test -vv --features=c_sse41
     - name: test AVX2
       run: cargo test -vv --features=c_avx2
-    # TODO: explicit AVX512
+    # The GitHub Actions test machines don't support AVX512 yet.
+    # - name: test AVX512
+    #   run: cargo test -vv --features=c_avx512
+
     # The rerun-if-env-changed directives in build.rs mean that each of these
     # different CC settings will do a recompilation.
     - name: test native GCC

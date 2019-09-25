@@ -52,7 +52,9 @@ INLINE uint8_t chunk_state_maybe_start_flag(const chunk_state *self) {
 INLINE void compress(uint32_t state[8], const uint8_t block[BLOCK_LEN],
                      uint8_t block_len, uint64_t offset, uint8_t internal_flags,
                      uint32_t context) {
-#ifdef __SSE4_1__
+#if defined(___AVX512F__) && defined(___AVX512VL__)
+  compress_avx512(state, block, block_len, offset, internal_flags, context);
+#elif __SSE4_1__
   compress_sse41(state, block, block_len, offset, internal_flags, context);
 #else
   compress_portable(state, block, block_len, offset, internal_flags, context);
@@ -160,7 +162,10 @@ INLINE void hash_many(const uint8_t *const *inputs, size_t num_inputs,
                       uint64_t offset, uint64_t offset_delta,
                       uint8_t internal_flags_start, uint8_t internal_flags_end,
                       uint32_t context, uint8_t *out) {
-#ifdef __AVX2__
+#if defined(___AVX512F__) && defined(___AVX512VL__)
+  hash_many_avx512(inputs, num_inputs, blocks, key_words, offset, offset_delta,
+                   internal_flags_start, internal_flags_end, context, out);
+#elif __AVX2__
   hash_many_avx2(inputs, num_inputs, blocks, key_words, offset, offset_delta,
                  internal_flags_start, internal_flags_end, context, out);
 #elif __SSE4_1__
