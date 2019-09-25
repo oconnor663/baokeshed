@@ -2,9 +2,9 @@ fn defined(name: &str) -> bool {
     std::env::var_os(name).is_some()
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     if !defined("CARGO_FEATURE_C") {
-        return;
+        return Ok(());
     }
 
     // Note that under -march=native, Clang seems to perform better than GCC.
@@ -37,4 +37,14 @@ fn main() {
     // add the variables that we're likely to need.
     println!("cargo:rerun-if-env-changed=CC");
     println!("cargo:rerun-if-env-changed=CFLAGS");
+
+    // Ditto for source files, though these shouldn't change as often.
+    for file in std::fs::read_dir("c")? {
+        println!(
+            "cargo:rerun-if-changed={}",
+            file?.path().to_str().expect("utf-8")
+        );
+    }
+
+    Ok(())
 }
