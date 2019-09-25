@@ -6,7 +6,7 @@ use baokeshed::*;
 use rand::prelude::*;
 use test::Bencher;
 
-const MEDIUM: usize = baokeshed::MAX_SIMD_DEGREE * baokeshed::CHUNK_LEN;
+const MEDIUM: usize = MAX_SIMD_DEGREE * CHUNK_LEN;
 
 const LONG: usize = 1 << 24; // 16 MiB
 
@@ -125,7 +125,16 @@ fn bench_ffihasher_01_long(b: &mut Bencher) {
 #[bench]
 #[cfg(feature = "c")]
 fn bench_ffihasher_02_medium(b: &mut Bencher) {
-    let mut input = RandomInput::new(b, MEDIUM);
+    // The C code supports AVX512, so use a larger input size for this
+    // benchmark when AVX512 is available.
+    let mut len: usize = MEDIUM;
+    #[cfg(any(feature = "c_avx512", feature = "c_native"))]
+    {
+        if is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512vl") {
+            len = std::cmp::max(len, 16 * CHUNK_LEN);
+        }
+    }
+    let mut input = RandomInput::new(b, len);
     b.iter(|| {
         let mut hasher = c::Hasher::new(DEFAULT_KEY, DEFAULT_CONTEXT);
         hasher.update(input.get());
