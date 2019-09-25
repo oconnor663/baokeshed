@@ -83,9 +83,11 @@ pub const TEST_CASES: &[usize] = &[
     7 * CHUNK_LEN + 1,
     8 * CHUNK_LEN,
     8 * CHUNK_LEN + 1,
+    16 * CHUNK_LEN, // AVX512's bandwidth
+    31 * CHUNK_LEN, // 16 + 8 + 4 + 2 + 1
 ];
 
-pub const TEST_CASES_MAX: usize = 8 * CHUNK_LEN + 1;
+pub const TEST_CASES_MAX: usize = 31 * CHUNK_LEN;
 
 // Paint a byte pattern that won't repeat, so that we don't accidentally
 // miss buffer offset bugs.
