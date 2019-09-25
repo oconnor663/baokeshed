@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <string.h>
 
-#if defined(__AVX512F__) && defined (__AVX512VL__)
+#if defined(__AVX512F__) && defined(__AVX512VL__)
 
 INLINE __m128i loadu_128(const uint8_t src[16]) {
   return _mm_loadu_si128((const __m128i *)src);
@@ -975,14 +975,14 @@ INLINE void transpose_vecs_512(__m512i vecs[16]) {
   __m512i ef_2 = _mm512_unpackhi_epi32(vecs[4], vecs[5]);
   __m512i gh_0 = _mm512_unpacklo_epi32(vecs[6], vecs[7]);
   __m512i gh_2 = _mm512_unpackhi_epi32(vecs[6], vecs[7]);
-  __m512i ij_0 = _mm512_unpacklo_epi32(vecs[0], vecs[1]);
-  __m512i ij_2 = _mm512_unpackhi_epi32(vecs[0], vecs[1]);
-  __m512i kl_0 = _mm512_unpacklo_epi32(vecs[2], vecs[3]);
-  __m512i kl_2 = _mm512_unpackhi_epi32(vecs[2], vecs[3]);
-  __m512i mn_0 = _mm512_unpacklo_epi32(vecs[4], vecs[5]);
-  __m512i mn_2 = _mm512_unpackhi_epi32(vecs[4], vecs[5]);
-  __m512i op_0 = _mm512_unpacklo_epi32(vecs[6], vecs[7]);
-  __m512i op_2 = _mm512_unpackhi_epi32(vecs[6], vecs[7]);
+  __m512i ij_0 = _mm512_unpacklo_epi32(vecs[8], vecs[9]);
+  __m512i ij_2 = _mm512_unpackhi_epi32(vecs[8], vecs[9]);
+  __m512i kl_0 = _mm512_unpacklo_epi32(vecs[10], vecs[11]);
+  __m512i kl_2 = _mm512_unpackhi_epi32(vecs[10], vecs[11]);
+  __m512i mn_0 = _mm512_unpacklo_epi32(vecs[12], vecs[13]);
+  __m512i mn_2 = _mm512_unpackhi_epi32(vecs[12], vecs[13]);
+  __m512i op_0 = _mm512_unpacklo_epi32(vecs[14], vecs[15]);
+  __m512i op_2 = _mm512_unpackhi_epi32(vecs[14], vecs[15]);
 
   // Interleave 64-bit lates. The _0 unpack is lanes
   // 0/0/0/0/4/4/4/4/8/8/8/8/12/12/12/12, the _1 unpack is lanes
@@ -1047,16 +1047,16 @@ INLINE void transpose_vecs_512(__m512i vecs[16]) {
 
 INLINE void transpose_msg_vecs16(const uint8_t *const *inputs,
                                  size_t block_offset, __m512i out[16]) {
-  out[0] = loadu_512( &inputs[0 ][block_offset]);
-  out[1] = loadu_512( &inputs[1 ][block_offset]);
-  out[2] = loadu_512( &inputs[2 ][block_offset]);
-  out[3] = loadu_512( &inputs[3 ][block_offset]);
-  out[4] = loadu_512( &inputs[4 ][block_offset]);
-  out[5] = loadu_512( &inputs[5 ][block_offset]);
-  out[6] = loadu_512( &inputs[6 ][block_offset]);
-  out[7] = loadu_512( &inputs[7 ][block_offset]);
-  out[8] = loadu_512( &inputs[8 ][block_offset]);
-  out[9] = loadu_512( &inputs[9 ][block_offset]);
+  out[0] = loadu_512(&inputs[0][block_offset]);
+  out[1] = loadu_512(&inputs[1][block_offset]);
+  out[2] = loadu_512(&inputs[2][block_offset]);
+  out[3] = loadu_512(&inputs[3][block_offset]);
+  out[4] = loadu_512(&inputs[4][block_offset]);
+  out[5] = loadu_512(&inputs[5][block_offset]);
+  out[6] = loadu_512(&inputs[6][block_offset]);
+  out[7] = loadu_512(&inputs[7][block_offset]);
+  out[8] = loadu_512(&inputs[8][block_offset]);
+  out[9] = loadu_512(&inputs[9][block_offset]);
   out[10] = loadu_512(&inputs[10][block_offset]);
   out[11] = loadu_512(&inputs[11][block_offset]);
   out[12] = loadu_512(&inputs[12][block_offset]);
@@ -1170,22 +1170,10 @@ void hash16_avx512(const uint8_t *const *inputs, size_t blocks,
   // state vectors. Pad the matrix with zeros. After transposition, store the
   // lower half of each vector.
   __m512i padded[16] = {
-      h_vecs[0],
-      h_vecs[1],
-      h_vecs[2],
-      h_vecs[3],
-      h_vecs[4],
-      h_vecs[5],
-      h_vecs[6],
-      h_vecs[7],
-      set1_512(0),
-      set1_512(0),
-      set1_512(0),
-      set1_512(0),
-      set1_512(0),
-      set1_512(0),
-      set1_512(0),
-      set1_512(0),
+      h_vecs[0],   h_vecs[1],   h_vecs[2],   h_vecs[3],
+      h_vecs[4],   h_vecs[5],   h_vecs[6],   h_vecs[7],
+      set1_512(0), set1_512(0), set1_512(0), set1_512(0),
+      set1_512(0), set1_512(0), set1_512(0), set1_512(0),
   };
   transpose_vecs_512(padded);
   storeu_256(_mm512_castsi512_si256(h_vecs[0]), &out[0 * sizeof(__m256i)]);
