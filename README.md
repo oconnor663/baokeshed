@@ -13,5 +13,5 @@ Other useful commands:
 ```
 cargo doc --open
 cargo test
-cargo +nightly bench
+CC=clang RUSTFLAGS="-C target-cpu=native" cargo +nightly bench --features=c_native
 ```
