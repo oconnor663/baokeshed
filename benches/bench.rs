@@ -127,6 +127,7 @@ fn bench_ffihasher_01_long(b: &mut Bencher) {
 fn bench_ffihasher_02_medium(b: &mut Bencher) {
     // The C code supports AVX512, so use a larger input size for this
     // benchmark when AVX512 is available.
+    #[allow(unused_mut)]
     let mut len: usize = MEDIUM;
     #[cfg(any(feature = "c_avx512", feature = "c_native"))]
     {
