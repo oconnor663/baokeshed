@@ -1181,28 +1181,32 @@ void hash_many_avx512(const uint8_t *const *inputs, size_t num_inputs,
                   internal_flags_start, internal_flags_end, context, out);
     inputs += 16;
     num_inputs -= 16;
-    offset += offset_deltas[16], out = &out[16 * OUT_LEN];
+    offset += offset_deltas[16];
+    out = &out[16 * OUT_LEN];
   }
   while (num_inputs >= 8) {
     hash8_avx512(inputs, blocks, key_words, offset, offset_deltas,
                  internal_flags_start, internal_flags_end, context, out);
     inputs += 8;
     num_inputs -= 8;
-    offset += offset_deltas[8], out = &out[8 * OUT_LEN];
+    offset += offset_deltas[8];
+    out = &out[8 * OUT_LEN];
   }
   while (num_inputs >= 4) {
     hash4_avx512(inputs, blocks, key_words, offset, offset_deltas,
                  internal_flags_start, internal_flags_end, context, out);
     inputs += 4;
     num_inputs -= 4;
-    offset += offset_deltas[4], out = &out[4 * OUT_LEN];
+    offset += offset_deltas[4];
+    out = &out[4 * OUT_LEN];
   }
   while (num_inputs > 0) {
     hash_one_avx512(inputs[0], blocks, key_words, offset, internal_flags_start,
                     internal_flags_end, context, out);
     inputs += 1;
     num_inputs -= 1;
-    offset += offset_deltas[1], out = &out[OUT_LEN];
+    offset += offset_deltas[1];
+    out = &out[OUT_LEN];
   }
 }
 
