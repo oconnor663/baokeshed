@@ -95,7 +95,7 @@ INLINE void hash_one_portable(const uint8_t *input, size_t blocks,
 
 void hash_many_portable(const uint8_t *const *inputs, size_t num_inputs,
                         size_t blocks, const uint32_t key_words[8],
-                        uint64_t offset, uint64_t offset_delta,
+                        uint64_t offset, const uint64_t offset_deltas[2],
                         uint8_t internal_flags_start,
                         uint8_t internal_flags_end, uint32_t context,
                         uint8_t *out) {
@@ -104,7 +104,7 @@ void hash_many_portable(const uint8_t *const *inputs, size_t num_inputs,
                       internal_flags_start, internal_flags_end, context, out);
     inputs += 1;
     num_inputs -= 1;
-    offset += offset_delta;
+    offset += offset_deltas[1];
     out = &out[OUT_LEN];
   }
 }

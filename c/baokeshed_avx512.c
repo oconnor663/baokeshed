@@ -48,19 +48,6 @@ INLINE __m128i set4(uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
   return _mm_setr_epi32(a, b, c, d);
 }
 
-INLINE __m256i set8(uint32_t a, uint32_t b, uint32_t c, uint32_t d, uint32_t e,
-                    uint32_t f, uint32_t g, uint32_t h) {
-  return _mm256_setr_epi32(a, b, c, d, e, f, g, h);
-}
-
-INLINE __m512i set16(uint32_t a, uint32_t b, uint32_t c, uint32_t d, uint32_t e,
-                     uint32_t f, uint32_t g, uint32_t h, uint32_t i, uint32_t j,
-                     uint32_t k, uint32_t l, uint32_t m, uint32_t n, uint32_t o,
-                     uint32_t p) {
-
-  return _mm512_setr_epi32(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p);
-}
-
 INLINE __m128i rot16_128(__m128i x) { return _mm_ror_epi32(x, 16); }
 
 INLINE __m256i rot16_256(__m256i x) { return _mm256_ror_epi32(x, 16); }
@@ -467,21 +454,18 @@ INLINE void transpose_msg_vecs4(const uint8_t *const *inputs,
   transpose_vecs_128(&out[12]);
 }
 
-INLINE void load_offsets4(uint64_t offset, uint64_t offset_delta,
-                          __m128i *out_low, __m128i *out_high) {
-  *out_low = set4(offset_low(offset + 0 * offset_delta),
-                  offset_low(offset + 1 * offset_delta),
-                  offset_low(offset + 2 * offset_delta),
-                  offset_low(offset + 3 * offset_delta));
-  *out_high = set4(offset_high(offset + 0 * offset_delta),
-                   offset_high(offset + 1 * offset_delta),
-                   offset_high(offset + 2 * offset_delta),
-                   offset_high(offset + 3 * offset_delta));
+INLINE void load_offsets4(uint64_t offset, const uint64_t deltas[4],
+                          __m128i *out_lo, __m128i *out_hi) {
+  // _mm256_load_epi64 does not seem to be supported by GCC.
+  __m256i a = _mm256_add_epi64(_mm256_set1_epi64x(offset),
+                               _mm256_loadu_si256((const __m256i *)deltas));
+  *out_lo = _mm256_cvtepi64_epi32(a);
+  *out_hi = _mm256_cvtepi64_epi32(_mm256_srli_epi64(a, 32));
 }
 
 void hash4_avx512(const uint8_t *const *inputs, size_t blocks,
                   const uint32_t key_words[8], uint64_t offset,
-                  uint64_t offset_delta, uint8_t internal_flags_start,
+                  const uint64_t offset_deltas[4], uint8_t internal_flags_start,
                   uint8_t internal_flags_end, uint32_t context, uint8_t *out) {
   __m128i h_vecs[8] = {
       xor_128(set1_128(IV[0]), set1_128(key_words[0])),
@@ -494,7 +478,7 @@ void hash4_avx512(const uint8_t *const *inputs, size_t blocks,
       xor_128(set1_128(IV[7]), set1_128(key_words[7])),
   };
   __m128i offset_low_vec, offset_high_vec;
-  load_offsets4(offset, offset_delta, &offset_low_vec, &offset_high_vec);
+  load_offsets4(offset, offset_deltas, &offset_low_vec, &offset_high_vec);
   const __m128i context_vec = set1_128(context);
   uint8_t internal_flags = internal_flags_start;
 
@@ -732,29 +716,17 @@ INLINE void transpose_msg_vecs8(const uint8_t *const *inputs,
   transpose_vecs_256(&out[8]);
 }
 
-INLINE void load_offsets8(uint64_t offset, uint64_t offset_delta,
-                          __m256i *out_low, __m256i *out_high) {
-  *out_low = set8(offset_low(offset + 0 * offset_delta),
-                  offset_low(offset + 1 * offset_delta),
-                  offset_low(offset + 2 * offset_delta),
-                  offset_low(offset + 3 * offset_delta),
-                  offset_low(offset + 4 * offset_delta),
-                  offset_low(offset + 5 * offset_delta),
-                  offset_low(offset + 6 * offset_delta),
-                  offset_low(offset + 7 * offset_delta));
-  *out_high = set8(offset_high(offset + 0 * offset_delta),
-                   offset_high(offset + 1 * offset_delta),
-                   offset_high(offset + 2 * offset_delta),
-                   offset_high(offset + 3 * offset_delta),
-                   offset_high(offset + 4 * offset_delta),
-                   offset_high(offset + 5 * offset_delta),
-                   offset_high(offset + 6 * offset_delta),
-                   offset_high(offset + 7 * offset_delta));
+INLINE void load_offsets8(uint64_t offset, const uint64_t deltas[8],
+                          __m256i *out_lo, __m256i *out_hi) {
+  __m512i a =
+      _mm512_add_epi64(_mm512_set1_epi64(offset), _mm512_load_epi64(deltas));
+  *out_lo = _mm512_cvtepi64_epi32(a);
+  *out_hi = _mm512_cvtepi64_epi32(_mm512_srli_epi64(a, 32));
 }
 
 void hash8_avx512(const uint8_t *const *inputs, size_t blocks,
                   const uint32_t key_words[8], uint64_t offset,
-                  uint64_t offset_delta, uint8_t internal_flags_start,
+                  const uint64_t offset_deltas[8], uint8_t internal_flags_start,
                   uint8_t internal_flags_end, uint32_t context, uint8_t *out) {
   __m256i h_vecs[8] = {
       xor_256(set1_256(IV[0]), set1_256(key_words[0])),
@@ -767,7 +739,7 @@ void hash8_avx512(const uint8_t *const *inputs, size_t blocks,
       xor_256(set1_256(IV[7]), set1_256(key_words[7])),
   };
   __m256i offset_low_vec, offset_high_vec;
-  load_offsets8(offset, offset_delta, &offset_low_vec, &offset_high_vec);
+  load_offsets8(offset, offset_deltas, &offset_low_vec, &offset_high_vec);
   const __m256i context_vec = set1_256(context);
   uint8_t internal_flags = internal_flags_start;
 
@@ -1066,46 +1038,26 @@ INLINE void transpose_msg_vecs16(const uint8_t *const *inputs,
   transpose_vecs_512(out);
 }
 
-INLINE void load_offsets16(uint64_t offset, uint64_t offset_delta,
-                           __m512i *out_low, __m512i *out_high) {
-  *out_low = set16(offset_low(offset + 0 * offset_delta),
-                   offset_low(offset + 1 * offset_delta),
-                   offset_low(offset + 2 * offset_delta),
-                   offset_low(offset + 3 * offset_delta),
-                   offset_low(offset + 4 * offset_delta),
-                   offset_low(offset + 5 * offset_delta),
-                   offset_low(offset + 6 * offset_delta),
-                   offset_low(offset + 7 * offset_delta),
-                   offset_low(offset + 8 * offset_delta),
-                   offset_low(offset + 9 * offset_delta),
-                   offset_low(offset + 10 * offset_delta),
-                   offset_low(offset + 11 * offset_delta),
-                   offset_low(offset + 12 * offset_delta),
-                   offset_low(offset + 13 * offset_delta),
-                   offset_low(offset + 14 * offset_delta),
-                   offset_low(offset + 15 * offset_delta));
-  *out_high = set16(offset_high(offset + 0 * offset_delta),
-                    offset_high(offset + 1 * offset_delta),
-                    offset_high(offset + 2 * offset_delta),
-                    offset_high(offset + 3 * offset_delta),
-                    offset_high(offset + 4 * offset_delta),
-                    offset_high(offset + 5 * offset_delta),
-                    offset_high(offset + 6 * offset_delta),
-                    offset_high(offset + 7 * offset_delta),
-                    offset_high(offset + 8 * offset_delta),
-                    offset_high(offset + 9 * offset_delta),
-                    offset_high(offset + 10 * offset_delta),
-                    offset_high(offset + 11 * offset_delta),
-                    offset_high(offset + 12 * offset_delta),
-                    offset_high(offset + 13 * offset_delta),
-                    offset_high(offset + 14 * offset_delta),
-                    offset_high(offset + 15 * offset_delta));
+INLINE void load_offsets16(uint64_t offset, const uint64_t deltas[16],
+                           __m512i *out_lo, __m512i *out_hi) {
+  __m512i a = _mm512_add_epi64(_mm512_set1_epi64(offset),
+                               _mm512_load_epi64(&deltas[0]));
+  __m512i b = _mm512_add_epi64(_mm512_set1_epi64(offset),
+                               _mm512_load_epi64(&deltas[8]));
+  __m256i a_lo = _mm512_cvtepi64_epi32(a);
+  __m256i b_lo = _mm512_cvtepi64_epi32(b);
+  __m256i a_hi = _mm512_cvtepi64_epi32(_mm512_srli_epi64(a, 32));
+  __m256i b_hi = _mm512_cvtepi64_epi32(_mm512_srli_epi64(b, 32));
+  // Note that _mm512_inserti32x8 requires AVX512DQ
+  *out_lo = _mm512_inserti64x4(_mm512_castsi256_si512(a_lo), b_lo, 1);
+  *out_hi = _mm512_inserti64x4(_mm512_castsi256_si512(a_hi), b_hi, 1);
 }
 
 void hash16_avx512(const uint8_t *const *inputs, size_t blocks,
                    const uint32_t key_words[8], uint64_t offset,
-                   uint64_t offset_delta, uint8_t internal_flags_start,
-                   uint8_t internal_flags_end, uint32_t context, uint8_t *out) {
+                   const uint64_t offset_deltas[16],
+                   uint8_t internal_flags_start, uint8_t internal_flags_end,
+                   uint32_t context, uint8_t *out) {
   __m512i h_vecs[8] = {
       xor_512(set1_512(IV[0]), set1_512(key_words[0])),
       xor_512(set1_512(IV[1]), set1_512(key_words[1])),
@@ -1117,7 +1069,7 @@ void hash16_avx512(const uint8_t *const *inputs, size_t blocks,
       xor_512(set1_512(IV[7]), set1_512(key_words[7])),
   };
   __m512i offset_low_vec, offset_high_vec;
-  load_offsets16(offset, offset_delta, &offset_low_vec, &offset_high_vec);
+  load_offsets16(offset, offset_deltas, &offset_low_vec, &offset_high_vec);
   const __m512i context_vec = set1_512(context);
   uint8_t internal_flags = internal_flags_start;
 
@@ -1222,40 +1174,36 @@ INLINE void hash_one_avx512(const uint8_t *input, size_t blocks,
 
 void hash_many_avx512(const uint8_t *const *inputs, size_t num_inputs,
                       size_t blocks, const uint32_t key_words[8],
-                      uint64_t offset, uint64_t offset_delta,
+                      uint64_t offset, const uint64_t offset_deltas[17],
                       uint8_t internal_flags_start, uint8_t internal_flags_end,
                       uint32_t context, uint8_t *out) {
   while (num_inputs >= 16) {
-    hash16_avx512(inputs, blocks, key_words, offset, offset_delta,
+    hash16_avx512(inputs, blocks, key_words, offset, offset_deltas,
                   internal_flags_start, internal_flags_end, context, out);
     inputs += 16;
     num_inputs -= 16;
-    offset += 16 * offset_delta;
-    out = &out[16 * OUT_LEN];
+    offset += offset_deltas[16], out = &out[16 * OUT_LEN];
   }
   while (num_inputs >= 8) {
-    hash8_avx512(inputs, blocks, key_words, offset, offset_delta,
+    hash8_avx512(inputs, blocks, key_words, offset, offset_deltas,
                  internal_flags_start, internal_flags_end, context, out);
     inputs += 8;
     num_inputs -= 8;
-    offset += 8 * offset_delta;
-    out = &out[8 * OUT_LEN];
+    offset += offset_deltas[8], out = &out[8 * OUT_LEN];
   }
   while (num_inputs >= 4) {
-    hash4_sse41(inputs, blocks, key_words, offset, offset_delta,
-                internal_flags_start, internal_flags_end, context, out);
+    hash4_avx512(inputs, blocks, key_words, offset, offset_deltas,
+                 internal_flags_start, internal_flags_end, context, out);
     inputs += 4;
     num_inputs -= 4;
-    offset += 4 * offset_delta;
-    out = &out[4 * OUT_LEN];
+    offset += offset_deltas[4], out = &out[4 * OUT_LEN];
   }
   while (num_inputs > 0) {
     hash_one_avx512(inputs[0], blocks, key_words, offset, internal_flags_start,
                     internal_flags_end, context, out);
     inputs += 1;
     num_inputs -= 1;
-    offset += offset_delta;
-    out = &out[OUT_LEN];
+    offset += offset_deltas[1], out = &out[OUT_LEN];
   }
 }
 
@@ -1282,7 +1230,7 @@ void compress_avx512(uint32_t state[8], const uint8_t block[BLOCK_LEN],
 
 void hash_many_avx512(const uint8_t *const *inputs, size_t num_inputs,
                       size_t blocks, const uint32_t key_words[8],
-                      uint64_t offset, uint64_t offset_delta,
+                      uint64_t offset, const uint64_t offset_deltas[16],
                       uint8_t internal_flags_start, uint8_t internal_flags_end,
                       uint32_t context, uint8_t *out) {
   // Suppress unused parameter warnings.
@@ -1291,7 +1239,7 @@ void hash_many_avx512(const uint8_t *const *inputs, size_t num_inputs,
   (void)blocks;
   (void)key_words;
   (void)offset;
-  (void)offset_delta;
+  (void)offset_deltas;
   (void)internal_flags_start;
   (void)internal_flags_end;
   (void)context;

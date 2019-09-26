@@ -10,7 +10,7 @@ default = ["rayon"]
 c = []
 c_sse41 = ["c"]
 c_avx2 = ["c", "c_sse41"]
-c_avx512 = ["c", "c_sse41", "c_avx2"] # represents AVX512F + AVX512VL
+c_avx512 = ["c", "c_sse41", "c_avx2"] # requires AVX512 F+VL
 c_native = ["c"]
 
 [dependencies]

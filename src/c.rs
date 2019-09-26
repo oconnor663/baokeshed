@@ -52,6 +52,10 @@ impl Hasher {
     }
 }
 
+pub fn is_avx512_detected() -> bool {
+    is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512vl")
+}
+
 mod ffi {
     extern "C" {
         pub fn hasher_init(hasher: *mut super::Hasher, key: *const u8, context: u32);
@@ -69,6 +73,28 @@ mod test {
     use super::*;
     use crate::{Word, BLOCK_LEN, CHUNK_LEN, WORD_BITS};
     use arrayref::array_ref;
+
+    const CHUNK_OFFSET_DELTAS: &[u64; 17] = &[
+        CHUNK_LEN as u64 * 0,
+        CHUNK_LEN as u64 * 1,
+        CHUNK_LEN as u64 * 2,
+        CHUNK_LEN as u64 * 3,
+        CHUNK_LEN as u64 * 4,
+        CHUNK_LEN as u64 * 5,
+        CHUNK_LEN as u64 * 6,
+        CHUNK_LEN as u64 * 7,
+        CHUNK_LEN as u64 * 8,
+        CHUNK_LEN as u64 * 9,
+        CHUNK_LEN as u64 * 10,
+        CHUNK_LEN as u64 * 11,
+        CHUNK_LEN as u64 * 12,
+        CHUNK_LEN as u64 * 13,
+        CHUNK_LEN as u64 * 14,
+        CHUNK_LEN as u64 * 15,
+        CHUNK_LEN as u64 * 16,
+    ];
+
+    const PARENT_OFFSET_DELTAS: &[u64; 17] = &[0; 17];
 
     // FFI functions that we only call in tests.
     mod ffi {
@@ -105,7 +131,7 @@ mod test {
                 blocks: usize,
                 key_words: *const u32,
                 offset: u64,
-                offset_delta: u64,
+                offset_deltas: *const u64,
                 internal_flags_start: u8,
                 internal_flags_end: u8,
                 context: u32,
@@ -118,7 +144,7 @@ mod test {
                 blocks: usize,
                 key_words: *const u32,
                 offset: u64,
-                offset_delta: u64,
+                offset_deltas: *const u64,
                 internal_flags_start: u8,
                 internal_flags_end: u8,
                 context: u32,
@@ -131,7 +157,7 @@ mod test {
                 blocks: usize,
                 key_words: *const u32,
                 offset: u64,
-                offset_delta: u64,
+                offset_deltas: *const u64,
                 internal_flags_start: u8,
                 internal_flags_end: u8,
                 context: u32,
@@ -144,7 +170,7 @@ mod test {
                 blocks: usize,
                 key_words: *const u32,
                 offset: u64,
-                offset_delta: u64,
+                offset_deltas: *const u64,
                 internal_flags_start: u8,
                 internal_flags_end: u8,
                 context: u32,
@@ -255,7 +281,7 @@ mod test {
     #[test]
     #[cfg(any(feature = "c_avx512", feature = "c_native"))]
     fn test_compress_avx512() {
-        if !is_x86_feature_detected!("avx512f") || !is_x86_feature_detected!("avx512vl") {
+        if !is_avx512_detected() {
             return;
         }
         compare_compress_fn(ffi::compress_avx512);
@@ -267,7 +293,7 @@ mod test {
         blocks: usize,
         key_words: *const u32,
         offset: u64,
-        offset_delta: u64,
+        offset_deltas: *const u64,
         internal_flags_start: u8,
         internal_flags_end: u8,
         context: u32,
@@ -300,7 +326,7 @@ mod test {
                 CHUNK_LEN / BLOCK_LEN,
                 key_words.as_ptr(),
                 offset,
-                CHUNK_LEN as u64,
+                CHUNK_OFFSET_DELTAS.as_ptr(),
                 crate::Flags::CHUNK_START.bits(),
                 crate::Flags::CHUNK_END.bits(),
                 context,
@@ -326,7 +352,7 @@ mod test {
                 1,
                 key_words.as_ptr(),
                 0,
-                0,
+                PARENT_OFFSET_DELTAS.as_ptr(),
                 crate::Flags::PARENT.bits(),
                 0,
                 context,
@@ -362,7 +388,7 @@ mod test {
     #[test]
     #[cfg(any(feature = "c_avx512", feature = "c_native"))]
     fn test_hash_many_avx512() {
-        if !is_x86_feature_detected!("avx512f") || !is_x86_feature_detected!("avx512vl") {
+        if !is_avx512_detected() {
             return;
         }
         compare_hash_many_fn(ffi::hash_many_avx512);

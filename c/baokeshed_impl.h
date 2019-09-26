@@ -35,6 +35,14 @@ static const uint8_t MSG_SCHEDULE[7][16] = {
     {12, 5, 1, 15, 14, 13, 4, 10, 0, 7, 6, 3, 9, 2, 8, 11},
 };
 
+static const uint64_t CHUNK_OFFSET_DELTAS[17] = {
+    CHUNK_LEN * 0,  CHUNK_LEN * 1,  CHUNK_LEN * 2,  CHUNK_LEN * 3,
+    CHUNK_LEN * 4,  CHUNK_LEN * 5,  CHUNK_LEN * 6,  CHUNK_LEN * 7,
+    CHUNK_LEN * 8,  CHUNK_LEN * 9,  CHUNK_LEN * 10, CHUNK_LEN * 11,
+    CHUNK_LEN * 12, CHUNK_LEN * 13, CHUNK_LEN * 14, CHUNK_LEN * 15,
+    CHUNK_LEN * 16,
+};
+
 INLINE uint32_t load32(const void *src) {
   const uint8_t *p = (const uint8_t *)src;
   return ((uint32_t)(p[0]) << 0) | ((uint32_t)(p[1]) << 8) |
@@ -141,25 +149,26 @@ void compress_avx512(uint32_t state[8], const uint8_t block[BLOCK_LEN],
 // Used by hash_many_avx2.
 void hash4_sse41(const uint8_t *const *inputs, size_t blocks,
                  const uint32_t key_words[8], uint64_t offset,
-                 uint64_t offset_delta, uint8_t internal_flags_start,
+                 const uint64_t offset_deltas[4], uint8_t internal_flags_start,
                  uint8_t internal_flags_end, uint32_t context, uint8_t *out);
 void hash_many_portable(const uint8_t *const *inputs, size_t num_inputs,
                         size_t blocks, const uint32_t key_words[8],
-                        uint64_t offset, uint64_t offset_delta,
+                        uint64_t offset, const uint64_t offset_deltas[2],
                         uint8_t internal_flags_start,
                         uint8_t internal_flags_end, uint32_t context,
                         uint8_t *out);
 void hash_many_sse41(const uint8_t *const *inputs, size_t num_inputs,
                      size_t blocks, const uint32_t key_words[8],
-                     uint64_t offset, uint64_t offset_delta,
+                     uint64_t offset, const uint64_t offset_deltas[5],
                      uint8_t internal_flags_start, uint8_t internal_flags_end,
                      uint32_t context, uint8_t *out);
 void hash_many_avx2(const uint8_t *const *inputs, size_t num_inputs,
                     size_t blocks, const uint32_t key_words[8], uint64_t offset,
-                    uint64_t offset_delta, uint8_t internal_flags_start,
-                    uint8_t internal_flags_end, uint32_t context, uint8_t *out);
+                    const uint64_t offset_deltas[9],
+                    uint8_t internal_flags_start, uint8_t internal_flags_end,
+                    uint32_t context, uint8_t *out);
 void hash_many_avx512(const uint8_t *const *inputs, size_t num_inputs,
                       size_t blocks, const uint32_t key_words[8],
-                      uint64_t offset, uint64_t offset_delta,
+                      uint64_t offset, const uint64_t offset_deltas[17],
                       uint8_t internal_flags_start, uint8_t internal_flags_end,
                       uint32_t context, uint8_t *out);

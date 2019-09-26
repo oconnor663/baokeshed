@@ -415,21 +415,21 @@ INLINE void transpose_msg_vecs(const uint8_t *const *inputs,
   transpose_vecs(&out[12]);
 }
 
-INLINE void load_offsets(uint64_t offset, uint64_t offset_delta,
+INLINE void load_offsets(uint64_t offset, const uint64_t offset_deltas[4],
                          __m128i *out_low, __m128i *out_high) {
-  *out_low = set4(offset_low(offset + 0 * offset_delta),
-                  offset_low(offset + 1 * offset_delta),
-                  offset_low(offset + 2 * offset_delta),
-                  offset_low(offset + 3 * offset_delta));
-  *out_high = set4(offset_high(offset + 0 * offset_delta),
-                   offset_high(offset + 1 * offset_delta),
-                   offset_high(offset + 2 * offset_delta),
-                   offset_high(offset + 3 * offset_delta));
+  *out_low = set4(offset_low(offset + offset_deltas[0]),
+                  offset_low(offset + offset_deltas[1]),
+                  offset_low(offset + offset_deltas[2]),
+                  offset_low(offset + offset_deltas[3]));
+  *out_high = set4(offset_high(offset + offset_deltas[0]),
+                   offset_high(offset + offset_deltas[1]),
+                   offset_high(offset + offset_deltas[2]),
+                   offset_high(offset + offset_deltas[3]));
 }
 
 void hash4_sse41(const uint8_t *const *inputs, size_t blocks,
                  const uint32_t key_words[8], uint64_t offset,
-                 uint64_t offset_delta, uint8_t internal_flags_start,
+                 const uint64_t offset_deltas[4], uint8_t internal_flags_start,
                  uint8_t internal_flags_end, uint32_t context, uint8_t *out) {
   __m128i h_vecs[8] = {
       xorv(set1(IV[0]), set1(key_words[0])),
@@ -442,7 +442,7 @@ void hash4_sse41(const uint8_t *const *inputs, size_t blocks,
       xorv(set1(IV[7]), set1(key_words[7])),
   };
   __m128i offset_low_vec, offset_high_vec;
-  load_offsets(offset, offset_delta, &offset_low_vec, &offset_high_vec);
+  load_offsets(offset, offset_deltas, &offset_low_vec, &offset_high_vec);
   const __m128i context_vec = set1(context);
   uint8_t internal_flags = internal_flags_start;
 
@@ -527,15 +527,15 @@ INLINE void hash_one_sse41(const uint8_t *input, size_t blocks,
 
 void hash_many_sse41(const uint8_t *const *inputs, size_t num_inputs,
                      size_t blocks, const uint32_t key_words[8],
-                     uint64_t offset, uint64_t offset_delta,
+                     uint64_t offset, const uint64_t offset_deltas[5],
                      uint8_t internal_flags_start, uint8_t internal_flags_end,
                      uint32_t context, uint8_t *out) {
   while (num_inputs >= DEGREE) {
-    hash4_sse41(inputs, blocks, key_words, offset, offset_delta,
+    hash4_sse41(inputs, blocks, key_words, offset, offset_deltas,
                 internal_flags_start, internal_flags_end, context, out);
     inputs += DEGREE;
     num_inputs -= DEGREE;
-    offset += DEGREE * offset_delta;
+    offset += offset_deltas[DEGREE];
     out = &out[DEGREE * OUT_LEN];
   }
   while (num_inputs > 0) {
@@ -543,7 +543,7 @@ void hash_many_sse41(const uint8_t *const *inputs, size_t num_inputs,
                    internal_flags_end, context, out);
     inputs += 1;
     num_inputs -= 1;
-    offset += offset_delta;
+    offset += offset_deltas[1];
     out = &out[OUT_LEN];
   }
 }
@@ -571,7 +571,7 @@ void compress_sse41(uint32_t state[8], const uint8_t block[BLOCK_LEN],
 
 void hash_many_sse41(const uint8_t *const *inputs, size_t num_inputs,
                      size_t blocks, const uint32_t key_words[8],
-                     uint64_t offset, uint64_t offset_delta,
+                     uint64_t offset, const uint64_t offset_deltas[5],
                      uint8_t internal_flags_start, uint8_t internal_flags_end,
                      uint32_t context, uint8_t *out) {
   // Suppress unused parameter warnings.
@@ -580,7 +580,7 @@ void hash_many_sse41(const uint8_t *const *inputs, size_t num_inputs,
   (void)blocks;
   (void)key_words;
   (void)offset;
-  (void)offset_delta;
+  (void)offset_deltas;
   (void)internal_flags_start;
   (void)internal_flags_end;
   (void)context;

@@ -131,7 +131,7 @@ fn bench_ffihasher_02_medium(b: &mut Bencher) {
     let mut len: usize = MEDIUM;
     #[cfg(any(feature = "c_avx512", feature = "c_native"))]
     {
-        if is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512vl") {
+        if c::is_avx512_detected() {
             len = std::cmp::max(len, 16 * CHUNK_LEN);
         }
     }

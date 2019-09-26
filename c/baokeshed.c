@@ -159,21 +159,21 @@ INLINE void hasher_push_chunk_hash(hasher *self, uint8_t hash[OUT_LEN],
 
 INLINE void hash_many(const uint8_t *const *inputs, size_t num_inputs,
                       size_t blocks, const uint32_t key_words[8],
-                      uint64_t offset, uint64_t offset_delta,
+                      uint64_t offset, const uint64_t offset_deltas[17],
                       uint8_t internal_flags_start, uint8_t internal_flags_end,
                       uint32_t context, uint8_t *out) {
 #if defined(__AVX512F__) && defined(__AVX512VL__)
-  hash_many_avx512(inputs, num_inputs, blocks, key_words, offset, offset_delta,
+  hash_many_avx512(inputs, num_inputs, blocks, key_words, offset, offset_deltas,
                    internal_flags_start, internal_flags_end, context, out);
 #elif __AVX2__
-  hash_many_avx2(inputs, num_inputs, blocks, key_words, offset, offset_delta,
+  hash_many_avx2(inputs, num_inputs, blocks, key_words, offset, offset_deltas,
                  internal_flags_start, internal_flags_end, context, out);
 #elif __SSE4_1__
-  hash_many_sse41(inputs, num_inputs, blocks, key_words, offset, offset_delta,
+  hash_many_sse41(inputs, num_inputs, blocks, key_words, offset, offset_deltas,
                   internal_flags_start, internal_flags_end, context, out);
 #else
   hash_many_portable(inputs, num_inputs, blocks, key_words, offset,
-                     offset_delta, internal_flags_start, internal_flags_end,
+                     offset_deltas, internal_flags_start, internal_flags_end,
                      context, out);
 #endif
 }
@@ -219,7 +219,7 @@ void hasher_update(hasher *self, const void *input, size_t input_len) {
       num_chunks += 1;
     }
     hash_many(chunks, num_chunks, CHUNK_LEN / BLOCK_LEN, self->key_words,
-              self->chunk.offset, CHUNK_LEN, CHUNK_START, CHUNK_END,
+              self->chunk.offset, CHUNK_OFFSET_DELTAS, CHUNK_START, CHUNK_END,
               self->context, out);
     for (size_t chunk_index = 0; chunk_index < num_chunks; chunk_index++) {
       // The chunk state is empty here, but it stores the offset of the next
