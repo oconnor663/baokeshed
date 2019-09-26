@@ -456,7 +456,6 @@ INLINE void transpose_msg_vecs4(const uint8_t *const *inputs,
 
 INLINE void load_offsets4(uint64_t offset, const uint64_t deltas[4],
                           __m128i *out_lo, __m128i *out_hi) {
-  // _mm256_load_epi64 does not seem to be supported by GCC.
   __m256i a = _mm256_add_epi64(_mm256_set1_epi64x(offset),
                                _mm256_loadu_si256((const __m256i *)deltas));
   *out_lo = _mm256_cvtepi64_epi32(a);
@@ -718,8 +717,8 @@ INLINE void transpose_msg_vecs8(const uint8_t *const *inputs,
 
 INLINE void load_offsets8(uint64_t offset, const uint64_t deltas[8],
                           __m256i *out_lo, __m256i *out_hi) {
-  __m512i a =
-      _mm512_add_epi64(_mm512_set1_epi64(offset), _mm512_load_epi64(deltas));
+  __m512i a = _mm512_add_epi64(_mm512_set1_epi64(offset),
+                               _mm512_loadu_si512((const __m512i *)deltas));
   *out_lo = _mm512_cvtepi64_epi32(a);
   *out_hi = _mm512_cvtepi64_epi32(_mm512_srli_epi64(a, 32));
 }
@@ -1041,9 +1040,9 @@ INLINE void transpose_msg_vecs16(const uint8_t *const *inputs,
 INLINE void load_offsets16(uint64_t offset, const uint64_t deltas[16],
                            __m512i *out_lo, __m512i *out_hi) {
   __m512i a = _mm512_add_epi64(_mm512_set1_epi64(offset),
-                               _mm512_load_epi64(&deltas[0]));
+                               _mm512_loadu_si512((const __m512i *)&deltas[0]));
   __m512i b = _mm512_add_epi64(_mm512_set1_epi64(offset),
-                               _mm512_load_epi64(&deltas[8]));
+                               _mm512_loadu_si512((const __m512i *)&deltas[8]));
   __m256i a_lo = _mm512_cvtepi64_epi32(a);
   __m256i b_lo = _mm512_cvtepi64_epi32(b);
   __m256i a_hi = _mm512_cvtepi64_epi32(_mm512_srli_epi64(a, 32));
