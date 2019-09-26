@@ -528,13 +528,15 @@ void hash4_avx512(const uint8_t *const *inputs, size_t blocks,
 
   transpose_vecs_128(&h_vecs[0]);
   transpose_vecs_128(&h_vecs[4]);
+  // The first four vecs now contain the first half of each output, and the
+  // second four vecs contain the second half of each output.
   storeu_128(h_vecs[0], &out[0 * sizeof(__m128i)]);
-  storeu_128(h_vecs[1], &out[1 * sizeof(__m128i)]);
-  storeu_128(h_vecs[2], &out[2 * sizeof(__m128i)]);
-  storeu_128(h_vecs[3], &out[3 * sizeof(__m128i)]);
-  storeu_128(h_vecs[4], &out[4 * sizeof(__m128i)]);
-  storeu_128(h_vecs[5], &out[5 * sizeof(__m128i)]);
-  storeu_128(h_vecs[6], &out[6 * sizeof(__m128i)]);
+  storeu_128(h_vecs[4], &out[1 * sizeof(__m128i)]);
+  storeu_128(h_vecs[1], &out[2 * sizeof(__m128i)]);
+  storeu_128(h_vecs[5], &out[3 * sizeof(__m128i)]);
+  storeu_128(h_vecs[2], &out[4 * sizeof(__m128i)]);
+  storeu_128(h_vecs[6], &out[5 * sizeof(__m128i)]);
+  storeu_128(h_vecs[3], &out[6 * sizeof(__m128i)]);
   storeu_128(h_vecs[7], &out[7 * sizeof(__m128i)]);
 }
 
