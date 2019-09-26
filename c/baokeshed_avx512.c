@@ -526,7 +526,8 @@ void hash4_avx512(const uint8_t *const *inputs, size_t blocks,
     internal_flags = 0;
   }
 
-  transpose_vecs_128(h_vecs);
+  transpose_vecs_128(&h_vecs[0]);
+  transpose_vecs_128(&h_vecs[4]);
   storeu_128(h_vecs[0], &out[0 * sizeof(__m128i)]);
   storeu_128(h_vecs[1], &out[1 * sizeof(__m128i)]);
   storeu_128(h_vecs[2], &out[2 * sizeof(__m128i)]);
