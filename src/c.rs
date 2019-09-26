@@ -333,7 +333,13 @@ mod test {
                 c_out.as_mut_ptr(),
             );
         }
-        assert_eq!(&rust_out[..], &c_out[..]);
+        for n in 0..NUM_INPUTS {
+            dbg!(n);
+            assert_eq!(
+                &rust_out[n * OUT_LEN..][..OUT_LEN],
+                &c_out[n * OUT_LEN..][..OUT_LEN]
+            );
+        }
 
         // Then hash parents.
         let mut parents = Vec::new();
@@ -359,7 +365,13 @@ mod test {
                 c_out.as_mut_ptr(),
             );
         }
-        assert_eq!(&rust_out[..], &c_out[..]);
+        for n in 0..NUM_INPUTS {
+            dbg!(n);
+            assert_eq!(
+                &rust_out[n * OUT_LEN..][..OUT_LEN],
+                &c_out[n * OUT_LEN..][..OUT_LEN]
+            );
+        }
     }
 
     #[test]
