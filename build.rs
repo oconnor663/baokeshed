@@ -29,8 +29,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if defined("CARGO_FEATURE_C_SSE41") {
         if is_windows {
+            // /arch:SSE2 is the default on x86 and undefined on x86_64:
+            // https://docs.microsoft.com/en-us/cpp/build/reference/arch-x86
+            // It also includes SSE4.1 intrisincs:
             // https://stackoverflow.com/a/32183222/823869
-            build.flag("/arch:SSE2");
+            // But we do need to explicitly define the __SSE4_1__ constant:
             // https://stackoverflow.com/a/18566249/823869
             build.flag("/D__SSE4_1__");
         } else {
