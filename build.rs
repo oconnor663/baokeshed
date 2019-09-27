@@ -1,5 +1,7 @@
+use std::env;
+
 fn defined(name: &str) -> bool {
-    std::env::var_os(name).is_some()
+    env::var_os(name).is_some()
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -13,8 +15,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut build = cc::Build::new();
     build.file("c/baokeshed.c");
     build.file("c/baokeshed_portable.c");
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    {
+    let target = env::var("TARGET")?;
+    if target.starts_with("x86_64-") || target.starts_with("i686-") {
         build.file("c/baokeshed_sse41.c");
         build.file("c/baokeshed_avx2.c");
         build.file("c/baokeshed_avx512.c");
