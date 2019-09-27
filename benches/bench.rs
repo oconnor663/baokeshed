@@ -129,6 +129,7 @@ fn bench_ffihasher_02_medium(b: &mut Bencher) {
     // benchmark when AVX512 is available.
     #[allow(unused_mut)]
     let mut len: usize = MEDIUM;
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     #[cfg(any(feature = "c_avx512", feature = "c_native"))]
     {
         if c::is_avx512_detected() {
