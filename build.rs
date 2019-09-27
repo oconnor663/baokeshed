@@ -13,9 +13,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut build = cc::Build::new();
     build.file("c/baokeshed.c");
     build.file("c/baokeshed_portable.c");
-    build.file("c/baokeshed_sse41.c");
-    build.file("c/baokeshed_avx2.c");
-    build.file("c/baokeshed_avx512.c");
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    {
+        build.file("c/baokeshed_sse41.c");
+        build.file("c/baokeshed_avx2.c");
+        build.file("c/baokeshed_avx512.c");
+    }
     if defined("CARGO_FEATURE_C_SSE41") {
         build.flag("-msse4.1");
     }

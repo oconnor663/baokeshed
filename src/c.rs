@@ -52,6 +52,7 @@ impl Hasher {
     }
 }
 
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 pub fn is_avx512_detected() -> bool {
     is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512vl")
 }
@@ -271,6 +272,7 @@ mod test {
 
     #[test]
     #[cfg(any(feature = "c_sse41", feature = "c_native"))]
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     fn test_compress_sse41() {
         if !is_x86_feature_detected!("sse4.1") {
             return;
@@ -280,6 +282,7 @@ mod test {
 
     #[test]
     #[cfg(any(feature = "c_avx512", feature = "c_native"))]
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     fn test_compress_avx512() {
         if !is_avx512_detected() {
             return;
@@ -381,6 +384,7 @@ mod test {
 
     #[test]
     #[cfg(any(feature = "c_sse41", feature = "c_native"))]
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     fn test_hash_many_sse41() {
         if !is_x86_feature_detected!("sse4.1") {
             return;
@@ -390,6 +394,7 @@ mod test {
 
     #[test]
     #[cfg(any(feature = "c_avx2", feature = "c_native"))]
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     fn test_hash_many_avx2() {
         if !is_x86_feature_detected!("avx2") {
             return;
@@ -399,6 +404,7 @@ mod test {
 
     #[test]
     #[cfg(any(feature = "c_avx512", feature = "c_native"))]
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     fn test_hash_many_avx512() {
         if !is_avx512_detected() {
             return;
