@@ -149,20 +149,106 @@ void compress_avx512(uint32_t state[8], const uint8_t block[BLOCK_LEN],
   __m256i m0 = loadu_256(&block[sizeof(__m256i) * 0]);
   __m256i m1 = loadu_256(&block[sizeof(__m256i) * 1]);
 
-  for (size_t round=0 ; round < 7; round ++ ) {
-      __m256i schedule0 = _mm256_loadu_si256((const __m256i*)&MSG_SCHEDULE_IN_PLACE[round][0]);
-      __m256i schedule1 = _mm256_loadu_si256((const __m256i*)&MSG_SCHEDULE_IN_PLACE[round][8]);
-      __m256i new_m0 = _mm256_permutex2var_epi32(m0, schedule0, m1);
-      __m256i new_m1 = _mm256_permutex2var_epi32(m0, schedule1, m1);
-      m0 = new_m0;
-      m1 = new_m1;
-      g1(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m0, 0));
-      g2(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m0, 1));
-      diagonalize(&row1, &row3, &row4);
-      g1(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m1, 0));
-      g2(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m1, 1));
-      undiagonalize(&row1, &row3, &row4);
-  }
+  ssize_t round;
+  __m256i schedule0, schedule1, new_m0, new_m1;
+
+  round = 0;
+  schedule0 = _mm256_loadu_si256((const __m256i*)&MSG_SCHEDULE_IN_PLACE[round][0]);
+  schedule1 = _mm256_loadu_si256((const __m256i*)&MSG_SCHEDULE_IN_PLACE[round][8]);
+  new_m0 = _mm256_permutex2var_epi32(m0, schedule0, m1);
+  new_m1 = _mm256_permutex2var_epi32(m0, schedule1, m1);
+  m0 = new_m0;
+  m1 = new_m1;
+  g1(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m0, 0));
+  g2(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m0, 1));
+  diagonalize(&row1, &row3, &row4);
+  g1(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m1, 0));
+  g2(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m1, 1));
+  undiagonalize(&row1, &row3, &row4);
+
+  round = 1;
+  schedule0 = _mm256_loadu_si256((const __m256i*)&MSG_SCHEDULE_IN_PLACE[round][0]);
+  schedule1 = _mm256_loadu_si256((const __m256i*)&MSG_SCHEDULE_IN_PLACE[round][8]);
+  new_m0 = _mm256_permutex2var_epi32(m0, schedule0, m1);
+  new_m1 = _mm256_permutex2var_epi32(m0, schedule1, m1);
+  m0 = new_m0;
+  m1 = new_m1;
+  g1(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m0, 0));
+  g2(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m0, 1));
+  diagonalize(&row1, &row3, &row4);
+  g1(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m1, 0));
+  g2(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m1, 1));
+  undiagonalize(&row1, &row3, &row4);
+
+  round = 2;
+  schedule0 = _mm256_loadu_si256((const __m256i*)&MSG_SCHEDULE_IN_PLACE[round][0]);
+  schedule1 = _mm256_loadu_si256((const __m256i*)&MSG_SCHEDULE_IN_PLACE[round][8]);
+  new_m0 = _mm256_permutex2var_epi32(m0, schedule0, m1);
+  new_m1 = _mm256_permutex2var_epi32(m0, schedule1, m1);
+  m0 = new_m0;
+  m1 = new_m1;
+  g1(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m0, 0));
+  g2(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m0, 1));
+  diagonalize(&row1, &row3, &row4);
+  g1(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m1, 0));
+  g2(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m1, 1));
+  undiagonalize(&row1, &row3, &row4);
+
+  round = 3;
+  schedule0 = _mm256_loadu_si256((const __m256i*)&MSG_SCHEDULE_IN_PLACE[round][0]);
+  schedule1 = _mm256_loadu_si256((const __m256i*)&MSG_SCHEDULE_IN_PLACE[round][8]);
+  new_m0 = _mm256_permutex2var_epi32(m0, schedule0, m1);
+  new_m1 = _mm256_permutex2var_epi32(m0, schedule1, m1);
+  m0 = new_m0;
+  m1 = new_m1;
+  g1(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m0, 0));
+  g2(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m0, 1));
+  diagonalize(&row1, &row3, &row4);
+  g1(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m1, 0));
+  g2(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m1, 1));
+  undiagonalize(&row1, &row3, &row4);
+
+  round = 4;
+  schedule0 = _mm256_loadu_si256((const __m256i*)&MSG_SCHEDULE_IN_PLACE[round][0]);
+  schedule1 = _mm256_loadu_si256((const __m256i*)&MSG_SCHEDULE_IN_PLACE[round][8]);
+  new_m0 = _mm256_permutex2var_epi32(m0, schedule0, m1);
+  new_m1 = _mm256_permutex2var_epi32(m0, schedule1, m1);
+  m0 = new_m0;
+  m1 = new_m1;
+  g1(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m0, 0));
+  g2(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m0, 1));
+  diagonalize(&row1, &row3, &row4);
+  g1(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m1, 0));
+  g2(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m1, 1));
+  undiagonalize(&row1, &row3, &row4);
+
+  round = 5;
+  schedule0 = _mm256_loadu_si256((const __m256i*)&MSG_SCHEDULE_IN_PLACE[round][0]);
+  schedule1 = _mm256_loadu_si256((const __m256i*)&MSG_SCHEDULE_IN_PLACE[round][8]);
+  new_m0 = _mm256_permutex2var_epi32(m0, schedule0, m1);
+  new_m1 = _mm256_permutex2var_epi32(m0, schedule1, m1);
+  m0 = new_m0;
+  m1 = new_m1;
+  g1(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m0, 0));
+  g2(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m0, 1));
+  diagonalize(&row1, &row3, &row4);
+  g1(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m1, 0));
+  g2(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m1, 1));
+  undiagonalize(&row1, &row3, &row4);
+
+  round = 6;
+  schedule0 = _mm256_loadu_si256((const __m256i*)&MSG_SCHEDULE_IN_PLACE[round][0]);
+  schedule1 = _mm256_loadu_si256((const __m256i*)&MSG_SCHEDULE_IN_PLACE[round][8]);
+  new_m0 = _mm256_permutex2var_epi32(m0, schedule0, m1);
+  new_m1 = _mm256_permutex2var_epi32(m0, schedule1, m1);
+  m0 = new_m0;
+  m1 = new_m1;
+  g1(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m0, 0));
+  g2(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m0, 1));
+  diagonalize(&row1, &row3, &row4);
+  g1(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m1, 0));
+  g2(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m1, 1));
+  undiagonalize(&row1, &row3, &row4);
 
   storeu_128(xor_128(row1, row3), (uint8_t *)&state[0]);
   storeu_128(xor_128(row2, row4), (uint8_t *)&state[4]);
