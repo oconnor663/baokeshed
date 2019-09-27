@@ -109,6 +109,7 @@ mod test {
                 context: u32,
             );
             #[cfg(any(feature = "c_sse41", feature = "c_native"))]
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
             pub fn compress_sse41(
                 state: *mut u32,
                 block: *const u8,
@@ -118,6 +119,7 @@ mod test {
                 context: u32,
             );
             #[cfg(any(feature = "c_avx512", feature = "c_native"))]
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
             pub fn compress_avx512(
                 state: *mut u32,
                 block: *const u8,
@@ -139,6 +141,7 @@ mod test {
                 out: *mut u8,
             );
             #[cfg(any(feature = "c_sse41", feature = "c_native"))]
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
             pub fn hash_many_sse41(
                 inputs: *const *const u8,
                 num_inputs: usize,
@@ -152,6 +155,7 @@ mod test {
                 out: *mut u8,
             );
             #[cfg(any(feature = "c_avx2", feature = "c_native"))]
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
             pub fn hash_many_avx2(
                 inputs: *const *const u8,
                 num_inputs: usize,
@@ -165,6 +169,7 @@ mod test {
                 out: *mut u8,
             );
             #[cfg(any(feature = "c_avx512", feature = "c_native"))]
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
             pub fn hash_many_avx512(
                 inputs: *const *const u8,
                 num_inputs: usize,
