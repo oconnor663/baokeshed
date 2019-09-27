@@ -56,8 +56,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     if defined("CARGO_FEATURE_C_NATIVE") {
-        // MSVC does not have an equivalent.
-        build.flag("-march=native");
+        if is_windows {
+            panic!("Windows doesn't have an equivalent of -march=native.");
+        } else {
+            build.flag("-march=native");
+        }
     }
     build.compile("cbaokeshed");
 
