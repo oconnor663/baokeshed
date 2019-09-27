@@ -113,6 +113,27 @@ INLINE void undiagonalize(__m128i *row1, __m128i *row3, __m128i *row4) {
   *row3 = _mm_shuffle_epi32(*row3, _MM_SHUFFLE(2, 1, 0, 3));
 }
 
+// This is the same as MSG_SCHEDULE, with two changes:
+// 1) The indexes are ordered according to how they're used in vector
+//    operations. Rather than doing g1 for one column, then g2 for that column,
+//    the vector operations do g1 for all columns, followed by g2 for all
+//    columns. This 0/1/2/3/... in the first row becomes 0/2/4/8/...
+// 2) Rows after the first are reinterpreted to load from the previous round's
+//    permuted message words, rather than the original message words. This
+//    means we don't need to keep the original message words in their own
+//    register.
+// These optimizations were originally done by Samuel Neves at
+// https://git.zx2c4.com/WireGuard/tree/src/crypto/zinc/blake2s/blake2s-x86_64.S#n189
+static uint32_t MSG_SCHEDULE_IN_PLACE[7][16] = {
+    {0, 2, 4, 6, 1, 3, 5, 7, 14, 8, 10, 12, 15, 9, 11, 13},
+    {8, 2, 13, 15, 10, 9, 12, 3, 6, 4, 0, 14, 5, 11, 1, 7},
+    {11, 13, 8, 6, 5, 10, 14, 3, 2, 4, 12, 15, 1, 0, 7, 9},
+    {11, 10, 7, 0, 8, 15, 1, 13, 3, 6, 2, 12, 4, 14, 9, 5},
+    {4, 10, 9, 14, 15, 0, 11, 8, 1, 7, 3, 13, 2, 5, 6, 12},
+    {2, 11, 4, 15, 14, 3, 10, 8, 13, 6, 5, 7, 0, 12, 1, 9},
+    {4, 8, 15, 9, 14, 11, 13, 5, 3, 2, 1, 12, 6, 10, 7, 0},
+};
+
 void compress_avx512(uint32_t state[8], const uint8_t block[BLOCK_LEN],
                      uint8_t block_len, uint64_t offset, uint8_t internal_flags,
                      uint32_t context) {
@@ -123,165 +144,25 @@ void compress_avx512(uint32_t state[8], const uint8_t block[BLOCK_LEN],
       set4(IV[4] ^ offset_low(offset), IV[5] ^ offset_high(offset),
            IV[6] ^ block_flags(block_len, internal_flags), IV[7] ^ context);
 
-  __m128i m0 = loadu_128(&block[sizeof(__m128i) * 0]);
-  __m128i m1 = loadu_128(&block[sizeof(__m128i) * 1]);
-  __m128i m2 = loadu_128(&block[sizeof(__m128i) * 2]);
-  __m128i m3 = loadu_128(&block[sizeof(__m128i) * 3]);
+  // Use two __m256i's instead of one __m512i to avoid paying a CPU frequency
+  // penalty.
+  __m256i m0 = loadu_256(&block[sizeof(__m256i) * 0]);
+  __m256i m1 = loadu_256(&block[sizeof(__m256i) * 1]);
 
-  __m128i buf, t0, t1, t2;
-
-  // round 1
-  buf = _mm_castps_si128(_mm_shuffle_ps(
-      _mm_castsi128_ps(m0), _mm_castsi128_ps(m1), _MM_SHUFFLE(2, 0, 2, 0)));
-  g1(&row1, &row2, &row3, &row4, buf);
-  buf = _mm_castps_si128(_mm_shuffle_ps(
-      _mm_castsi128_ps(m0), _mm_castsi128_ps(m1), _MM_SHUFFLE(3, 1, 3, 1)));
-  g2(&row1, &row2, &row3, &row4, buf);
-  diagonalize(&row1, &row3, &row4);
-  t0 = _mm_shuffle_epi32(m2, _MM_SHUFFLE(3, 2, 0, 1));
-  t1 = _mm_shuffle_epi32(m3, _MM_SHUFFLE(0, 1, 3, 2));
-  buf = _mm_blend_epi16(t0, t1, 0xC3);
-  g1(&row1, &row2, &row3, &row4, buf);
-  t0 = _mm_blend_epi16(t0, t1, 0x3C);
-  buf = _mm_shuffle_epi32(t0, _MM_SHUFFLE(2, 3, 0, 1));
-  g2(&row1, &row2, &row3, &row4, buf);
-  undiagonalize(&row1, &row3, &row4);
-
-  // round 2
-  t0 = _mm_blend_epi16(m1, m2, 0x0C);
-  t1 = _mm_slli_si128(m3, 4);
-  t2 = _mm_blend_epi16(t0, t1, 0xF0);
-  buf = _mm_shuffle_epi32(t2, _MM_SHUFFLE(2, 1, 0, 3));
-  g1(&row1, &row2, &row3, &row4, buf);
-  t0 = _mm_shuffle_epi32(m2, _MM_SHUFFLE(0, 0, 2, 0));
-  t1 = _mm_blend_epi16(m1, m3, 0xC0);
-  t2 = _mm_blend_epi16(t0, t1, 0xF0);
-  buf = _mm_shuffle_epi32(t2, _MM_SHUFFLE(2, 3, 0, 1));
-  g2(&row1, &row2, &row3, &row4, buf);
-  diagonalize(&row1, &row3, &row4);
-  t0 = _mm_slli_si128(m1, 4);
-  t1 = _mm_blend_epi16(m2, t0, 0x30);
-  t2 = _mm_blend_epi16(m0, t1, 0xF0);
-  buf = _mm_shuffle_epi32(t2, _MM_SHUFFLE(3, 0, 1, 2));
-  g1(&row1, &row2, &row3, &row4, buf);
-  t0 = _mm_unpackhi_epi32(m0, m1);
-  t1 = _mm_slli_si128(m3, 4);
-  t2 = _mm_blend_epi16(t0, t1, 0x0C);
-  buf = _mm_shuffle_epi32(t2, _MM_SHUFFLE(3, 0, 1, 2));
-  g2(&row1, &row2, &row3, &row4, buf);
-  undiagonalize(&row1, &row3, &row4);
-
-  // round 3
-  t0 = _mm_unpackhi_epi32(m2, m3);
-  t1 = _mm_blend_epi16(m3, m1, 0x0C);
-  t2 = _mm_blend_epi16(t0, t1, 0x0F);
-  buf = _mm_shuffle_epi32(t2, _MM_SHUFFLE(3, 1, 0, 2));
-  g1(&row1, &row2, &row3, &row4, buf);
-  t0 = _mm_unpacklo_epi32(m2, m0);
-  t1 = _mm_blend_epi16(t0, m0, 0xF0);
-  t2 = _mm_slli_si128(m3, 8);
-  buf = _mm_blend_epi16(t1, t2, 0xC0);
-  g2(&row1, &row2, &row3, &row4, buf);
-  diagonalize(&row1, &row3, &row4);
-  t0 = _mm_blend_epi16(m0, m2, 0x3C);
-  t1 = _mm_srli_si128(m1, 12);
-  t2 = _mm_blend_epi16(t0, t1, 0x03);
-  buf = _mm_shuffle_epi32(t2, _MM_SHUFFLE(0, 3, 2, 1));
-  g1(&row1, &row2, &row3, &row4, buf);
-  t0 = _mm_slli_si128(m3, 4);
-  t1 = _mm_blend_epi16(m0, m1, 0x33);
-  t2 = _mm_blend_epi16(t1, t0, 0xC0);
-  buf = _mm_shuffle_epi32(t2, _MM_SHUFFLE(1, 2, 3, 0));
-  g2(&row1, &row2, &row3, &row4, buf);
-  undiagonalize(&row1, &row3, &row4);
-
-  // round 4
-  t0 = _mm_unpackhi_epi32(m0, m1);
-  t1 = _mm_unpackhi_epi32(t0, m2);
-  t2 = _mm_blend_epi16(t1, m3, 0x0C);
-  buf = _mm_shuffle_epi32(t2, _MM_SHUFFLE(3, 1, 0, 2));
-  g1(&row1, &row2, &row3, &row4, buf);
-  t0 = _mm_slli_si128(m2, 8);
-  t1 = _mm_blend_epi16(m3, m0, 0x0C);
-  t2 = _mm_blend_epi16(t1, t0, 0xC0);
-  buf = _mm_shuffle_epi32(t2, _MM_SHUFFLE(2, 0, 1, 3));
-  g2(&row1, &row2, &row3, &row4, buf);
-  diagonalize(&row1, &row3, &row4);
-  t0 = _mm_blend_epi16(m0, m1, 0x0F);
-  t1 = _mm_blend_epi16(t0, m3, 0xC0);
-  buf = _mm_shuffle_epi32(t1, _MM_SHUFFLE(0, 1, 2, 3));
-  g1(&row1, &row2, &row3, &row4, buf);
-  t0 = _mm_alignr_epi8(m0, m1, 4);
-  buf = _mm_blend_epi16(t0, m2, 0x33);
-  g2(&row1, &row2, &row3, &row4, buf);
-  undiagonalize(&row1, &row3, &row4);
-
-  // round 5
-  t0 = _mm_unpacklo_epi64(m1, m2);
-  t1 = _mm_unpackhi_epi64(m0, m2);
-  t2 = _mm_blend_epi16(t0, t1, 0x33);
-  buf = _mm_shuffle_epi32(t2, _MM_SHUFFLE(2, 0, 1, 3));
-  g1(&row1, &row2, &row3, &row4, buf);
-  t0 = _mm_unpackhi_epi64(m1, m3);
-  t1 = _mm_unpacklo_epi64(m0, m1);
-  buf = _mm_blend_epi16(t0, t1, 0x33);
-  g2(&row1, &row2, &row3, &row4, buf);
-  diagonalize(&row1, &row3, &row4);
-  t0 = _mm_unpackhi_epi64(m3, m1);
-  t1 = _mm_unpackhi_epi64(m2, m0);
-  t2 = _mm_blend_epi16(t1, t0, 0x33);
-  buf = _mm_shuffle_epi32(t2, _MM_SHUFFLE(2, 1, 0, 3));
-  g1(&row1, &row2, &row3, &row4, buf);
-  t0 = _mm_blend_epi16(m0, m2, 0x03);
-  t1 = _mm_slli_si128(t0, 8);
-  t2 = _mm_blend_epi16(t1, m3, 0x0F);
-  buf = _mm_shuffle_epi32(t2, _MM_SHUFFLE(2, 0, 3, 1));
-  g2(&row1, &row2, &row3, &row4, buf);
-  undiagonalize(&row1, &row3, &row4);
-
-  // round 6
-  t0 = _mm_unpackhi_epi32(m0, m1);
-  t1 = _mm_unpacklo_epi32(m0, m2);
-  buf = _mm_unpacklo_epi64(t0, t1);
-  g1(&row1, &row2, &row3, &row4, buf);
-  t0 = _mm_srli_si128(m2, 4);
-  t1 = _mm_blend_epi16(m0, m3, 0x03);
-  buf = _mm_blend_epi16(t1, t0, 0x3C);
-  g2(&row1, &row2, &row3, &row4, buf);
-  diagonalize(&row1, &row3, &row4);
-  t0 = _mm_blend_epi16(m1, m0, 0x0C);
-  t1 = _mm_srli_si128(m3, 4);
-  t2 = _mm_blend_epi16(t0, t1, 0x30);
-  buf = _mm_shuffle_epi32(t2, _MM_SHUFFLE(2, 3, 0, 1));
-  g1(&row1, &row2, &row3, &row4, buf);
-  t0 = _mm_unpacklo_epi64(m2, m1);
-  t1 = _mm_shuffle_epi32(m3, _MM_SHUFFLE(2, 0, 1, 0));
-  t2 = _mm_srli_si128(t0, 4);
-  buf = _mm_blend_epi16(t1, t2, 0x33);
-  g2(&row1, &row2, &row3, &row4, buf);
-  undiagonalize(&row1, &row3, &row4);
-
-  // round 7
-  t0 = _mm_slli_si128(m1, 12);
-  t1 = _mm_blend_epi16(m0, m3, 0x33);
-  buf = _mm_blend_epi16(t1, t0, 0xC0);
-  g1(&row1, &row2, &row3, &row4, buf);
-  t0 = _mm_blend_epi16(m3, m2, 0x30);
-  t1 = _mm_srli_si128(m1, 4);
-  t2 = _mm_blend_epi16(t0, t1, 0x03);
-  buf = _mm_shuffle_epi32(t2, _MM_SHUFFLE(2, 1, 3, 0));
-  g2(&row1, &row2, &row3, &row4, buf);
-  diagonalize(&row1, &row3, &row4);
-  t0 = _mm_unpacklo_epi64(m0, m2);
-  t1 = _mm_srli_si128(m1, 4);
-  buf =
-      _mm_shuffle_epi32(_mm_blend_epi16(t0, t1, 0x0C), _MM_SHUFFLE(3, 1, 0, 2));
-  g1(&row1, &row2, &row3, &row4, buf);
-  t0 = _mm_unpackhi_epi32(m1, m2);
-  t1 = _mm_unpackhi_epi64(m0, t0);
-  buf = _mm_shuffle_epi32(t1, _MM_SHUFFLE(0, 1, 2, 3));
-  g2(&row1, &row2, &row3, &row4, buf);
-  undiagonalize(&row1, &row3, &row4);
+  for (size_t round=0 ; round < 7; round ++ ) {
+      __m256i schedule0 = _mm256_loadu_si256((const __m256i*)&MSG_SCHEDULE_IN_PLACE[round][0]);
+      __m256i schedule1 = _mm256_loadu_si256((const __m256i*)&MSG_SCHEDULE_IN_PLACE[round][8]);
+      __m256i new_m0 = _mm256_permutex2var_epi32(m0, schedule0, m1);
+      __m256i new_m1 = _mm256_permutex2var_epi32(m0, schedule1, m1);
+      m0 = new_m0;
+      m1 = new_m1;
+      g1(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m0, 0));
+      g2(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m0, 1));
+      diagonalize(&row1, &row3, &row4);
+      g1(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m1, 0));
+      g2(&row1, &row2, &row3, &row4, _mm256_extracti128_si256(m1, 1));
+      undiagonalize(&row1, &row3, &row4);
+  }
 
   storeu_128(xor_128(row1, row3), (uint8_t *)&state[0]);
   storeu_128(xor_128(row2, row4), (uint8_t *)&state[4]);
