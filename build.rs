@@ -31,6 +31,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if is_windows {
             // https://stackoverflow.com/a/32183222/823869
             build.flag("/arch:SSE2");
+            // https://stackoverflow.com/a/18566249/823869
+            build.flag("/D__SSE4_1__");
         } else {
             build.flag("-msse4.1");
         }
