@@ -5,9 +5,16 @@ fn defined(name: &str) -> bool {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    if !defined("CARGO_FEATURE_C") {
+    if !defined("CARGO_FEATURE_C_PORTABLE") {
         return Ok(());
     }
+
+    let target = env::var("TARGET")?;
+    let target_components: Vec<&str> = target.split("-").collect();
+    let target_arch = target_components[0];
+    let target_os = target_components[1];
+    let is_x86 = target_arch == "x86_64" || target_arch == "i686";
+    let is_windows = target_os == "windows";
 
     // Note that under -march=native, Clang seems to perform better than GCC.
     // To keep this build portable, we use the system default compiler. This
@@ -15,23 +22,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut build = cc::Build::new();
     build.file("c/baokeshed.c");
     build.file("c/baokeshed_portable.c");
-    let target = env::var("TARGET")?;
-    if target.starts_with("x86_64-") || target.starts_with("i686-") {
+    if is_x86 {
         build.file("c/baokeshed_sse41.c");
         build.file("c/baokeshed_avx2.c");
         build.file("c/baokeshed_avx512.c");
     }
     if defined("CARGO_FEATURE_C_SSE41") {
-        build.flag("-msse4.1");
+        if is_windows {
+            // https://stackoverflow.com/a/32183222/823869
+            build.flag("/arch:SSE2");
+        } else {
+            build.flag("-msse4.1");
+        }
     }
     if defined("CARGO_FEATURE_C_AVX2") {
-        build.flag("-mavx2");
+        if is_windows {
+            build.flag("/arch:AVX2");
+        } else {
+            build.flag("-mavx2");
+        }
     }
     if defined("CARGO_FEATURE_C_AVX512") {
-        build.flag("-mavx512f");
-        build.flag("-mavx512vl");
+        if is_windows {
+            build.flag("/arch:AVX512");
+        } else {
+            build.flag("-mavx512f");
+            build.flag("-mavx512vl");
+        }
     }
     if defined("CARGO_FEATURE_C_NATIVE") {
+        // MSVC does not have an equivalent.
         build.flag("-march=native");
     }
     build.compile("cbaokeshed");

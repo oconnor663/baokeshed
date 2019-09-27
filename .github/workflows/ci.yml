@@ -17,10 +17,17 @@ jobs:
       with:
         toolchain: ${{ matrix.rust_version }}
         override: true
-    - name: cargo test --features=c
-      run: cargo test --features=c
-    - name: cargo test --no-default-features
-      run: cargo test --no-default-features
+    # We want to see C compiler flags in the build output, which requires
+    # building at high verbosity. To avoid seeing a flood of output, do an
+    # initial no-C test runs at low verbosity.
+    - run: cargo test
+    - run: cargo test --no-default-features
+    - run: cargo test -vv --features=c_portable
+    - run: cargo test -vv --features=c_sse41
+    - run: cargo test -vv --features=c_avx2
+    # The GitHub Actions test machines don't support AVX512 yet, but we should
+    # be able to build it.
+    - run: cargo build --all-targets -vv --features=c_avx512
     - name: binary tests
       working-directory: ./baokeshed_bin
       run: cargo test
@@ -38,9 +45,9 @@ jobs:
     - name: install cross
       run: cargo install cross
     - name: cross test
-      run: cross test --target mips-unknown-linux-gnu --features=c
+      run: cross test --target mips-unknown-linux-gnu --features=c_portable
 
-  test_c:
+  test_c_native:
     name: C implementation on Linux
     runs-on: ubuntu-latest
 
@@ -53,26 +60,8 @@ jobs:
     - name: cpuinfo
       run: cat /proc/cpuinfo
 
-    # We want to see C compiler flags in the build output, which requires
-    # building at high verbosity. To avoid seeing a flood of output, do an
-    # initial build at low verbosity. All x86 SIMD features should build
-    # successfully, including AVX512, even though the host currently doesn't
-    # support running AVX512.
-    - name: pre-build tests
-      run: cargo build --tests --features=c_avx512
-    - name: pre-build tests --release
-      run: cargo build --tests --features=c_avx512 --release
-
-    - name: test portable
-      run: cargo test -vv --features=c
-    - name: test SSE4.1
-      run: cargo test -vv --features=c_sse41
-    - name: test AVX2
-      run: cargo test -vv --features=c_avx2
-    # The GitHub Actions test machines don't support AVX512 yet. The Rust tests
-    # do runtime feature detection, but the C code does not.
-    # - name: test AVX512
-    #   run: cargo test -vv --features=c_avx512
+    # Again do a low-verosity test run first.
+    - run: cargo test --release
 
     # The rerun-if-env-changed directives in build.rs mean that each of these
     # different CC settings will do a recompilation.

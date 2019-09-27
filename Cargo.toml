@@ -7,11 +7,11 @@ edition = "2018"
 
 [features]
 default = ["rayon"]
-c = []
-c_sse41 = ["c"]
-c_avx2 = ["c", "c_sse41"]
-c_avx512 = ["c", "c_sse41", "c_avx2"] # requires AVX512 F+VL
-c_native = ["c"]
+c_portable = []
+c_sse41 = ["c_portable"]
+c_avx2 = ["c_portable", "c_sse41"]
+c_avx512 = ["c_portable", "c_sse41", "c_avx2"] # requires AVX512 F+VL
+c_native = ["c_portable"]
 
 [dependencies]
 arrayref = "0.3.5"

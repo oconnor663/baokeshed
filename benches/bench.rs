@@ -112,7 +112,7 @@ fn bench_hasher_04_block(b: &mut Bencher) {
 }
 
 #[bench]
-#[cfg(feature = "c")]
+#[cfg(feature = "c_portable")]
 fn bench_ffihasher_01_long(b: &mut Bencher) {
     let mut input = RandomInput::new(b, LONG);
     b.iter(|| {
@@ -123,7 +123,7 @@ fn bench_ffihasher_01_long(b: &mut Bencher) {
 }
 
 #[bench]
-#[cfg(feature = "c")]
+#[cfg(feature = "c_portable")]
 fn bench_ffihasher_02_medium(b: &mut Bencher) {
     // The C code supports AVX512, so use a larger input size for this
     // benchmark when AVX512 is available.
@@ -145,7 +145,7 @@ fn bench_ffihasher_02_medium(b: &mut Bencher) {
 }
 
 #[bench]
-#[cfg(feature = "c")]
+#[cfg(feature = "c_portable")]
 fn bench_ffihasher_03_chunk(b: &mut Bencher) {
     let mut input = RandomInput::new(b, CHUNK_LEN);
     b.iter(|| {
@@ -156,7 +156,7 @@ fn bench_ffihasher_03_chunk(b: &mut Bencher) {
 }
 
 #[bench]
-#[cfg(feature = "c")]
+#[cfg(feature = "c_portable")]
 fn bench_ffihasher_04_block(b: &mut Bencher) {
     let mut input = RandomInput::new(b, BLOCK_LEN);
     b.iter(|| {
