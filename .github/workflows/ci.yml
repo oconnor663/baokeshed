@@ -24,10 +24,10 @@ jobs:
     - run: cargo test --no-default-features
     - run: cargo test -vv --features=c_portable
     - run: cargo test -vv --features=c_sse41
-    - run: cargo test -vv --features=c_avx2
-    # The GitHub Actions test machines don't support AVX512 yet, but we should
-    # be able to build it.
-    - run: cargo build --all-targets -vv --features=c_avx512
+    # The GitHub Actions test machines don't support AVX512 yet (and the macOS
+    # ones don't support AVX2), but we should be able to build them.
+    - run: cargo build --tests -vv --features=c_avx2
+    - run: cargo build --tests -vv --features=c_avx512
     - name: binary tests
       working-directory: ./baokeshed_bin
       run: cargo test
