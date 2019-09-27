@@ -34,7 +34,7 @@ void compress_portable(uint32_t state[8], const uint8_t block[BLOCK_LEN],
                        uint8_t block_len, uint64_t offset,
                        uint8_t internal_flags, uint32_t context) {
   uint32_t block_words[16];
-  load_msg_words(block, block_words);
+  load_msg_words(block, block_words); // This handles big-endianness.
 
   uint32_t full_state[16] = {
       state[0],
@@ -90,7 +90,7 @@ INLINE void hash_one_portable(const uint8_t *input, size_t blocks,
     blocks -= 1;
     flags = 0;
   }
-  memcpy(out, state, OUT_LEN);
+  write_state_bytes(state, out); // This handles big-endianness.
 }
 
 void hash_many_portable(const uint8_t *const *inputs, size_t num_inputs,

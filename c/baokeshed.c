@@ -125,7 +125,7 @@ typedef struct {
 } hasher;
 
 void hasher_init(hasher *self, const uint8_t key[KEY_LEN], uint32_t context) {
-  load_key_words(key, self->key_words);
+  load_key_words(key, self->key_words); // This handles big-endianness.
   chunk_state_init(&self->chunk, self->key_words, 0);
   self->context = context;
   self->subtree_hashes_len = 0;
