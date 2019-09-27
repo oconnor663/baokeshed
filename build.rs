@@ -12,7 +12,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let target = env::var("TARGET")?;
     let target_components: Vec<&str> = target.split("-").collect();
     let target_arch = target_components[0];
-    let target_os = target_components[1];
+    let target_os = target_components[2];
     let is_x86 = target_arch == "x86_64" || target_arch == "i686";
     let is_windows = target_os == "windows";
 
