@@ -1,8 +1,11 @@
 #pragma once
 
-#include <nmmintrin.h>
 #include <stddef.h>
 #include <stdint.h>
+
+#if __POPCNT__
+#include <nmmintrin.h>
+#endif
 
 // size constants
 #define BLOCK_LEN 64
