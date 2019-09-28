@@ -1,5 +1,6 @@
 #pragma once
 
+#include <nmmintrin.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -67,12 +68,16 @@ INLINE uint32_t rotr32(uint32_t w, uint32_t c) {
 
 // Count the number of 1 bits.
 INLINE uint8_t popcnt(uint64_t x) {
+#if __POPCNT__
+  return (uint8_t)_mm_popcnt_u64(x);
+#else
   uint8_t count = 0;
   while (x > 0) {
     count += ((uint8_t)x) & 1;
     x >>= 1;
   }
   return count;
+#endif
 }
 
 INLINE uint32_t offset_low(uint64_t offset) { return (uint32_t)offset; }
