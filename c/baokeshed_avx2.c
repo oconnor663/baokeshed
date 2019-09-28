@@ -13,7 +13,7 @@ INLINE __m256i loadu(const uint8_t src[32]) {
 }
 
 INLINE void storeu(__m256i src, uint8_t dest[16]) {
-  return _mm256_storeu_si256((__m256i *)dest, src);
+  _mm256_storeu_si256((__m256i *)dest, src);
 }
 
 INLINE __m256i addv(__m256i a, __m256i b) { return _mm256_add_epi32(a, b); }

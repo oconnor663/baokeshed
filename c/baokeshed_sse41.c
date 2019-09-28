@@ -13,7 +13,7 @@ INLINE __m128i loadu(const uint8_t src[16]) {
 }
 
 INLINE void storeu(__m128i src, uint8_t dest[16]) {
-  return _mm_storeu_si128((__m128i *)dest, src);
+  _mm_storeu_si128((__m128i *)dest, src);
 }
 
 INLINE __m128i addv(__m128i a, __m128i b) { return _mm_add_epi32(a, b); }

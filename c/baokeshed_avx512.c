@@ -19,11 +19,11 @@ INLINE __m512i loadu_512(const uint8_t src[64]) {
 }
 
 INLINE void storeu_128(__m128i src, uint8_t dest[16]) {
-  return _mm_storeu_si128((__m128i *)dest, src);
+  _mm_storeu_si128((__m128i *)dest, src);
 }
 
 INLINE void storeu_256(__m256i src, uint8_t dest[16]) {
-  return _mm256_storeu_si256((__m256i *)dest, src);
+  _mm256_storeu_si256((__m256i *)dest, src);
 }
 
 INLINE __m128i add_128(__m128i a, __m128i b) { return _mm_add_epi32(a, b); }
