@@ -22,7 +22,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut build = cc::Build::new();
     build.file("c/baokeshed.c");
     build.file("c/baokeshed_portable.c");
-    build.flag("-Weverything");
     if is_x86 {
         build.file("c/baokeshed_sse41.c");
         build.file("c/baokeshed_avx2.c");

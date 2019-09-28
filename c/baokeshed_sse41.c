@@ -21,10 +21,10 @@ INLINE __m128i addv(__m128i a, __m128i b) { return _mm_add_epi32(a, b); }
 // Note that clang-format doesn't like the name "xor" for some reason.
 INLINE __m128i xorv(__m128i a, __m128i b) { return _mm_xor_si128(a, b); }
 
-INLINE __m128i set1(uint32_t x) { return _mm_set1_epi32(x); }
+INLINE __m128i set1(uint32_t x) { return _mm_set1_epi32((int32_t)x); }
 
 INLINE __m128i set4(uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
-  return _mm_setr_epi32(a, b, c, d);
+  return _mm_setr_epi32((int32_t)a, (int32_t)b, (int32_t)c, (int32_t)d);
 }
 
 INLINE __m128i rot16(__m128i x) {

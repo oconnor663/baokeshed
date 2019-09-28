@@ -21,11 +21,12 @@ INLINE __m256i addv(__m256i a, __m256i b) { return _mm256_add_epi32(a, b); }
 // Note that clang-format doesn't like the name "xor" for some reason.
 INLINE __m256i xorv(__m256i a, __m256i b) { return _mm256_xor_si256(a, b); }
 
-INLINE __m256i set1(uint32_t x) { return _mm256_set1_epi32(x); }
+INLINE __m256i set1(uint32_t x) { return _mm256_set1_epi32((int32_t)x); }
 
 INLINE __m256i set8(uint32_t a, uint32_t b, uint32_t c, uint32_t d, uint32_t e,
                     uint32_t f, uint32_t g, uint32_t h) {
-  return _mm256_setr_epi32(a, b, c, d, e, f, g, h);
+  return _mm256_setr_epi32((int32_t)a, (int32_t)b, (int32_t)c, (int32_t)d,
+                           (int32_t)e, (int32_t)f, (int32_t)g, (int32_t)h);
 }
 
 INLINE __m256i rot16(__m256i x) {
