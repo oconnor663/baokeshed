@@ -1046,13 +1046,12 @@ INLINE void load_offsets16(uint64_t offset, const uint64_t deltas[16],
                                _mm512_loadu_si512((const __m512i *)&deltas[0]));
   __m512i b = _mm512_add_epi64(_mm512_set1_epi64((int64_t)offset),
                                _mm512_loadu_si512((const __m512i *)&deltas[8]));
-  __m256i a_lo = _mm512_cvtepi64_epi32(a);
-  __m256i b_lo = _mm512_cvtepi64_epi32(b);
-  __m256i a_hi = _mm512_cvtepi64_epi32(_mm512_srli_epi64(a, 32));
-  __m256i b_hi = _mm512_cvtepi64_epi32(_mm512_srli_epi64(b, 32));
-  // Note that _mm512_inserti32x8 requires AVX512DQ
-  *out_lo = _mm512_inserti64x4(_mm512_castsi256_si512(a_lo), b_lo, 1);
-  *out_hi = _mm512_inserti64x4(_mm512_castsi256_si512(a_hi), b_hi, 1);
+  __m512i lo_indexes = _mm512_setr_epi32(0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20,
+                                         22, 24, 26, 28, 30);
+  __m512i hi_indexes = _mm512_setr_epi32(1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21,
+                                         23, 25, 27, 29, 31);
+  *out_lo = _mm512_permutex2var_epi32(a, lo_indexes, b);
+  *out_hi = _mm512_permutex2var_epi32(a, hi_indexes, b);
 }
 
 void hash16_avx512(const uint8_t *const *inputs, size_t blocks,
