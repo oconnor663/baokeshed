@@ -49,6 +49,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if defined("CARGO_FEATURE_C_AVX512") {
         if is_windows {
+            // Note that a lot of versions of MSVC don't support /arch:AVX512,
+            // and they'll discard it with a warning, giving you an AVX2 build.
             build.flag("/arch:AVX512");
         } else {
             build.flag("-mavx512f");
