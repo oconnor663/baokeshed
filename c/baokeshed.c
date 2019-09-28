@@ -179,7 +179,7 @@ INLINE void hash_many(const uint8_t *const *inputs, size_t num_inputs,
 }
 
 void hasher_update(hasher *self, const void *input, size_t input_len) {
-  const uint8_t *input_bytes = (uint8_t *)input;
+  const uint8_t *input_bytes = (const uint8_t *)input;
 
   // If we already have a partial chunk, or if this is the very first chunk
   // (and it could be the root), we need to add bytes to the chunk state.
