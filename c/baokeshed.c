@@ -171,6 +171,9 @@ INLINE void hash_many(const uint8_t *const *inputs, size_t num_inputs,
 #elif __SSE4_1__
   hash_many_sse41(inputs, num_inputs, blocks, key_words, offset, offset_deltas,
                   internal_flags_start, internal_flags_end, context, out);
+#elif __ARM_NEON
+  hash_many_neon(inputs, num_inputs, blocks, key_words, offset, offset_deltas,
+                 internal_flags_start, internal_flags_end, context, out);
 #else
   hash_many_portable(inputs, num_inputs, blocks, key_words, offset,
                      offset_deltas, internal_flags_start, internal_flags_end,

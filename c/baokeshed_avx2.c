@@ -1,10 +1,8 @@
 #include "baokeshed_impl.h"
-#include <assert.h>
-#include <immintrin.h>
-#include <stdbool.h>
-#include <string.h>
 
 #ifdef __AVX2__
+
+#include <immintrin.h>
 
 #define DEGREE 8
 

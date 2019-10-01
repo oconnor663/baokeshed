@@ -11,6 +11,7 @@ c_portable = []
 c_sse41 = ["c_portable"]
 c_avx2 = ["c_portable", "c_sse41"]
 c_avx512 = ["c_portable", "c_sse41", "c_avx2"] # requires AVX512 F+VL
+c_neon = ["c_portable"]
 c_native = ["c_portable"]
 
 [dependencies]

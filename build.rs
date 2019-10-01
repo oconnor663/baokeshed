@@ -11,9 +11,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let target = env::var("TARGET")?;
     let target_components: Vec<&str> = target.split("-").collect();
-    let target_arch = target_components[0];
+    // let target_arch = target_components[0];
+    // let is_arm = target_arch.starts_with("arm") || target_arch.starts_with("aarch64");
     let target_os = target_components[2];
-    let is_x86 = target_arch == "x86_64" || target_arch == "i686";
     let is_windows = target_os == "windows";
 
     // Note that under -march=native, Clang seems to perform better than GCC.
@@ -22,10 +22,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut build = cc::Build::new();
     build.file("c/baokeshed.c");
     build.file("c/baokeshed_portable.c");
-    if is_x86 {
-        build.file("c/baokeshed_sse41.c");
-        build.file("c/baokeshed_avx2.c");
-        build.file("c/baokeshed_avx512.c");
+    build.file("c/baokeshed_sse41.c");
+    build.file("c/baokeshed_avx2.c");
+    build.file("c/baokeshed_avx512.c");
+    build.file("c/baokeshed_neon.c");
+    if !is_windows {
+        build.flag("-std=c11");
     }
     if defined("CARGO_FEATURE_C_SSE41") {
         if is_windows {
@@ -56,6 +58,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             build.flag("-mavx512f");
             build.flag("-mavx512vl");
         }
+    }
+    if defined("CARGO_FEATURE_C_NEON") {
+        build.flag("-march=armv7-a");
+        build.flag("-mfpu=neon-vfpv4");
     }
     if defined("CARGO_FEATURE_C_NATIVE") {
         if is_windows {

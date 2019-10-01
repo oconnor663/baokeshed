@@ -1,7 +1,10 @@
 #pragma once
 
+#include <assert.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #if __POPCNT__
 #include <nmmintrin.h>
@@ -184,3 +187,8 @@ void hash_many_avx512(const uint8_t *const *inputs, size_t num_inputs,
                       uint64_t offset, const uint64_t offset_deltas[17],
                       uint8_t internal_flags_start, uint8_t internal_flags_end,
                       uint32_t context, uint8_t *out);
+void hash_many_neon(const uint8_t *const *inputs, size_t num_inputs,
+                    size_t blocks, const uint32_t key_words[8], uint64_t offset,
+                    const uint64_t offset_deltas[17],
+                    uint8_t internal_flags_start, uint8_t internal_flags_end,
+                    uint32_t context, uint8_t *out);

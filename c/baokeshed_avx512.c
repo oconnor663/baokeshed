@@ -1,10 +1,8 @@
 #include "baokeshed_impl.h"
-#include <assert.h>
-#include <immintrin.h>
-#include <stdbool.h>
-#include <string.h>
 
 #if defined(__AVX512F__) && defined(__AVX512VL__)
+
+#include <immintrin.h>
 
 INLINE __m128i loadu_128(const uint8_t src[16]) {
   return _mm_loadu_si128((const __m128i *)src);

@@ -182,6 +182,20 @@ mod test {
                 context: u32,
                 out: *mut u8,
             );
+            #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
+            #[cfg(feature = "c_neon")]
+            pub fn hash_many_neon(
+                inputs: *const *const u8,
+                num_inputs: usize,
+                blocks: usize,
+                key_words: *const u32,
+                offset: u64,
+                offset_deltas: *const u64,
+                internal_flags_start: u8,
+                internal_flags_end: u8,
+                context: u32,
+                out: *mut u8,
+            );
             pub fn chunk_state_init(
                 state: *mut super::ChunkState,
                 key_words: *const u32,
@@ -415,6 +429,13 @@ mod test {
             return;
         }
         compare_hash_many_fn(ffi::hash_many_avx512);
+    }
+
+    #[test]
+    #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
+    #[cfg(feature = "c_neon")]
+    fn test_hash_many_neon() {
+        compare_hash_many_fn(ffi::hash_many_neon);
     }
 
     #[test]
