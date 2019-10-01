@@ -49,8 +49,11 @@ jobs:
     - name: cross test armv7 portable
       run: cross test --target armv7-unknown-linux-gnueabihf --features=c_portable
     - name: cross test armv7 neon
-      run: cross test --target armv7-unknown-linux-gnueabihf --features=c_neon
-    # Note that AArch64 always supports NEON.
+      run: cross test --target armv7-unknown-linux-gnueabihf --features=c_armv7neon
+    # Note that AArch64 always supports NEON, so there is no AArch64 equivalent
+    # of --features=c_armv7neon. However, the C compiler in the cross
+    # environment might not be setting __ARM_NEON, so the NEON code might not
+    # be exercised here.
     - name: cross test aarch64
       run: cross test --target aarch64-unknown-linux-gnu --features=c_portable
 
