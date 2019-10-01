@@ -351,7 +351,7 @@ void hash_many_neon(const uint8_t *const *inputs, size_t num_inputs,
 
 #else // __ARM_NEON
 
-// NEON is only enabled statically in the build, with --features=c_neon.
+// NEON is only enabled statically in the build, with --features=c_armv7neon.
 // (Rust's dynamic feature detection for ARM is not yet stable.) So we don't
 // need to provide any stubs here.
 

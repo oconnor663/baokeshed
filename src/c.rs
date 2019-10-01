@@ -183,7 +183,7 @@ mod test {
                 out: *mut u8,
             );
             #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
-            #[cfg(feature = "c_neon")]
+            #[cfg(feature = "c_armv7neon")]
             pub fn hash_many_neon(
                 inputs: *const *const u8,
                 num_inputs: usize,
@@ -433,7 +433,7 @@ mod test {
 
     #[test]
     #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
-    #[cfg(feature = "c_neon")]
+    #[cfg(feature = "c_armv7neon")]
     fn test_hash_many_neon() {
         compare_hash_many_fn(ffi::hash_many_neon);
     }

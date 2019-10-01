@@ -44,12 +44,15 @@ jobs:
         override: true
     - name: install cross
       run: cargo install cross
-    - name: cross test mips portable
+    - name: cross test mips
       run: cross test --target mips-unknown-linux-gnu --features=c_portable
-    - name: cross test arm portable
+    - name: cross test armv7 portable
       run: cross test --target armv7-unknown-linux-gnueabihf --features=c_portable
-    - name: cross test arm neon
+    - name: cross test armv7 neon
       run: cross test --target armv7-unknown-linux-gnueabihf --features=c_neon
+    # Note that AArch64 always supports NEON.
+    - name: cross test aarch64
+      run: cross test --target aarch64-unknown-linux-gnu --features=c_portable
 
   test_c_native:
     name: C implementation on Linux

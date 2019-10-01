@@ -59,9 +59,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             build.flag("-mavx512vl");
         }
     }
-    if defined("CARGO_FEATURE_C_NEON") {
-        build.flag("-march=armv7-a");
-        build.flag("-mfpu=neon-vfpv4");
+    if defined("CARGO_FEATURE_C_ARMV7NEON") {
+        // Note that AArch64 supports NEON by default under
+        // `features=c_portable`, and does not support -mpfu.
+        build.flag("-mfpu=neon");
     }
     if defined("CARGO_FEATURE_C_NATIVE") {
         if is_windows {
