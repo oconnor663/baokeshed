@@ -125,18 +125,10 @@ fn bench_ffihasher_01_long(b: &mut Bencher) {
 #[bench]
 #[cfg(feature = "c_portable")]
 fn bench_ffihasher_02_medium(b: &mut Bencher) {
-    // The C code supports AVX512, so use a larger input size for this
-    // benchmark when AVX512 is available.
-    #[allow(unused_mut)]
-    let mut len: usize = MEDIUM;
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    #[cfg(any(feature = "c_avx512", feature = "c_native"))]
-    {
-        if c::is_avx512_detected() {
-            len = std::cmp::max(len, 16 * CHUNK_LEN);
-        }
-    }
-    let mut input = RandomInput::new(b, len);
+    // The C code supports AVX512 and ARM NEON. It also doesn't do any
+    // multithreading. Always use 16 chunks as the "medium" length for
+    // benchmarking C.
+    let mut input = RandomInput::new(b, 16 * CHUNK_LEN);
     b.iter(|| {
         let mut hasher = c::Hasher::new(DEFAULT_KEY, DEFAULT_CONTEXT);
         hasher.update(input.get());
