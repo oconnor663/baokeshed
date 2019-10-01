@@ -33,7 +33,7 @@ jobs:
       run: cargo test
 
   cross:
-    name: cross test on mips
+    name: cross tests
     runs-on: ubuntu-latest
 
     steps:
@@ -44,8 +44,12 @@ jobs:
         override: true
     - name: install cross
       run: cargo install cross
-    - name: cross test
+    - name: cross test mips portable
       run: cross test --target mips-unknown-linux-gnu --features=c_portable
+    - name: cross test arm portable
+      run: cross test --target armv7-unknown-linux-gnueabihf --features=c_portable
+    - name: cross test arm neon
+      run: cross test --target armv7-unknown-linux-gnueabihf --features=c_neon
 
   test_c_native:
     name: C implementation on Linux
