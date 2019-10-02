@@ -241,8 +241,9 @@ INLINE void load_offsets(uint64_t offset, const uint64_t offset_deltas[8],
 
 void hash8_avx2(const uint8_t *const *inputs, size_t blocks,
                 const uint32_t key_words[8], uint64_t offset,
-                const uint64_t offset_deltas[8], uint8_t internal_flags_start,
-                uint8_t internal_flags_end, uint32_t context, uint8_t *out) {
+                const uint64_t offset_deltas[8], uint8_t flags,
+                uint8_t flags_start, uint8_t flags_end, uint32_t domain,
+                uint8_t *out) {
   __m256i h_vecs[8] = {
       xorv(set1(IV[0]), set1(key_words[0])),
       xorv(set1(IV[1]), set1(key_words[1])),
@@ -255,14 +256,14 @@ void hash8_avx2(const uint8_t *const *inputs, size_t blocks,
   };
   __m256i offset_low_vec, offset_high_vec;
   load_offsets(offset, offset_deltas, &offset_low_vec, &offset_high_vec);
-  const __m256i context_vec = set1(context);
-  uint8_t internal_flags = internal_flags_start;
+  const __m256i domain_vec = set1(domain);
+  uint8_t block_flags = flags | flags_start;
 
   for (size_t block = 0; block < blocks; block++) {
     if (block + 1 == blocks) {
-      internal_flags |= internal_flags_end;
+      block_flags |= flags_end;
     }
-    __m256i block_flags_vec = set1(block_flags(BLOCK_LEN, internal_flags));
+    __m256i block_flags_vec = set1(block_frame_word(BLOCK_LEN, block_flags));
     __m256i msg_vecs[16];
     transpose_msg_vecs(inputs, block * BLOCK_LEN, msg_vecs);
 
@@ -282,7 +283,7 @@ void hash8_avx2(const uint8_t *const *inputs, size_t blocks,
         xorv(set1(IV[4]), offset_low_vec),
         xorv(set1(IV[5]), offset_high_vec),
         xorv(set1(IV[6]), block_flags_vec),
-        xorv(set1(IV[7]), context_vec),
+        xorv(set1(IV[7]), domain_vec),
     };
     round_fn(v, msg_vecs, 0);
     round_fn(v, msg_vecs, 1);
@@ -300,7 +301,7 @@ void hash8_avx2(const uint8_t *const *inputs, size_t blocks,
     h_vecs[6] = xorv(v[6], v[14]);
     h_vecs[7] = xorv(v[7], v[15]);
 
-    internal_flags = 0;
+    block_flags = flags;
   }
 
   transpose_vecs(h_vecs);
@@ -318,32 +319,31 @@ void hash8_avx2(const uint8_t *const *inputs, size_t blocks,
 // function implementation.
 INLINE void hash_one_avx2(const uint8_t *input, size_t blocks,
                           const uint32_t key_words[8], uint64_t offset,
-                          uint8_t internal_flags_start,
-                          uint8_t internal_flags_end, uint32_t context,
-                          uint8_t out[OUT_LEN]) {
+                          uint8_t flags, uint8_t flags_start, uint8_t flags_end,
+                          uint32_t domain, uint8_t out[OUT_LEN]) {
   uint32_t state[8];
   init_iv(key_words, state);
-  uint8_t flags = internal_flags_start;
+  uint8_t block_flags = flags | flags_start;
   while (blocks > 0) {
     if (blocks == 1) {
-      flags |= internal_flags_end;
+      block_flags |= flags_end;
     }
-    compress_sse41(state, input, BLOCK_LEN, offset, flags, context);
+    compress_sse41(state, input, BLOCK_LEN, offset, block_flags, domain);
     input = &input[BLOCK_LEN];
     blocks -= 1;
-    flags = 0;
+    block_flags = flags;
   }
   memcpy(out, state, OUT_LEN);
 }
 
 void hash_many_avx2(const uint8_t *const *inputs, size_t num_inputs,
                     size_t blocks, const uint32_t key_words[8], uint64_t offset,
-                    const uint64_t offset_deltas[9],
-                    uint8_t internal_flags_start, uint8_t internal_flags_end,
-                    uint32_t context, uint8_t *out) {
+                    const uint64_t offset_deltas[9], uint8_t flags,
+                    uint8_t flags_start, uint8_t flags_end, uint32_t domain,
+                    uint8_t *out) {
   while (num_inputs >= DEGREE) {
-    hash8_avx2(inputs, blocks, key_words, offset, offset_deltas,
-               internal_flags_start, internal_flags_end, context, out);
+    hash8_avx2(inputs, blocks, key_words, offset, offset_deltas, flags,
+               flags_start, flags_end, domain, out);
     inputs += DEGREE;
     num_inputs -= DEGREE;
     offset += offset_deltas[DEGREE];
@@ -351,16 +351,16 @@ void hash_many_avx2(const uint8_t *const *inputs, size_t num_inputs,
   }
   // When there are too few inputs for AVX2, fall back to SSE4.1.
   while (num_inputs >= 4) {
-    hash4_sse41(inputs, blocks, key_words, offset, offset_deltas,
-                internal_flags_start, internal_flags_end, context, out);
+    hash4_sse41(inputs, blocks, key_words, offset, offset_deltas, flags,
+                flags_start, flags_end, domain, out);
     inputs += 4;
     num_inputs -= 4;
     offset += offset_deltas[4];
     out = &out[4 * OUT_LEN];
   }
   while (num_inputs > 0) {
-    hash_one_avx2(inputs[0], blocks, key_words, offset, internal_flags_start,
-                  internal_flags_end, context, out);
+    hash_one_avx2(inputs[0], blocks, key_words, offset, flags, flags_start,
+                  flags_end, domain, out);
     inputs += 1;
     num_inputs -= 1;
     offset += offset_deltas[1];
@@ -378,9 +378,9 @@ void hash_many_avx2(const uint8_t *const *inputs, size_t num_inputs,
 
 void hash_many_avx2(const uint8_t *const *inputs, size_t num_inputs,
                     size_t blocks, const uint32_t key_words[8], uint64_t offset,
-                    const uint64_t offset_deltas[9],
-                    uint8_t internal_flags_start, uint8_t internal_flags_end,
-                    uint32_t context, uint8_t *out) {
+                    const uint64_t offset_deltas[9], uint8_t flags,
+                    uint8_t flags_start, uint8_t flags_end, uint32_t domain,
+                    uint8_t *out) {
   // Suppress unused parameter warnings.
   (void)inputs;
   (void)num_inputs;
@@ -388,9 +388,10 @@ void hash_many_avx2(const uint8_t *const *inputs, size_t num_inputs,
   (void)key_words;
   (void)offset;
   (void)offset_deltas;
-  (void)internal_flags_start;
-  (void)internal_flags_end;
-  (void)context;
+  (void)flags;
+  (void)flags_start;
+  (void)flags_end;
+  (void)domain;
   (void)out;
   assert(false);
 }

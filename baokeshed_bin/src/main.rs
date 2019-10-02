@@ -9,14 +9,14 @@ use std::path::{Path, PathBuf};
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const USAGE: &str = "
-Usage: baokeshed [<inputs>...] [--length=<bytes>] [--key=<hex>] [--context=<int>]
+Usage: baokeshed [<inputs>...] [--length=<bytes>] [--key=<hex>] [--domain=<int>]
        baokeshed (--help | --version)
 ";
 
 #[derive(Debug, Deserialize)]
 struct Args {
     arg_inputs: Vec<PathBuf>,
-    flag_context: Option<u32>,
+    flag_domain: Option<u32>,
     flag_help: bool,
     flag_key: Option<String>,
     flag_length: Option<u64>,
@@ -41,14 +41,33 @@ fn main() -> Result<(), Error> {
 
 fn hash_one(
     maybe_path: &Option<PathBuf>,
-    key: &[u8; baokeshed::KEY_LEN],
-    context: u32,
+    key: Option<&[u8; baokeshed::KEY_LEN]>,
+    domain: Option<u32>,
 ) -> Result<baokeshed::Output, Error> {
     let mut input = open_input(maybe_path)?;
     if let Some(map) = maybe_memmap_input(&input)? {
-        Ok(baokeshed::hash_keyed_contextified_xof(&map, key, context))
+        let output = if let Some(domain) = domain {
+            // If a domain is supplied without a key, the key defaults to all
+            // zeros.
+            let key = key.unwrap_or(&[0; baokeshed::KEY_LEN]);
+            baokeshed::hash_keyed_with_domain_xof(&map, key, domain)
+        } else if let Some(key) = key {
+            baokeshed::hash_keyed_xof(&map, key)
+        } else {
+            baokeshed::hash_xof(&map)
+        };
+        Ok(output)
     } else {
-        let mut hasher = baokeshed::Hasher::new_keyed_contextified(key, context);
+        let mut hasher = if let Some(domain) = domain {
+            // If a domain is supplied without a key, the key defaults to all
+            // zeros.
+            let key = key.unwrap_or(&[0; baokeshed::KEY_LEN]);
+            baokeshed::Hasher::new_keyed_with_domain(key, domain)
+        } else if let Some(key) = key {
+            baokeshed::Hasher::new_keyed(key)
+        } else {
+            baokeshed::Hasher::new()
+        };
         baokeshed::copy::copy_wide(&mut input, &mut hasher)?;
         Ok(hasher.finalize_xof())
     }
@@ -66,9 +85,7 @@ fn print_hex(output: &mut baokeshed::Output, byte_length: u64) {
 
 fn hash(args: &Args) -> Result<(), Error> {
     let byte_length = args.flag_length.unwrap_or(baokeshed::OUT_LEN as u64);
-    let context = args.flag_context.unwrap_or(baokeshed::DEFAULT_CONTEXT);
-    let mut key_array = [0; baokeshed::KEY_LEN];
-    debug_assert_eq!(&key_array, baokeshed::DEFAULT_KEY);
+    let mut key = None;
     if let Some(key_str) = &args.flag_key {
         let key_bytes = hex::decode(key_str)?;
         if key_bytes.len() != baokeshed::KEY_LEN {
@@ -78,7 +95,9 @@ fn hash(args: &Args) -> Result<(), Error> {
                 key_bytes.len()
             );
         }
+        let mut key_array = [0; baokeshed::KEY_LEN];
         key_array.copy_from_slice(&key_bytes);
+        key = Some(key_array);
     }
 
     if !args.arg_inputs.is_empty() {
@@ -88,7 +107,7 @@ fn hash(args: &Args) -> Result<(), Error> {
             // As with b2sum or sha1sum, the multi-arg hash loop prints errors and keeps going.
             // This is more convenient for the user in cases like `bao hash *`, where it's common
             // that some of the inputs will error on read e.g. because they're directories.
-            match hash_one(&Some(input.clone()), &key_array, context) {
+            match hash_one(&Some(input.clone()), key.as_ref(), args.flag_domain) {
                 Ok(mut output) => {
                     print_hex(&mut output, byte_length);
                     if args.arg_inputs.len() > 1 {
@@ -107,7 +126,7 @@ fn hash(args: &Args) -> Result<(), Error> {
             std::process::exit(1);
         }
     } else {
-        let mut output = hash_one(&None, &key_array, context)?;
+        let mut output = hash_one(&None, key.as_ref(), args.flag_domain)?;
         print_hex(&mut output, byte_length);
         println!();
     }

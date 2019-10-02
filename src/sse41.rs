@@ -4,7 +4,8 @@ use core::arch::x86::*;
 use core::arch::x86_64::*;
 
 use crate::{
-    block_flags, offset_high, offset_low, Word, BLOCK_LEN, IV, MSG_SCHEDULE, OUT_LEN, WORD_BYTES,
+    block_frame_word, offset_high, offset_low, Word, BLOCK_LEN, IV, MSG_SCHEDULE, OUT_LEN,
+    WORD_BYTES,
 };
 use arrayref::{array_mut_ref, array_ref, mut_array_refs};
 
@@ -130,8 +131,8 @@ pub unsafe fn compress(
     block: &[u8; BLOCK_LEN],
     block_len: u8,
     offset: u64,
-    internal_flags: u8,
-    context: Word,
+    flags: u8,
+    domain: Word,
 ) {
     let row1 = &mut loadu(state.as_ptr().add(0) as _);
     let row2 = &mut loadu(state.as_ptr().add(4) as _);
@@ -139,8 +140,8 @@ pub unsafe fn compress(
     let row4 = &mut set4(
         IV[4] ^ offset_low(offset),
         IV[5] ^ offset_high(offset),
-        IV[6] ^ block_flags(block_len, internal_flags),
-        IV[7] ^ context,
+        IV[6] ^ block_frame_word(block_len, flags),
+        IV[7] ^ domain,
     );
 
     let m0 = loadu(block.as_ptr().add(0 * WORD_BYTES * DEGREE));
@@ -502,9 +503,10 @@ pub unsafe fn hash4(
     key: &[Word; 8],
     offset: u64,
     offset_delta: u64,
-    internal_flags_start: u8,
-    internal_flags_end: u8,
-    context: Word,
+    flags: u8,
+    flags_start: u8,
+    flags_end: u8,
+    domain: Word,
     out: &mut [u8; DEGREE * OUT_LEN],
 ) {
     let mut h_vecs = [
@@ -518,15 +520,15 @@ pub unsafe fn hash4(
         xor(set1(IV[7]), set1(key[7])),
     ];
     let (offset_low_vec, offset_high_vec) = load_offsets(offset, offset_delta);
-    let context_vec = set1(context);
-    let mut internal_flags = internal_flags_start;
+    let domain_vec = set1(domain);
+    let mut block_flags = flags | flags_start;
 
     for block in 0..blocks {
         if block + 1 == blocks {
-            internal_flags |= internal_flags_end;
+            block_flags |= flags_end;
         }
         let block_len = BLOCK_LEN as u8; // full blocks only
-        let block_flags_vec = set1(block_flags(block_len, internal_flags));
+        let block_flags_vec = set1(block_frame_word(block_len, block_flags));
         let msg_vecs = transpose_msg_vecs(inputs, block * BLOCK_LEN);
 
         // The transposed compression function. Note that inlining this
@@ -549,7 +551,7 @@ pub unsafe fn hash4(
             xor(set1(IV[4]), offset_low_vec),
             xor(set1(IV[5]), offset_high_vec),
             xor(set1(IV[6]), block_flags_vec),
-            xor(set1(IV[7]), context_vec),
+            xor(set1(IV[7]), domain_vec),
         ];
         round(&mut v, &msg_vecs, 0);
         round(&mut v, &msg_vecs, 1);
@@ -567,7 +569,7 @@ pub unsafe fn hash4(
         h_vecs[6] = xor(v[6], v[14]);
         h_vecs[7] = xor(v[7], v[15]);
 
-        internal_flags = 0;
+        block_flags = flags;
     }
 
     let squares = mut_array_refs!(&mut h_vecs, DEGREE, DEGREE);
@@ -590,28 +592,29 @@ unsafe fn hash1<A: arrayvec::Array<Item = u8>>(
     input: &A,
     key: &[Word; 8],
     offset: u64,
-    internal_flags_start: u8,
-    internal_flags_end: u8,
-    context: Word,
+    flags: u8,
+    flags_start: u8,
+    flags_end: u8,
+    domain: Word,
     out: &mut [u8; OUT_LEN],
 ) {
     debug_assert_eq!(A::CAPACITY % BLOCK_LEN, 0, "uneven blocks");
     let mut state = crate::iv(key);
-    let mut internal_flags = internal_flags_start;
+    let mut block_flags = flags | flags_start;
     let mut slice = input.as_slice();
     while slice.len() >= BLOCK_LEN {
         if slice.len() == BLOCK_LEN {
-            internal_flags |= internal_flags_end;
+            block_flags |= flags_end;
         }
         compress(
             &mut state,
             array_ref!(slice, 0, BLOCK_LEN),
             BLOCK_LEN as u8,
             offset,
-            internal_flags,
-            context,
+            block_flags,
+            domain,
         );
-        internal_flags = 0;
+        block_flags = flags;
         slice = &slice[BLOCK_LEN..];
     }
     *out = crate::bytes_from_state_words(&state);
@@ -623,9 +626,10 @@ pub unsafe fn hash_many<A: arrayvec::Array<Item = u8>>(
     key: &[Word; 8],
     mut offset: u64,
     offset_delta: u64,
-    internal_flags_start: u8,
-    internal_flags_end: u8,
-    context: Word,
+    flags: u8,
+    flags_start: u8,
+    flags_end: u8,
+    domain: Word,
     mut out: &mut [u8],
 ) {
     debug_assert!(out.len() >= inputs.len() * OUT_LEN, "out too short");
@@ -640,9 +644,10 @@ pub unsafe fn hash_many<A: arrayvec::Array<Item = u8>>(
             key,
             offset,
             offset_delta,
-            internal_flags_start,
-            internal_flags_end,
-            context,
+            flags,
+            flags_start,
+            flags_end,
+            domain,
             array_mut_ref!(out, 0, DEGREE * OUT_LEN),
         );
         inputs = &inputs[DEGREE..];
@@ -654,9 +659,10 @@ pub unsafe fn hash_many<A: arrayvec::Array<Item = u8>>(
             input,
             key,
             offset,
-            internal_flags_start,
-            internal_flags_end,
-            context,
+            flags,
+            flags_start,
+            flags_end,
+            domain,
             array_mut_ref!(output, 0, OUT_LEN),
         );
         offset += offset_delta;
@@ -713,7 +719,7 @@ mod test {
         // Use an offset with set bits in both 32-bit words.
         let offset = ((5 * CHUNK_LEN as u64) << WORD_BITS) + 6 * CHUNK_LEN as u64;
         let flags = crate::Flags::CHUNK_END | crate::Flags::ROOT;
-        let context = 23;
+        let domain = 23;
 
         let mut portable_state = initial_state;
         portable::compress(
@@ -722,7 +728,7 @@ mod test {
             block_len,
             offset as u64,
             flags.bits(),
-            context,
+            domain,
         );
 
         let mut simd_state = initial_state;
@@ -733,7 +739,7 @@ mod test {
                 block_len,
                 offset as u64,
                 flags.bits(),
-                context,
+                domain,
             );
         }
 
@@ -755,7 +761,7 @@ mod test {
             array_ref!(input, 3 * BLOCK_LEN, BLOCK_LEN),
         ];
         let key = [99, 98, 97, 96, 95, 94, 93, 92];
-        let context = 23;
+        let domain = 23;
 
         let mut portable_out = [0; DEGREE * OUT_LEN];
         for (parent, out) in parents.iter().zip(portable_out.chunks_exact_mut(OUT_LEN)) {
@@ -766,7 +772,7 @@ mod test {
                 BLOCK_LEN as u8,
                 0,
                 Flags::PARENT.bits(),
-                context,
+                domain,
             );
             out.copy_from_slice(&bytes_from_state_words(&state));
         }
@@ -785,9 +791,10 @@ mod test {
                 &key,
                 0,
                 0,
+                0,
                 Flags::PARENT.bits(),
-                Flags::empty().bits(),
-                context,
+                0,
+                domain,
                 &mut simd_out,
             );
         }
@@ -812,7 +819,7 @@ mod test {
         let key = [108, 107, 106, 105, 104, 103, 102, 101];
         // Use an offset with set bits in both 32-bit words.
         let initial_offset = ((5 * CHUNK_LEN as u64) << WORD_BITS) + 6 * CHUNK_LEN as u64;
-        let context = 23;
+        let domain = 23;
 
         let mut portable_out = [0; DEGREE * OUT_LEN];
         for ((chunk_index, chunk), out) in chunks
@@ -822,20 +829,20 @@ mod test {
         {
             let mut state = iv(&key);
             for (block_index, block) in chunk.chunks_exact(BLOCK_LEN).enumerate() {
-                let mut flags = Flags::empty();
+                let mut block_flags = Flags::PRIVATE_DOMAIN;
                 if block_index == 0 {
-                    flags |= Flags::CHUNK_START;
+                    block_flags |= Flags::CHUNK_START;
                 }
                 if block_index == CHUNK_LEN / BLOCK_LEN - 1 {
-                    flags |= Flags::CHUNK_END;
+                    block_flags |= Flags::CHUNK_END;
                 }
                 portable::compress(
                     &mut state,
                     array_ref!(block, 0, BLOCK_LEN),
                     BLOCK_LEN as u8,
                     initial_offset + (chunk_index * CHUNK_LEN) as u64,
-                    flags.bits(),
-                    context,
+                    block_flags.bits(),
+                    domain,
                 );
             }
             out.copy_from_slice(&bytes_from_state_words(&state));
@@ -855,9 +862,10 @@ mod test {
                 &key,
                 initial_offset,
                 CHUNK_LEN as u64,
+                Flags::PRIVATE_DOMAIN.bits(),
                 Flags::CHUNK_START.bits(),
                 Flags::CHUNK_END.bits(),
-                context,
+                domain,
                 &mut simd_out,
             );
         }
@@ -874,18 +882,20 @@ mod test {
         let block = [1; BLOCK_LEN];
         let key = [2; 8];
         let offset = 3 * crate::CHUNK_LEN as u64;
-        let flags_start = 4;
-        let flags_end = 5;
-        let context = 6;
+        let flags = 4;
+        let flags_start = 8;
+        let flags_end = 16;
+        let domain = 5;
 
         let mut portable_out = [0; OUT_LEN];
         portable::hash1(
             &block,
             &key,
             offset,
+            flags,
             flags_start,
             flags_end,
-            context,
+            domain,
             &mut portable_out,
         );
 
@@ -895,9 +905,10 @@ mod test {
                 &block,
                 &key,
                 offset,
+                flags,
                 flags_start,
                 flags_end,
-                context,
+                domain,
                 &mut test_out,
             );
         }
@@ -915,18 +926,20 @@ mod test {
         crate::test::paint_test_input(&mut blocks);
         let key = [2; 8];
         let offset = 3 * crate::CHUNK_LEN as u64;
-        let flags_start = 4;
-        let flags_end = 5;
-        let context = 6;
+        let flags = 4;
+        let flags_start = 8;
+        let flags_end = 16;
+        let domain = 5;
 
         let mut portable_out = [0; OUT_LEN];
         portable::hash1(
             &blocks,
             &key,
             offset,
+            flags,
             flags_start,
             flags_end,
-            context,
+            domain,
             &mut portable_out,
         );
 
@@ -936,9 +949,10 @@ mod test {
                 &blocks,
                 &key,
                 offset,
+                flags,
                 flags_start,
                 flags_end,
-                context,
+                domain,
                 &mut test_out,
             );
         }
@@ -962,11 +976,12 @@ mod test {
             inputs.push(array_ref!(input_buf, i * INPUT_LEN, INPUT_LEN));
         }
         let key = [2; 8];
-        let offset = 3 * crate::CHUNK_LEN as u64;
-        let delta = 4;
-        let flags_start = 5;
-        let flags_end = 6;
-        let context = 7;
+        let offset = 3 * CHUNK_LEN as u64;
+        let delta = CHUNK_LEN as u64;
+        let flags = 4;
+        let flags_start = 8;
+        let flags_end = 16;
+        let domain = 5;
 
         let mut portable_out = [0; OUT_LEN * NUM_INPUTS];
         portable::hash_many(
@@ -974,9 +989,10 @@ mod test {
             &key,
             offset,
             delta,
+            flags,
             flags_start,
             flags_end,
-            context,
+            domain,
             &mut portable_out,
         );
 
@@ -987,9 +1003,10 @@ mod test {
                 &key,
                 offset,
                 delta,
+                flags,
                 flags_start,
                 flags_end,
-                context,
+                domain,
                 &mut test_out,
             );
         }

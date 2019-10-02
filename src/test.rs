@@ -10,12 +10,12 @@ fn test_offset_words() {
 }
 
 #[test]
-fn test_block_flags() {
+fn test_block_frame_word() {
     let block_len: u8 = 0b1110;
     let root_flag: u8 = Flags::ROOT.bits();
     assert_eq!(root_flag, 0b10000000);
     assert_eq!(
-        block_flags(block_len, root_flag),
+        block_frame_word(block_len, root_flag),
         0b10000000000000000000000000001110
     );
 }
@@ -114,16 +114,16 @@ fn test_recursive_incremental_same() {
     for &case in TEST_CASES {
         let input = &input_buf[..case];
         let key = array_ref!(input_buf, 0, KEY_LEN);
-        let context = 23;
+        let domain = 23;
 
-        let recursive_hash = hash_keyed_contextified(input, key, context);
+        let recursive_hash = hash_keyed_with_domain(input, key, domain);
 
-        let incremental_hash_all = Hasher::new_keyed_contextified(key, context)
+        let incremental_hash_all = Hasher::new_keyed_with_domain(key, domain)
             .update(input)
             .finalize();
         assert_eq!(recursive_hash, incremental_hash_all);
 
-        let mut hasher_one_at_a_time = Hasher::new_keyed_contextified(key, context);
+        let mut hasher_one_at_a_time = Hasher::new_keyed_with_domain(key, domain);
         for &byte in input {
             hasher_one_at_a_time.update(&[byte]);
         }
@@ -138,14 +138,14 @@ fn test_zero_bytes() {
     let key_words = words_from_key_bytes(&key);
     let mut state = iv(&key_words);
     let block = [0; BLOCK_LEN];
-    let internal_flags = Flags::CHUNK_START | Flags::CHUNK_END | Flags::ROOT;
-    let context = 23;
-    portable::compress(&mut state, &block, 0, 0, internal_flags.bits(), context);
+    let flags = Flags::CHUNK_START | Flags::CHUNK_END | Flags::ROOT;
+    let domain = 23;
+    portable::compress(&mut state, &block, 0, 0, flags.bits(), domain);
     let expected_hash: Hash = bytes_from_state_words(&state).into();
 
-    assert_eq!(expected_hash, hash_keyed_contextified(&[], &key, context));
+    assert_eq!(expected_hash, hash_keyed_with_domain(&[], &key, domain));
 
-    let hasher = Hasher::new_keyed_contextified(&key, context);
+    let hasher = Hasher::new_keyed_with_domain(&key, domain);
     assert_eq!(expected_hash, hasher.finalize());
 }
 
@@ -157,19 +157,20 @@ fn test_one_byte() {
     let mut state = iv(&key_words);
     let mut block = [0; BLOCK_LEN];
     block[0] = 9;
-    let internal_flags = Flags::CHUNK_START | Flags::CHUNK_END | Flags::ROOT;
-    let context = 23;
-    portable::compress(&mut state, &block, 1, 0, internal_flags.bits(), context);
+    let flags = Flags::CHUNK_START | Flags::CHUNK_END | Flags::ROOT;
+    let domain = 23;
+    portable::compress(&mut state, &block, 1, 0, flags.bits(), domain);
     let expected_hash: Hash = bytes_from_state_words(&state).into();
 
-    assert_eq!(expected_hash, hash_keyed_contextified(&[9], &key, context));
+    assert_eq!(expected_hash, hash_keyed_with_domain(&[9], &key, domain));
 
-    let mut hasher = Hasher::new_keyed_contextified(&key, context);
+    let mut hasher = Hasher::new_keyed_with_domain(&key, domain);
     hasher.update(&[9]);
     assert_eq!(expected_hash, hasher.finalize());
 }
 
-type Construction = fn(input_buf: &[u8], key: &[u8; KEY_LEN], flags: Word) -> Hash;
+type Construction =
+    fn(input_buf: &[u8], key: &[u8; KEY_LEN], domain: Word, private_domain: bool) -> Hash;
 
 fn exercise_construction(construction: Construction, input_len: usize) {
     let mut input_buf = [0; 65536];
@@ -177,30 +178,11 @@ fn exercise_construction(construction: Construction, input_len: usize) {
     let input = &input_buf[..input_len];
 
     // Check the default parameters.
-    let expected_default_hash = construction(&input, &[0; KEY_LEN], 0);
+    let expected_default_hash = construction(&input, &[0; KEY_LEN], crate::HASH_DOMAIN, true);
     assert_eq!(expected_default_hash, hash(&input));
-    assert_eq!(expected_default_hash, hash_keyed(&input, &[0; KEY_LEN]));
-    assert_eq!(
-        expected_default_hash,
-        hash_keyed_contextified(&input, &[0; KEY_LEN], 0)
-    );
-    assert_eq!(
-        expected_default_hash,
-        hash_keyed_contextified_xof(&input, &[0; KEY_LEN], 0).read()
-    );
     assert_eq!(
         expected_default_hash,
         Hasher::new().update(&input).finalize(),
-    );
-    assert_eq!(
-        expected_default_hash,
-        Hasher::new_keyed(&[0; KEY_LEN]).update(&input).finalize(),
-    );
-    assert_eq!(
-        expected_default_hash,
-        Hasher::new_keyed_contextified(&[0; KEY_LEN], 0)
-            .update(&input)
-            .finalize(),
     );
     assert_eq!(
         expected_default_hash,
@@ -209,34 +191,40 @@ fn exercise_construction(construction: Construction, input_len: usize) {
 
     // Check non-default parameters.
     let key = array_ref!(input, 7, KEY_LEN);
-    let context = 23;
-    let expected_nondefault_hash = construction(&input, key, context);
+    let domain = 23;
+    let expected_nondefault_hash = construction(&input, key, domain, false);
     assert_eq!(
         expected_nondefault_hash,
-        hash_keyed_contextified(&input, key, context)
+        hash_keyed_with_domain(&input, key, domain)
     );
     assert_eq!(
         expected_nondefault_hash,
-        hash_keyed_contextified_xof(&input, key, context).read(),
-    );
-    assert_eq!(
-        expected_nondefault_hash,
-        Hasher::new_keyed_contextified(key, context)
+        Hasher::new_keyed_with_domain(key, domain)
             .update(&input)
             .finalize(),
     );
     assert_eq!(
         expected_nondefault_hash,
-        Hasher::new_keyed_contextified(key, context)
+        Hasher::new_keyed_with_domain(key, domain)
             .update(&input)
             .finalize_xof()
             .read(),
     );
 }
 
-fn three_blocks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], context: Word) -> Hash {
+fn three_blocks_construction(
+    input_buf: &[u8],
+    key: &[u8; KEY_LEN],
+    domain: Word,
+    private_domain: bool,
+) -> Hash {
     let key_words = words_from_key_bytes(&key);
     let mut state = iv(&key_words);
+    let flags = if private_domain {
+        Flags::PRIVATE_DOMAIN
+    } else {
+        Flags::empty()
+    };
 
     let block0 = array_ref!(input_buf, 0, BLOCK_LEN);
     portable::compress(
@@ -244,8 +232,8 @@ fn three_blocks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], context: Wor
         &block0,
         BLOCK_LEN as u8,
         0,
-        Flags::CHUNK_START.bits(),
-        context,
+        (flags | Flags::CHUNK_START).bits(),
+        domain,
     );
 
     let block1 = array_ref!(input_buf, BLOCK_LEN, BLOCK_LEN);
@@ -254,8 +242,8 @@ fn three_blocks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], context: Wor
         &block1,
         BLOCK_LEN as u8,
         0, // Subsequent blocks keep using the chunk's starting offset.
-        0, // Middle blocks have no internal flags.
-        context,
+        flags.bits(),
+        domain,
     );
 
     let mut block2 = [0; BLOCK_LEN];
@@ -265,8 +253,8 @@ fn three_blocks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], context: Wor
         &block2,
         1,
         0, // Subsequent blocks keep using the chunk's starting offset.
-        (Flags::CHUNK_END | Flags::ROOT).bits(),
-        context,
+        (flags | Flags::CHUNK_END | Flags::ROOT).bits(),
+        domain,
     );
 
     bytes_from_state_words(&state).into()
@@ -283,7 +271,8 @@ fn hash_whole_chunk_for_testing(
     chunk: &[u8],
     key: &[Word; 8],
     offset: u64,
-    context: Word,
+    flags: Flags,
+    domain: Word,
 ) -> [u8; OUT_LEN] {
     assert_eq!(chunk.len(), CHUNK_LEN);
     let blocks = CHUNK_LEN / BLOCK_LEN;
@@ -294,8 +283,8 @@ fn hash_whole_chunk_for_testing(
         array_ref!(chunk, 0, BLOCK_LEN),
         BLOCK_LEN as u8,
         offset,
-        Flags::CHUNK_START.bits(),
-        context,
+        (flags | Flags::CHUNK_START).bits(),
+        domain,
     );
     // Middle blocks.
     for block_index in 1..blocks - 1 {
@@ -304,8 +293,8 @@ fn hash_whole_chunk_for_testing(
             array_ref!(chunk, block_index * BLOCK_LEN, BLOCK_LEN),
             BLOCK_LEN as u8,
             offset,
-            0,
-            context,
+            flags.bits(),
+            domain,
         );
     }
     // Last block.
@@ -314,24 +303,36 @@ fn hash_whole_chunk_for_testing(
         array_ref!(chunk, (blocks - 1) * BLOCK_LEN, BLOCK_LEN),
         BLOCK_LEN as u8,
         offset,
-        Flags::CHUNK_END.bits(),
-        context,
+        (flags | Flags::CHUNK_END).bits(),
+        domain,
     );
     bytes_from_state_words(&state)
 }
 
-fn three_chunks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], context: Word) -> Hash {
+fn three_chunks_construction(
+    input_buf: &[u8],
+    key: &[u8; KEY_LEN],
+    domain: Word,
+    private_domain: bool,
+) -> Hash {
     let key_words = words_from_key_bytes(&key);
+    let flags = if private_domain {
+        Flags::PRIVATE_DOMAIN
+    } else {
+        Flags::empty()
+    };
 
     // The first chunk.
-    let chunk0_out = hash_whole_chunk_for_testing(&input_buf[..CHUNK_LEN], &key_words, 0, context);
+    let chunk0_out =
+        hash_whole_chunk_for_testing(&input_buf[..CHUNK_LEN], &key_words, 0, flags, domain);
 
     // The second chunk.
     let chunk1_out = hash_whole_chunk_for_testing(
         &input_buf[CHUNK_LEN..][..CHUNK_LEN],
         &key_words,
         CHUNK_LEN as u64,
-        context,
+        flags,
+        domain,
     );
 
     // The third and final chunk is one byte.
@@ -343,8 +344,8 @@ fn three_chunks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], context: Wor
         &chunk2_block,
         1,
         2 * CHUNK_LEN as u64,
-        (Flags::CHUNK_START | Flags::CHUNK_END).bits(),
-        context,
+        (flags | Flags::CHUNK_START | Flags::CHUNK_END).bits(),
+        domain,
     );
     let chunk2_out = bytes_from_state_words(&chunk2_state);
 
@@ -358,8 +359,8 @@ fn three_chunks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], context: Wor
         &left_parent_block,
         BLOCK_LEN as u8,
         0,
-        Flags::PARENT.bits(),
-        context,
+        (flags | Flags::PARENT).bits(),
+        domain,
     );
     let left_parent_out = bytes_from_state_words(&left_parent_state);
 
@@ -373,8 +374,8 @@ fn three_chunks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], context: Wor
         &root_block,
         BLOCK_LEN as u8,
         0,
-        (Flags::PARENT | Flags::ROOT).bits(),
-        context,
+        (flags | Flags::PARENT | Flags::ROOT).bits(),
+        domain,
     );
     bytes_from_state_words(&root_state).into()
 }
@@ -385,40 +386,30 @@ fn test_three_chunks() {
 }
 
 #[test]
-fn test_default_key() {
-    let default_key = &[0; KEY_LEN];
-
-    let expected_hash = hash_keyed(b"abc", &default_key);
-
-    assert_eq!(expected_hash, hash(b"abc"));
-
-    let mut hasher = Hasher::new();
-    hasher.update(b"abc");
-    assert_eq!(expected_hash, hasher.finalize());
-}
-
-#[test]
 fn test_xof_output() {
     let input = b"abc";
     let key = &[42; KEY_LEN];
-    let context = 23;
-    let expected_hash = hash_keyed_contextified(input, key, context);
+    let domain = 23;
+    let expected_hash = hash_keyed_with_domain(input, key, domain);
 
-    let mut xof = hash_keyed_contextified_xof(input, key, context);
-    let mut hasher_xof = Hasher::new_keyed_contextified(key, context)
+    let mut xof = Hasher::new_keyed_with_domain(key, domain)
         .update(input)
         .finalize_xof();
 
     let first_bytes = xof.read();
-    assert_eq!(first_bytes, hasher_xof.read());
     assert_eq!(&first_bytes, expected_hash.as_bytes());
 
     let second_bytes = xof.read();
-    assert_eq!(second_bytes, hasher_xof.read());
     assert!(first_bytes != second_bytes);
 
     let third_bytes = xof.read();
-    assert_eq!(third_bytes, hasher_xof.read());
     assert!(first_bytes != third_bytes);
     assert!(second_bytes != third_bytes);
+}
+
+#[test]
+fn test_hash_and_hash_keyed_dont_collide() {
+    let h1 = hash(b"foo");
+    let h2 = hash_keyed(b"foo", ZERO_KEY);
+    assert!(h1 != h2);
 }

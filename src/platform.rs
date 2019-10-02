@@ -56,17 +56,17 @@ impl Platform {
         block: &[u8; BLOCK_LEN],
         block_len: u8,
         offset: u64,
-        internal_flags: u8,
-        context: Word,
+        flags: u8,
+        domain: Word,
     ) {
         match self {
             Platform::Portable => {
-                portable::compress(state, block, block_len, offset, internal_flags, context)
+                portable::compress(state, block, block_len, offset, flags, domain)
             }
             // Safe because detect() checked for platform support.
             #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
             Platform::SSE41 | Platform::AVX2 => unsafe {
-                sse41::compress(state, block, block_len, offset, internal_flags, context)
+                sse41::compress(state, block, block_len, offset, flags, domain)
             },
         }
     }
@@ -77,9 +77,10 @@ impl Platform {
         key: &[Word; 8],
         offset: u64,
         offset_delta: u64,
-        internal_flags_start: u8,
-        internal_flags_end: u8,
-        context: Word,
+        flags: u8,
+        flags_start: u8,
+        flags_end: u8,
+        domain: Word,
         out: &mut [u8],
     ) {
         match self {
@@ -88,9 +89,10 @@ impl Platform {
                 key,
                 offset,
                 offset_delta,
-                internal_flags_start,
-                internal_flags_end,
-                context,
+                flags,
+                flags_start,
+                flags_end,
+                domain,
                 out,
             ),
             // Safe because detect() checked for platform support.
@@ -101,9 +103,10 @@ impl Platform {
                     key,
                     offset,
                     offset_delta,
-                    internal_flags_start,
-                    internal_flags_end,
-                    context,
+                    flags,
+                    flags_start,
+                    flags_end,
+                    domain,
                     out,
                 )
             },
@@ -115,9 +118,10 @@ impl Platform {
                     key,
                     offset,
                     offset_delta,
-                    internal_flags_start,
-                    internal_flags_end,
-                    context,
+                    flags,
+                    flags_start,
+                    flags_end,
+                    domain,
                     out,
                 )
             },

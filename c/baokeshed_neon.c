@@ -222,8 +222,9 @@ INLINE void load_offsets4(uint64_t offset, const uint64_t deltas[4],
 
 void hash4_neon(const uint8_t *const *inputs, size_t blocks,
                 const uint32_t key_words[8], uint64_t offset,
-                const uint64_t offset_deltas[4], uint8_t internal_flags_start,
-                uint8_t internal_flags_end, uint32_t context, uint8_t *out) {
+                const uint64_t offset_deltas[4], uint8_t flags,
+                uint8_t flags_start, uint8_t flags_end, uint32_t domain,
+                uint8_t *out) {
   uint32x4_t h_vecs[8] = {
       xor_128(set1_128(IV[0]), set1_128(key_words[0])),
       xor_128(set1_128(IV[1]), set1_128(key_words[1])),
@@ -236,15 +237,15 @@ void hash4_neon(const uint8_t *const *inputs, size_t blocks,
   };
   uint32x4_t offset_low_vec, offset_high_vec;
   load_offsets4(offset, offset_deltas, &offset_low_vec, &offset_high_vec);
-  const uint32x4_t context_vec = set1_128(context);
-  uint8_t internal_flags = internal_flags_start;
+  const uint32x4_t domain_vec = set1_128(domain);
+  uint8_t block_flags = flags | flags_start;
 
   for (size_t block = 0; block < blocks; block++) {
     if (block + 1 == blocks) {
-      internal_flags |= internal_flags_end;
+      block_flags |= flags_end;
     }
     uint32x4_t block_flags_vec =
-        set1_128(block_flags(BLOCK_LEN, internal_flags));
+        set1_128(block_frame_word(BLOCK_LEN, block_flags));
     uint32x4_t msg_vecs[16];
     transpose_msg_vecs4(inputs, block * BLOCK_LEN, msg_vecs);
 
@@ -264,7 +265,7 @@ void hash4_neon(const uint8_t *const *inputs, size_t blocks,
         xor_128(set1_128(IV[4]), offset_low_vec),
         xor_128(set1_128(IV[5]), offset_high_vec),
         xor_128(set1_128(IV[6]), block_flags_vec),
-        xor_128(set1_128(IV[7]), context_vec),
+        xor_128(set1_128(IV[7]), domain_vec),
     };
     round_fn4(v, msg_vecs, 0);
     round_fn4(v, msg_vecs, 1);
@@ -282,7 +283,7 @@ void hash4_neon(const uint8_t *const *inputs, size_t blocks,
     h_vecs[6] = xor_128(v[6], v[14]);
     h_vecs[7] = xor_128(v[7], v[15]);
 
-    internal_flags = 0;
+    block_flags = flags;
   }
 
   transpose_vecs_128(&h_vecs[0]);
@@ -307,41 +308,40 @@ void hash4_neon(const uint8_t *const *inputs, size_t blocks,
 
 INLINE void hash_one_neon(const uint8_t *input, size_t blocks,
                           const uint32_t key_words[8], uint64_t offset,
-                          uint8_t internal_flags_start,
-                          uint8_t internal_flags_end, uint32_t context,
-                          uint8_t out[OUT_LEN]) {
+                          uint8_t flags, uint8_t flags_start, uint8_t flags_end,
+                          uint32_t domain, uint8_t out[OUT_LEN]) {
   uint32_t state[8];
   init_iv(key_words, state);
-  uint8_t flags = internal_flags_start;
+  uint8_t block_flags = flags | flags_start;
   while (blocks > 0) {
     if (blocks == 1) {
-      flags |= internal_flags_end;
+      block_flags |= flags_end;
     }
     // TODO: use compress_neon
-    compress_portable(state, input, BLOCK_LEN, offset, flags, context);
+    compress_portable(state, input, BLOCK_LEN, offset, block_flags, domain);
     input = &input[BLOCK_LEN];
     blocks -= 1;
-    flags = 0;
+    block_flags = flags;
   }
   memcpy(out, state, OUT_LEN);
 }
 
 void hash_many_neon(const uint8_t *const *inputs, size_t num_inputs,
                     size_t blocks, const uint32_t key_words[8], uint64_t offset,
-                    const uint64_t offset_deltas[17],
-                    uint8_t internal_flags_start, uint8_t internal_flags_end,
-                    uint32_t context, uint8_t *out) {
+                    const uint64_t offset_deltas[17], uint8_t flags,
+                    uint8_t flags_start, uint8_t flags_end, uint32_t domain,
+                    uint8_t *out) {
   while (num_inputs >= 4) {
-    hash4_neon(inputs, blocks, key_words, offset, offset_deltas,
-               internal_flags_start, internal_flags_end, context, out);
+    hash4_neon(inputs, blocks, key_words, offset, offset_deltas, flags,
+               flags_start, flags_end, domain, out);
     inputs += 4;
     num_inputs -= 4;
     offset += offset_deltas[4];
     out = &out[4 * OUT_LEN];
   }
   while (num_inputs > 0) {
-    hash_one_neon(inputs[0], blocks, key_words, offset, internal_flags_start,
-                  internal_flags_end, context, out);
+    hash_one_neon(inputs[0], blocks, key_words, offset, flags, flags_start,
+                  flags_end, domain, out);
     inputs += 1;
     num_inputs -= 1;
     offset += offset_deltas[1];

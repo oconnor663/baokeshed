@@ -64,11 +64,27 @@ fn test_hash_key() {
 }
 
 #[test]
-fn test_hash_context() {
-    let context = 99;
-    let expected =
-        baokeshed::hash_keyed_contextified(b"foo", baokeshed::DEFAULT_KEY, context).to_hex();
-    let output = cmd!(baokeshed_exe(), "--context", context.to_string())
+fn test_hash_domain() {
+    let domain = 99;
+
+    let key = &[99; baokeshed::KEY_LEN];
+    let expected = baokeshed::hash_keyed_with_domain(b"foo", key, domain).to_hex();
+    let output = cmd!(
+        baokeshed_exe(),
+        "--key",
+        hex::encode(key),
+        "--domain",
+        domain.to_string()
+    )
+    .stdin_bytes("foo")
+    .read()
+    .unwrap();
+    assert_eq!(&*expected, &*output);
+
+    // Check that when no key is supplied, the key default to zeros.
+    let default_key = &[0; baokeshed::KEY_LEN];
+    let expected = baokeshed::hash_keyed_with_domain(b"foo", default_key, domain).to_hex();
+    let output = cmd!(baokeshed_exe(), "--domain", domain.to_string())
         .stdin_bytes("foo")
         .read()
         .unwrap();
