@@ -1,5 +1,5 @@
-use crate::{block_flags, offset_high, offset_low, Word, BLOCK_LEN, IV, MSG_SCHEDULE};
-use arrayref::array_refs;
+use crate::{block_flags, offset_high, offset_low, Word, BLOCK_LEN, IV, MSG_SCHEDULE, OUT_LEN};
+use arrayref::{array_mut_ref, array_ref, array_refs};
 
 #[inline(always)]
 fn words_from_block(bytes: &[u8; BLOCK_LEN]) -> [Word; 16] {
@@ -98,4 +98,212 @@ pub fn compress(
     state[5] = full_state[5] ^ full_state[13];
     state[6] = full_state[6] ^ full_state[14];
     state[7] = full_state[7] ^ full_state[15];
+}
+
+pub fn hash1<A: arrayvec::Array<Item = u8>>(
+    input: &A,
+    key: &[Word; 8],
+    offset: u64,
+    internal_flags_start: u8,
+    internal_flags_end: u8,
+    context: Word,
+    out: &mut [u8; OUT_LEN],
+) {
+    debug_assert_eq!(A::CAPACITY % BLOCK_LEN, 0, "uneven blocks");
+    let mut state = crate::iv(key);
+    let mut internal_flags = internal_flags_start;
+    let mut slice = input.as_slice();
+    while slice.len() >= BLOCK_LEN {
+        if slice.len() == BLOCK_LEN {
+            internal_flags |= internal_flags_end;
+        }
+        compress(
+            &mut state,
+            array_ref!(slice, 0, BLOCK_LEN),
+            BLOCK_LEN as u8,
+            offset,
+            internal_flags,
+            context,
+        );
+        internal_flags = 0;
+        slice = &slice[BLOCK_LEN..];
+    }
+    *out = crate::bytes_from_state_words(&state);
+}
+
+pub fn hash_many<A: arrayvec::Array<Item = u8>>(
+    inputs: &[&A],
+    key: &[Word; 8],
+    mut offset: u64,
+    offset_delta: u64,
+    internal_flags_start: u8,
+    internal_flags_end: u8,
+    context: Word,
+    out: &mut [u8],
+) {
+    debug_assert!(out.len() >= inputs.len() * OUT_LEN, "out too short");
+    for (&input, output) in inputs.iter().zip(out.chunks_exact_mut(OUT_LEN)) {
+        hash1(
+            input,
+            key,
+            offset,
+            internal_flags_start,
+            internal_flags_end,
+            context,
+            array_mut_ref!(output, 0, OUT_LEN),
+        );
+        offset += offset_delta;
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_hash1_1() {
+        let block = [1; BLOCK_LEN];
+        let key = [2; 8];
+        let offset = 3 * crate::CHUNK_LEN as u64;
+        let flags_all = 0; // currently unused
+        let flags_start = 4;
+        let flags_end = 5;
+        let context = 6;
+
+        let mut expected_state = crate::iv(&key);
+        compress(
+            &mut expected_state,
+            &block,
+            BLOCK_LEN as u8,
+            offset,
+            flags_all | flags_start | flags_end,
+            context,
+        );
+        let expected_out = crate::bytes_from_state_words(&expected_state);
+
+        let mut test_out = [0; OUT_LEN];
+        hash1(
+            &block,
+            &key,
+            offset,
+            flags_start,
+            flags_end,
+            context,
+            &mut test_out,
+        );
+
+        assert_eq!(expected_out, test_out);
+    }
+
+    #[test]
+    fn test_hash1_3() {
+        let mut blocks = [0; BLOCK_LEN * 3];
+        crate::test::paint_test_input(&mut blocks);
+        let key = [2; 8];
+        let offset = 3 * crate::CHUNK_LEN as u64;
+        let flags_all = 0; // currently unused
+        let flags_start = 4;
+        let flags_end = 5;
+        let context = 6;
+
+        let mut expected_state = crate::iv(&key);
+        compress(
+            &mut expected_state,
+            array_ref!(blocks, 0, BLOCK_LEN),
+            BLOCK_LEN as u8,
+            offset,
+            flags_all | flags_start,
+            context,
+        );
+        compress(
+            &mut expected_state,
+            array_ref!(blocks, BLOCK_LEN, BLOCK_LEN),
+            BLOCK_LEN as u8,
+            offset,
+            flags_all,
+            context,
+        );
+        compress(
+            &mut expected_state,
+            array_ref!(blocks, 2 * BLOCK_LEN, BLOCK_LEN),
+            BLOCK_LEN as u8,
+            offset,
+            flags_all | flags_end,
+            context,
+        );
+        let expected_out = crate::bytes_from_state_words(&expected_state);
+
+        let mut test_out = [0; OUT_LEN];
+        hash1(
+            &blocks,
+            &key,
+            offset,
+            flags_start,
+            flags_end,
+            context,
+            &mut test_out,
+        );
+
+        assert_eq!(expected_out, test_out);
+    }
+
+    #[test]
+    fn test_hash_many() {
+        let mut input_buf = [0; BLOCK_LEN * 9];
+        crate::test::paint_test_input(&mut input_buf);
+        let inputs = [
+            array_ref!(input_buf, 0 * BLOCK_LEN, 3 * BLOCK_LEN),
+            array_ref!(input_buf, 3 * BLOCK_LEN, 3 * BLOCK_LEN),
+            array_ref!(input_buf, 6 * BLOCK_LEN, 3 * BLOCK_LEN),
+        ];
+        let key = [2; 8];
+        let offset = 3 * crate::CHUNK_LEN as u64;
+        let delta = 4;
+        let flags_start = 5;
+        let flags_end = 6;
+        let context = 7;
+
+        let mut expected_out = [0; 3 * OUT_LEN];
+        hash1(
+            inputs[0],
+            &key,
+            offset + 0 * delta,
+            flags_start,
+            flags_end,
+            context,
+            array_mut_ref!(&mut expected_out, 0 * OUT_LEN, OUT_LEN),
+        );
+        hash1(
+            inputs[1],
+            &key,
+            offset + 1 * delta,
+            flags_start,
+            flags_end,
+            context,
+            array_mut_ref!(&mut expected_out, 1 * OUT_LEN, OUT_LEN),
+        );
+        hash1(
+            inputs[2],
+            &key,
+            offset + 2 * delta,
+            flags_start,
+            flags_end,
+            context,
+            array_mut_ref!(&mut expected_out, 2 * OUT_LEN, OUT_LEN),
+        );
+
+        let mut test_out = [0; OUT_LEN * 3];
+        hash_many(
+            &inputs,
+            &key,
+            offset,
+            delta,
+            flags_start,
+            flags_end,
+            context,
+            &mut test_out,
+        );
+
+        assert_eq!(&expected_out[..], &test_out[..]);
+    }
 }

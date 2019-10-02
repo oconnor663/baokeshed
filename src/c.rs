@@ -338,7 +338,16 @@ mod test {
         }
         let platform = crate::platform::Platform::detect();
         let mut rust_out = [0; NUM_INPUTS * OUT_LEN];
-        platform.hash_many_chunks(&chunks, &key_words, offset, context, &mut rust_out);
+        platform.hash_many(
+            &chunks,
+            &key_words,
+            offset,
+            CHUNK_LEN as u64,
+            crate::Flags::CHUNK_START.bits(),
+            crate::Flags::CHUNK_END.bits(),
+            context,
+            &mut rust_out,
+        );
 
         let mut c_out = [0; NUM_INPUTS * OUT_LEN];
         unsafe {
@@ -370,7 +379,16 @@ mod test {
         }
         let platform = crate::platform::Platform::detect();
         let mut rust_out = [0; NUM_INPUTS * OUT_LEN];
-        platform.hash_many_parents(&parents, &key_words, context, &mut rust_out);
+        platform.hash_many(
+            &parents,
+            &key_words,
+            0, // Parents have no offset.
+            0, // Parents have no offset delta.
+            crate::Flags::PARENT.bits(),
+            0, // Parents have no end flags.
+            context,
+            &mut rust_out,
+        );
 
         let mut c_out = [0; NUM_INPUTS * OUT_LEN];
         unsafe {

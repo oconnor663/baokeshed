@@ -6,7 +6,7 @@ use core::arch::x86_64::*;
 use crate::{
     block_flags, offset_high, offset_low, Word, BLOCK_LEN, IV, MSG_SCHEDULE, OUT_LEN, WORD_BYTES,
 };
-use arrayref::mut_array_refs;
+use arrayref::{array_mut_ref, array_ref, mut_array_refs};
 
 pub const DEGREE: usize = 4;
 
@@ -496,7 +496,7 @@ unsafe fn load_offsets(offset: u64, offset_delta: u64) -> (__m128i, __m128i) {
 }
 
 #[target_feature(enable = "sse4.1")]
-pub unsafe fn compress4_loop(
+pub unsafe fn hash4(
     inputs: &[*const u8; DEGREE],
     blocks: usize,
     key: &[Word; 8],
@@ -583,6 +583,84 @@ pub unsafe fn compress4_loop(
     storeu(h_vecs[6], out.as_mut_ptr().add(5 * WORD_BYTES * DEGREE));
     storeu(h_vecs[3], out.as_mut_ptr().add(6 * WORD_BYTES * DEGREE));
     storeu(h_vecs[7], out.as_mut_ptr().add(7 * WORD_BYTES * DEGREE));
+}
+
+#[target_feature(enable = "sse4.1")]
+unsafe fn hash1<A: arrayvec::Array<Item = u8>>(
+    input: &A,
+    key: &[Word; 8],
+    offset: u64,
+    internal_flags_start: u8,
+    internal_flags_end: u8,
+    context: Word,
+    out: &mut [u8; OUT_LEN],
+) {
+    debug_assert_eq!(A::CAPACITY % BLOCK_LEN, 0, "uneven blocks");
+    let mut state = crate::iv(key);
+    let mut internal_flags = internal_flags_start;
+    let mut slice = input.as_slice();
+    while slice.len() >= BLOCK_LEN {
+        if slice.len() == BLOCK_LEN {
+            internal_flags |= internal_flags_end;
+        }
+        compress(
+            &mut state,
+            array_ref!(slice, 0, BLOCK_LEN),
+            BLOCK_LEN as u8,
+            offset,
+            internal_flags,
+            context,
+        );
+        internal_flags = 0;
+        slice = &slice[BLOCK_LEN..];
+    }
+    *out = crate::bytes_from_state_words(&state);
+}
+
+#[target_feature(enable = "sse4.1")]
+pub unsafe fn hash_many<A: arrayvec::Array<Item = u8>>(
+    mut inputs: &[&A],
+    key: &[Word; 8],
+    mut offset: u64,
+    offset_delta: u64,
+    internal_flags_start: u8,
+    internal_flags_end: u8,
+    context: Word,
+    mut out: &mut [u8],
+) {
+    debug_assert!(out.len() >= inputs.len() * OUT_LEN, "out too short");
+    while inputs.len() >= DEGREE && out.len() >= DEGREE * OUT_LEN {
+        // Safe because the layout of arrays is guaranteed, and because the
+        // `blocks` count is determined statically from the argument type.
+        let input_ptrs: &[*const u8; DEGREE] = &*(inputs.as_ptr() as *const [*const u8; DEGREE]);
+        let blocks = A::CAPACITY / BLOCK_LEN;
+        hash4(
+            input_ptrs,
+            blocks,
+            key,
+            offset,
+            offset_delta,
+            internal_flags_start,
+            internal_flags_end,
+            context,
+            array_mut_ref!(out, 0, DEGREE * OUT_LEN),
+        );
+        inputs = &inputs[DEGREE..];
+        offset += DEGREE as u64 * offset_delta;
+        out = &mut out[DEGREE * OUT_LEN..];
+    }
+    for (&input, output) in inputs.iter().zip(out.chunks_exact_mut(OUT_LEN)) {
+        hash1(
+            input,
+            key,
+            offset,
+            internal_flags_start,
+            internal_flags_end,
+            context,
+            array_mut_ref!(output, 0, OUT_LEN),
+        );
+        offset += offset_delta;
+    }
 }
 
 #[cfg(test)]
@@ -701,7 +779,7 @@ mod test {
             parents[3].as_ptr(),
         ];
         unsafe {
-            compress4_loop(
+            hash4(
                 &inputs,
                 1,
                 &key,
@@ -771,7 +849,7 @@ mod test {
             chunks[3].as_ptr(),
         ];
         unsafe {
-            compress4_loop(
+            hash4(
                 &inputs,
                 CHUNK_LEN / BLOCK_LEN,
                 &key,
@@ -785,5 +863,137 @@ mod test {
         }
 
         assert_eq!(&portable_out[..], &simd_out[..]);
+    }
+
+    #[test]
+    fn test_hash1_1() {
+        if !is_x86_feature_detected!("sse4.1") {
+            return;
+        }
+
+        let block = [1; BLOCK_LEN];
+        let key = [2; 8];
+        let offset = 3 * crate::CHUNK_LEN as u64;
+        let flags_start = 4;
+        let flags_end = 5;
+        let context = 6;
+
+        let mut portable_out = [0; OUT_LEN];
+        portable::hash1(
+            &block,
+            &key,
+            offset,
+            flags_start,
+            flags_end,
+            context,
+            &mut portable_out,
+        );
+
+        let mut test_out = [0; OUT_LEN];
+        unsafe {
+            hash1(
+                &block,
+                &key,
+                offset,
+                flags_start,
+                flags_end,
+                context,
+                &mut test_out,
+            );
+        }
+
+        assert_eq!(portable_out, test_out);
+    }
+
+    #[test]
+    fn test_hash1_3() {
+        if !is_x86_feature_detected!("sse4.1") {
+            return;
+        }
+
+        let mut blocks = [0; BLOCK_LEN * 3];
+        crate::test::paint_test_input(&mut blocks);
+        let key = [2; 8];
+        let offset = 3 * crate::CHUNK_LEN as u64;
+        let flags_start = 4;
+        let flags_end = 5;
+        let context = 6;
+
+        let mut portable_out = [0; OUT_LEN];
+        portable::hash1(
+            &blocks,
+            &key,
+            offset,
+            flags_start,
+            flags_end,
+            context,
+            &mut portable_out,
+        );
+
+        let mut test_out = [0; OUT_LEN];
+        unsafe {
+            hash1(
+                &blocks,
+                &key,
+                offset,
+                flags_start,
+                flags_end,
+                context,
+                &mut test_out,
+            );
+        }
+
+        assert_eq!(portable_out, test_out);
+    }
+
+    #[test]
+    fn test_hash_many() {
+        if !is_x86_feature_detected!("sse4.1") {
+            return;
+        }
+
+        // 31 = 16 + 8 + 4 + 2 + 1
+        const INPUT_LEN: usize = 3 * BLOCK_LEN;
+        const NUM_INPUTS: usize = 31;
+        let mut input_buf = [0; NUM_INPUTS * INPUT_LEN];
+        crate::test::paint_test_input(&mut input_buf);
+        let mut inputs = ArrayVec::<[&[u8; INPUT_LEN]; NUM_INPUTS]>::new();
+        for i in 0..NUM_INPUTS {
+            inputs.push(array_ref!(input_buf, i * INPUT_LEN, INPUT_LEN));
+        }
+        let key = [2; 8];
+        let offset = 3 * crate::CHUNK_LEN as u64;
+        let delta = 4;
+        let flags_start = 5;
+        let flags_end = 6;
+        let context = 7;
+
+        let mut portable_out = [0; OUT_LEN * NUM_INPUTS];
+        portable::hash_many(
+            &inputs,
+            &key,
+            offset,
+            delta,
+            flags_start,
+            flags_end,
+            context,
+            &mut portable_out,
+        );
+
+        let mut test_out = [0; OUT_LEN * NUM_INPUTS];
+        unsafe {
+            hash_many(
+                &inputs,
+                &key,
+                offset,
+                delta,
+                flags_start,
+                flags_end,
+                context,
+                &mut test_out,
+            );
+        }
+
+        assert_eq!(&portable_out[..], &test_out[..]);
     }
 }

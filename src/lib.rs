@@ -377,7 +377,16 @@ fn hash_chunks_parallel(
     for chunk in &mut chunks_exact {
         chunks_array.push(array_ref!(chunk, 0, CHUNK_LEN));
     }
-    platform.hash_many_chunks(&chunks_array, key, offset, context, out);
+    platform.hash_many(
+        &chunks_array,
+        key,
+        offset,
+        CHUNK_LEN as u64,
+        Flags::CHUNK_START.bits(),
+        Flags::CHUNK_END.bits(),
+        context,
+        out,
+    );
 
     // Handle the remaining partial chunk, if there is one. Note that the empty
     // chunk (meaning the empty message) is a different codepath.
@@ -419,7 +428,16 @@ fn hash_parents_parallel(
     for parent in &mut parents_exact {
         parents_array.push(array_ref!(parent, 0, BLOCK_LEN));
     }
-    platform.hash_many_parents(&parents_array, key, context, out);
+    platform.hash_many(
+        &parents_array,
+        key,
+        0, // Parents have no offset.
+        0, // Parents have no offset delta.
+        Flags::PARENT.bits(),
+        0, // Parents have no end flags.
+        context,
+        out,
+    );
 
     // If there's an odd child left over, it becomes an output.
     let parents_so_far = parents_array.len();
@@ -877,10 +895,13 @@ impl Hasher {
                 // the ChunkState below.
                 break;
             }
-            self.platform.hash_many_chunks(
+            self.platform.hash_many(
                 &chunks_array,
                 &self.key,
                 self.chunk.offset,
+                CHUNK_LEN as u64,
+                Flags::CHUNK_START.bits(),
+                Flags::CHUNK_END.bits(),
                 self.context,
                 &mut out_array,
             );
