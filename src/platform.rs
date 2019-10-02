@@ -27,23 +27,11 @@ type CompressionFn = unsafe fn(
     context: Word,
 );
 
-type HashManyFn = unsafe fn(
-    inputs: &[*const u8],
-    blocks: usize,
-    key: &[Word; 8],
-    offset: u64,
-    offset_delta: u64,
-    internal_flags_start: u8,
-    internal_flags_end: u8,
-    context: Word,
-    out: &mut [u8],
-);
-
 #[derive(Clone, Copy)]
-pub struct Platform {
-    compression_fn: CompressionFn,
-    hash_many_fn: HashManyFn,
-    simd_degree: usize,
+pub enum Platform {
+    Portable,
+    SSE41,
+    AVX2,
 }
 
 impl Platform {
@@ -51,29 +39,21 @@ impl Platform {
         #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
         {
             if is_x86_feature_detected!("avx2") {
-                return Self {
-                    compression_fn: sse41::compress, // no AVX2 implementation
-                    hash_many_fn: hash_many_avx2,
-                    simd_degree: avx2::DEGREE,
-                };
+                return Platform::AVX2;
             }
             if is_x86_feature_detected!("sse4.1") {
-                return Self {
-                    compression_fn: sse41::compress,
-                    hash_many_fn: hash_many_sse41,
-                    simd_degree: sse41::DEGREE,
-                };
+                return Platform::SSE41;
             }
         }
-        Self {
-            compression_fn: portable::compress,
-            hash_many_fn: hash_many_portable,
-            simd_degree: 1,
-        }
+        Platform::Portable
     }
 
     pub fn simd_degree(&self) -> usize {
-        self.simd_degree
+        match self {
+            Platform::Portable => 1,
+            Platform::SSE41 => 4,
+            Platform::AVX2 => 8,
+        }
     }
 
     pub fn compress(
@@ -87,7 +67,63 @@ impl Platform {
     ) {
         // Safe because detect() checked for platform support.
         unsafe {
-            (self.compression_fn)(state, block, block_len, offset, internal_flags, context);
+            match self {
+                Platform::Portable => {
+                    portable::compress(state, block, block_len, offset, internal_flags, context)
+                }
+                Platform::SSE41 | Platform::AVX2 => {
+                    sse41::compress(state, block, block_len, offset, internal_flags, context)
+                }
+            }
+        }
+    }
+
+    unsafe fn hash_many(
+        &self,
+        inputs: &[*const u8],
+        blocks: usize,
+        key: &[Word; 8],
+        offset: u64,
+        offset_delta: u64,
+        internal_flags_start: u8,
+        internal_flags_end: u8,
+        context: Word,
+        out: &mut [u8],
+    ) {
+        match self {
+            Platform::Portable => hash_many_portable(
+                inputs,
+                blocks,
+                key,
+                offset,
+                offset_delta,
+                internal_flags_start,
+                internal_flags_end,
+                context,
+                out,
+            ),
+            Platform::SSE41 => hash_many_sse41(
+                inputs,
+                blocks,
+                key,
+                offset,
+                offset_delta,
+                internal_flags_start,
+                internal_flags_end,
+                context,
+                out,
+            ),
+            Platform::AVX2 => hash_many_avx2(
+                inputs,
+                blocks,
+                key,
+                offset,
+                offset_delta,
+                internal_flags_start,
+                internal_flags_end,
+                context,
+                out,
+            ),
         }
     }
 
@@ -107,7 +143,7 @@ impl Platform {
             let chunk_ptrs: &[*const u8] =
                 core::slice::from_raw_parts(chunks.as_ptr() as *const *const u8, chunks.len());
             // Safe because detect() checked for platform support.
-            (self.hash_many_fn)(
+            self.hash_many(
                 chunk_ptrs,
                 blocks,
                 key,
@@ -138,7 +174,7 @@ impl Platform {
             let parent_ptrs: &[*const u8] =
                 core::slice::from_raw_parts(parents.as_ptr() as *const *const u8, parents.len());
             // Safe because detect() checked for platform support.
-            (self.hash_many_fn)(
+            self.hash_many(
                 parent_ptrs,
                 blocks,
                 key,
