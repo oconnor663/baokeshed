@@ -162,12 +162,6 @@ void compress_sse41(uint32_t state[8], const uint8_t block[BLOCK_LEN],
 void compress_avx512(uint32_t state[8], const uint8_t block[BLOCK_LEN],
                      uint8_t block_len, uint64_t offset, uint8_t flags,
                      uint32_t domain);
-// Used by hash_many_avx2.
-void hash4_sse41(const uint8_t *const *inputs, size_t blocks,
-                 const uint32_t key_words[8], uint64_t offset,
-                 const uint64_t offset_deltas[4], uint8_t flags,
-                 uint8_t flags_start, uint8_t flags_end, uint32_t domain,
-                 uint8_t *out);
 void hash_many_portable(const uint8_t *const *inputs, size_t num_inputs,
                         size_t blocks, const uint32_t key_words[8],
                         uint64_t offset, const uint64_t offset_deltas[2],

@@ -315,27 +315,6 @@ void hash8_avx2(const uint8_t *const *inputs, size_t blocks,
   storeu(h_vecs[7], &out[7 * sizeof(__m256i)]);
 }
 
-// This is actually just duplicated from SSE4.1. There is no AVX2 compression
-// function implementation.
-INLINE void hash_one_avx2(const uint8_t *input, size_t blocks,
-                          const uint32_t key_words[8], uint64_t offset,
-                          uint8_t flags, uint8_t flags_start, uint8_t flags_end,
-                          uint32_t domain, uint8_t out[OUT_LEN]) {
-  uint32_t state[8];
-  init_iv(key_words, state);
-  uint8_t block_flags = flags | flags_start;
-  while (blocks > 0) {
-    if (blocks == 1) {
-      block_flags |= flags_end;
-    }
-    compress_sse41(state, input, BLOCK_LEN, offset, block_flags, domain);
-    input = &input[BLOCK_LEN];
-    blocks -= 1;
-    block_flags = flags;
-  }
-  memcpy(out, state, OUT_LEN);
-}
-
 void hash_many_avx2(const uint8_t *const *inputs, size_t num_inputs,
                     size_t blocks, const uint32_t key_words[8], uint64_t offset,
                     const uint64_t offset_deltas[9], uint8_t flags,
@@ -349,23 +328,8 @@ void hash_many_avx2(const uint8_t *const *inputs, size_t num_inputs,
     offset += offset_deltas[DEGREE];
     out = &out[DEGREE * OUT_LEN];
   }
-  // When there are too few inputs for AVX2, fall back to SSE4.1.
-  while (num_inputs >= 4) {
-    hash4_sse41(inputs, blocks, key_words, offset, offset_deltas, flags,
-                flags_start, flags_end, domain, out);
-    inputs += 4;
-    num_inputs -= 4;
-    offset += offset_deltas[4];
-    out = &out[4 * OUT_LEN];
-  }
-  while (num_inputs > 0) {
-    hash_one_avx2(inputs[0], blocks, key_words, offset, flags, flags_start,
-                  flags_end, domain, out);
-    inputs += 1;
-    num_inputs -= 1;
-    offset += offset_deltas[1];
-    out = &out[OUT_LEN];
-  }
+  hash_many_sse41(inputs, num_inputs, blocks, key_words, offset, offset_deltas,
+                  flags, flags_start, flags_end, domain, out);
 }
 
 #else // __AVX2__ not defined
