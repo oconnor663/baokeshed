@@ -55,22 +55,22 @@ fn round(state: &mut [Word; 16], msg: &[Word; 16], round: usize) {
 }
 
 pub fn compress(
-    state: &mut [Word; 8],
+    cv: &[Word; 8],
     block: &[u8; BLOCK_LEN],
     block_len: u8,
     offset: u64,
     flags: u8,
-) {
+) -> [Word; 16] {
     let block_words = words_from_block(block);
-    let mut full_state = [
-        state[0],
-        state[1],
-        state[2],
-        state[3],
-        state[4],
-        state[5],
-        state[6],
-        state[7],
+    let mut state = [
+        cv[0],
+        cv[1],
+        cv[2],
+        cv[3],
+        cv[4],
+        cv[5],
+        cv[6],
+        cv[7],
         IV[0],
         IV[1],
         IV[2],
@@ -81,22 +81,35 @@ pub fn compress(
         IV[7] ^ flags as Word,
     ];
 
-    round(&mut full_state, &block_words, 0);
-    round(&mut full_state, &block_words, 1);
-    round(&mut full_state, &block_words, 2);
-    round(&mut full_state, &block_words, 3);
-    round(&mut full_state, &block_words, 4);
-    round(&mut full_state, &block_words, 5);
-    round(&mut full_state, &block_words, 6);
+    round(&mut state, &block_words, 0);
+    round(&mut state, &block_words, 1);
+    round(&mut state, &block_words, 2);
+    round(&mut state, &block_words, 3);
+    round(&mut state, &block_words, 4);
+    round(&mut state, &block_words, 5);
+    round(&mut state, &block_words, 6);
 
-    state[0] = full_state[0] ^ full_state[8];
-    state[1] = full_state[1] ^ full_state[9];
-    state[2] = full_state[2] ^ full_state[10];
-    state[3] = full_state[3] ^ full_state[11];
-    state[4] = full_state[4] ^ full_state[12];
-    state[5] = full_state[5] ^ full_state[13];
-    state[6] = full_state[6] ^ full_state[14];
-    state[7] = full_state[7] ^ full_state[15];
+    state[0] ^= cv[0];
+    state[1] ^= cv[1];
+    state[2] ^= cv[2];
+    state[3] ^= cv[3];
+    state[4] ^= cv[4];
+    state[5] ^= cv[5];
+    state[6] ^= cv[6];
+    state[7] ^= cv[7];
+
+    state
+}
+
+pub fn compress_in_place(
+    cv: &mut [Word; 8],
+    block: &[u8; BLOCK_LEN],
+    block_len: u8,
+    offset: u64,
+    flags: u8,
+) {
+    let out = compress(cv, block, block_len, offset, flags);
+    *cv = *array_ref!(out, 0, 8);
 }
 
 pub fn hash1<A: arrayvec::Array<Item = u8>>(
@@ -109,15 +122,15 @@ pub fn hash1<A: arrayvec::Array<Item = u8>>(
     out: &mut [u8; OUT_LEN],
 ) {
     debug_assert_eq!(A::CAPACITY % BLOCK_LEN, 0, "uneven blocks");
-    let mut state = crate::iv(key);
+    let mut cv = crate::iv(key);
     let mut block_flags = flags | flags_start;
     let mut slice = input.as_slice();
     while slice.len() >= BLOCK_LEN {
         if slice.len() == BLOCK_LEN {
             block_flags |= flags_end;
         }
-        compress(
-            &mut state,
+        compress_in_place(
+            &mut cv,
             array_ref!(slice, 0, BLOCK_LEN),
             BLOCK_LEN as u8,
             offset,
@@ -126,7 +139,7 @@ pub fn hash1<A: arrayvec::Array<Item = u8>>(
         block_flags = flags;
         slice = &slice[BLOCK_LEN..];
     }
-    *out = crate::bytes_from_state_words(&state);
+    *out = crate::bytes_from_state_words(&cv);
 }
 
 pub fn hash_many<A: arrayvec::Array<Item = u8>>(
@@ -155,7 +168,7 @@ pub fn hash_many<A: arrayvec::Array<Item = u8>>(
 }
 
 #[cfg(test)]
-mod test {
+pub mod test {
     use super::*;
 
     #[test]
@@ -168,7 +181,7 @@ mod test {
         let flags_end = 16;
 
         let mut expected_state = crate::iv(&key);
-        compress(
+        compress_in_place(
             &mut expected_state,
             &block,
             BLOCK_LEN as u8,
@@ -202,21 +215,21 @@ mod test {
         let flags_end = 16;
 
         let mut expected_state = crate::iv(&key);
-        compress(
+        compress_in_place(
             &mut expected_state,
             array_ref!(blocks, 0, BLOCK_LEN),
             BLOCK_LEN as u8,
             offset,
             flags | flags_start,
         );
-        compress(
+        compress_in_place(
             &mut expected_state,
             array_ref!(blocks, BLOCK_LEN, BLOCK_LEN),
             BLOCK_LEN as u8,
             offset,
             flags,
         );
-        compress(
+        compress_in_place(
             &mut expected_state,
             array_ref!(blocks, 2 * BLOCK_LEN, BLOCK_LEN),
             BLOCK_LEN as u8,

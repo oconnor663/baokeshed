@@ -246,8 +246,10 @@ void compress_sse41(uint32_t state[8], const uint8_t block[BLOCK_LEN],
   g2(&row1, &row2, &row3, &row4, buf);
   undiagonalize(&row1, &row3, &row4);
 
-  storeu(xorv(row1, row3), (uint8_t *)&state[0]);
-  storeu(xorv(row2, row4), (uint8_t *)&state[4]);
+  row1 = xorv(row1, loadu((uint8_t *)&state[0]));
+  row2 = xorv(row2, loadu((uint8_t *)&state[4]));
+  storeu(row1, (uint8_t *)&state[0]);
+  storeu(row2, (uint8_t *)&state[4]);
 }
 
 INLINE void round_fn(__m128i v[16], __m128i m[16], size_t r) {
@@ -475,14 +477,14 @@ void hash4_sse41(const uint8_t *const *inputs, size_t blocks,
     round_fn(v, msg_vecs, 4);
     round_fn(v, msg_vecs, 5);
     round_fn(v, msg_vecs, 6);
-    h_vecs[0] = xorv(v[0], v[8]);
-    h_vecs[1] = xorv(v[1], v[9]);
-    h_vecs[2] = xorv(v[2], v[10]);
-    h_vecs[3] = xorv(v[3], v[11]);
-    h_vecs[4] = xorv(v[4], v[12]);
-    h_vecs[5] = xorv(v[5], v[13]);
-    h_vecs[6] = xorv(v[6], v[14]);
-    h_vecs[7] = xorv(v[7], v[15]);
+    h_vecs[0] = xorv(h_vecs[0], v[0]);
+    h_vecs[1] = xorv(h_vecs[1], v[1]);
+    h_vecs[2] = xorv(h_vecs[2], v[2]);
+    h_vecs[3] = xorv(h_vecs[3], v[3]);
+    h_vecs[4] = xorv(h_vecs[4], v[4]);
+    h_vecs[5] = xorv(h_vecs[5], v[5]);
+    h_vecs[6] = xorv(h_vecs[6], v[6]);
+    h_vecs[7] = xorv(h_vecs[7], v[7]);
 
     block_flags = flags;
   }

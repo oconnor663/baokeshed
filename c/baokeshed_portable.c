@@ -62,14 +62,14 @@ void compress_portable(uint32_t state[8], const uint8_t block[BLOCK_LEN],
   round_fn(&full_state[0], &block_words[0], 5);
   round_fn(&full_state[0], &block_words[0], 6);
 
-  state[0] = full_state[0] ^ full_state[8];
-  state[1] = full_state[1] ^ full_state[9];
-  state[2] = full_state[2] ^ full_state[10];
-  state[3] = full_state[3] ^ full_state[11];
-  state[4] = full_state[4] ^ full_state[12];
-  state[5] = full_state[5] ^ full_state[13];
-  state[6] = full_state[6] ^ full_state[14];
-  state[7] = full_state[7] ^ full_state[15];
+  state[0] ^= full_state[0];
+  state[1] ^= full_state[1];
+  state[2] ^= full_state[2];
+  state[3] ^= full_state[3];
+  state[4] ^= full_state[4];
+  state[5] ^= full_state[5];
+  state[6] ^= full_state[6];
+  state[7] ^= full_state[7];
 }
 
 INLINE void hash_one_portable(const uint8_t *input, size_t blocks,

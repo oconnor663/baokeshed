@@ -160,9 +160,9 @@ fn bench_ffihasher_04_block(b: &mut Bencher) {
 
 #[bench]
 fn bench_xof(b: &mut Bencher) {
-    b.bytes = OUT_LEN as u64;
     let hasher = Hasher::new();
     let mut xof = hasher.finalize_xof();
+    b.bytes = xof.read().len() as u64;
     b.iter(|| xof.read());
 }
 

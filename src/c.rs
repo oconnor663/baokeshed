@@ -256,7 +256,7 @@ mod test {
         let flags = Flags::CHUNK_END | Flags::ROOT;
 
         let mut rust_state = initial_state;
-        crate::portable::compress(
+        crate::portable::compress_in_place(
             &mut rust_state,
             &block,
             block_len,
@@ -474,7 +474,7 @@ mod test {
                 let mut rust_chunk = crate::ChunkState::new(&key_words, offset);
                 let platform = crate::platform::Platform::detect();
                 rust_chunk.update(input, flags, platform);
-                let rust_out = rust_chunk.finalize(is_root, flags, platform).read();
+                let rust_out = rust_chunk.finalize(is_root, flags, platform).to_hash();
 
                 // First test at once.
                 let is_root_bool = is_root.flag().bits() > 0;
@@ -505,7 +505,7 @@ mod test {
             dbg!(case);
             let input = &input_buf[..case];
 
-            let rust_hash = crate::hash_internal(input, &key, Flags::KEYED_HASH).read();
+            let rust_hash = crate::hash_internal(input, &key, Flags::KEYED_HASH).to_hash();
 
             // First test at once.
             let mut c_hasher = super::Hasher::new(&key, Flags::KEYED_HASH.bits());

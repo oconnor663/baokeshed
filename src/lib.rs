@@ -235,7 +235,7 @@ impl fmt::Debug for Hash {
 /// internally.
 #[derive(Clone)]
 pub struct Output {
-    state: [Word; 8],
+    cv: [Word; 8],
     block: [u8; BLOCK_LEN],
     block_len: u8,
     offset: u64,
@@ -244,17 +244,41 @@ pub struct Output {
 }
 
 impl Output {
-    pub fn read(&mut self) -> [u8; OUT_LEN] {
-        let mut state_copy = self.state;
-        self.platform.compress(
-            &mut state_copy,
+    pub fn read(&mut self) -> [u8; 2 * OUT_LEN] {
+        let out = self.platform.compress(
+            &self.cv,
             &self.block,
             self.block_len,
             self.offset,
             self.flags.bits(),
         );
-        self.offset += OUT_LEN as u64;
-        bytes_from_state_words(&state_copy)
+        self.offset += 2 * OUT_LEN as u64;
+        let mut bytes = [0; 2 * OUT_LEN];
+        {
+            let refs = mut_array_refs!(&mut bytes, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4);
+            *refs.0 = out[0].to_le_bytes();
+            *refs.1 = out[1].to_le_bytes();
+            *refs.2 = out[2].to_le_bytes();
+            *refs.3 = out[3].to_le_bytes();
+            *refs.4 = out[4].to_le_bytes();
+            *refs.5 = out[5].to_le_bytes();
+            *refs.6 = out[6].to_le_bytes();
+            *refs.7 = out[7].to_le_bytes();
+            *refs.8 = out[8].to_le_bytes();
+            *refs.9 = out[9].to_le_bytes();
+            *refs.10 = out[10].to_le_bytes();
+            *refs.11 = out[11].to_le_bytes();
+            *refs.12 = out[12].to_le_bytes();
+            *refs.13 = out[13].to_le_bytes();
+            *refs.14 = out[14].to_le_bytes();
+            *refs.15 = out[15].to_le_bytes();
+        }
+        bytes
+    }
+
+    pub fn to_hash(mut self) -> Hash {
+        let out = self.read();
+        (*array_ref!(out, 0, OUT_LEN)).into()
     }
 }
 
@@ -269,13 +293,13 @@ impl fmt::Debug for Output {
 #[doc(hidden)]
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 pub unsafe fn compress_sse41(
-    state: &mut [Word; 8],
+    state: &[Word; 8],
     block: &[u8; BLOCK_LEN],
     block_len: u8,
     offset: u64,
     flags: u8,
-) {
-    sse41::compress(state, block, block_len, offset, flags);
+) -> [Word; 16] {
+    sse41::compress(state, block, block_len, offset, flags)
 }
 
 // =======================================================================
@@ -301,13 +325,13 @@ fn hash_one_chunk(
     if let IsRoot::Root = is_root {
         debug_assert_eq!(offset, 0, "root chunk must be offset 0");
     }
-    let mut state = iv(key);
+    let mut cv = iv(key);
     let mut block_flags = flags | Flags::CHUNK_START;
     let mut block_offset = 0;
     while block_offset + BLOCK_LEN <= chunk.len() {
         if block_offset + BLOCK_LEN == chunk.len() {
             return Output {
-                state,
+                cv,
                 block: *array_ref!(chunk, block_offset, BLOCK_LEN),
                 block_len: BLOCK_LEN as u8,
                 offset,
@@ -315,8 +339,8 @@ fn hash_one_chunk(
                 platform,
             };
         }
-        platform.compress(
-            &mut state,
+        platform.compress_in_place(
+            &mut cv,
             array_ref!(chunk, block_offset, BLOCK_LEN),
             BLOCK_LEN as u8,
             offset,
@@ -333,7 +357,7 @@ fn hash_one_chunk(
     let mut last_block = [0; BLOCK_LEN];
     last_block[..block_len].copy_from_slice(&chunk[block_offset..]);
     Output {
-        state,
+        cv,
         block: last_block,
         block_len: block_len as u8,
         offset,
@@ -378,7 +402,7 @@ fn hash_chunks_parallel(
     // chunk (meaning the empty message) is a different codepath.
     let chunks_so_far = chunks_array.len();
     if !chunks_exact.remainder().is_empty() {
-        let mut output = hash_one_chunk(
+        let output = hash_one_chunk(
             chunks_exact.remainder(),
             key,
             offset + chunks_so_far as u64 * CHUNK_LEN as u64,
@@ -386,7 +410,7 @@ fn hash_chunks_parallel(
             flags,
             platform,
         );
-        *array_mut_ref!(out, chunks_so_far * OUT_LEN, OUT_LEN) = output.read();
+        *array_mut_ref!(out, chunks_so_far * OUT_LEN, OUT_LEN) = output.to_hash().into();
         chunks_so_far + 1
     } else {
         chunks_so_far
@@ -543,7 +567,7 @@ fn condense_root(
         children = &mut children[..out_n * OUT_LEN];
     }
     Output {
-        state: iv(key),
+        cv: iv(key),
         block: *array_ref!(children, 0, BLOCK_LEN),
         block_len: BLOCK_LEN as u8,
         offset: 0,
@@ -571,7 +595,7 @@ fn hash_internal(input: &[u8], key_bytes: &[u8; KEY_LEN], flags: Flags) -> Outpu
 
 /// The default hash function.
 pub fn hash(input: &[u8]) -> Hash {
-    hash_xof(input).read().into()
+    hash_xof(input).to_hash()
 }
 
 /// The default hash function, returning an extensible output.
@@ -583,7 +607,7 @@ pub fn hash_xof(input: &[u8]) -> Output {
 ///
 /// This is domain separated from `hash`.
 pub fn keyed_hash(input: &[u8], key: &[u8; KEY_LEN]) -> Hash {
-    keyed_hash_xof(input, key).read().into()
+    keyed_hash_xof(input, key).to_hash()
 }
 
 /// The hash function with a key, returning an extensible output.
@@ -655,7 +679,7 @@ impl ChunkState {
             if !input.is_empty() {
                 debug_assert_eq!(self.buf_len as usize, BLOCK_LEN);
                 let block_flags = flags | self.maybe_chunk_start_flag(); // borrowck
-                platform.compress(
+                platform.compress_in_place(
                     &mut self.state,
                     &self.buf,
                     BLOCK_LEN as u8,
@@ -671,7 +695,7 @@ impl ChunkState {
         while input.len() > BLOCK_LEN {
             debug_assert_eq!(self.buf_len, 0);
             let block_flags = flags | self.maybe_chunk_start_flag(); // borrowck
-            platform.compress(
+            platform.compress_in_place(
                 &mut self.state,
                 array_ref!(input, 0, BLOCK_LEN),
                 BLOCK_LEN as u8,
@@ -699,7 +723,7 @@ impl ChunkState {
         }
         let block_flags = flags | self.maybe_chunk_start_flag() | Flags::CHUNK_END | is_root.flag();
         Output {
-            state: self.state,
+            cv: self.state,
             block: self.buf,
             block_len: self.buf_len,
             offset: self.offset,
@@ -728,7 +752,7 @@ fn hash_one_parent(
     *refs.0 = *left_child;
     *refs.1 = *right_child;
     Output {
-        state: iv(key),
+        cv: iv(key),
         block,
         block_len: BLOCK_LEN as u8,
         offset: 0,
@@ -802,7 +826,7 @@ impl Hasher {
     fn merge_parent(&mut self) {
         let num_subtrees = self.subtree_hashes.len();
         debug_assert!(num_subtrees >= 2);
-        let hash = hash_one_parent(
+        let parent_hash = hash_one_parent(
             &self.subtree_hashes[num_subtrees - 2],
             &self.subtree_hashes[num_subtrees - 1],
             &self.key,
@@ -810,8 +834,8 @@ impl Hasher {
             self.flags,
             self.platform,
         )
-        .read();
-        self.subtree_hashes[num_subtrees - 2] = hash;
+        .to_hash();
+        self.subtree_hashes[num_subtrees - 2] = parent_hash.into();
         self.subtree_hashes.truncate(num_subtrees - 1)
     }
 
@@ -852,8 +876,8 @@ impl Hasher {
                 let chunk_hash = self
                     .chunk
                     .finalize(IsRoot::NotRoot, self.flags, self.platform)
-                    .read();
-                self.push_chunk_hash(&chunk_hash, self.chunk.offset);
+                    .to_hash();
+                self.push_chunk_hash(chunk_hash.as_bytes(), self.chunk.offset);
                 self.chunk = ChunkState::new(&self.key, self.chunk.offset + CHUNK_LEN as u64);
             } else {
                 return self;
@@ -925,7 +949,7 @@ impl Hasher {
     /// This method is idempotent, and calling it multiple times will give the
     /// same result. It's also possible to add more input and finalize again.
     pub fn finalize(&self) -> Hash {
-        self.finalize_xof().read().into()
+        self.finalize_xof().to_hash()
     }
 
     /// Finalize the root hash, returning an extensible output.
@@ -951,14 +975,15 @@ impl Hasher {
         // If there are no bytes in the ChunkState, we'll merge what's already
         // in the stack. In this case it's fine if there are unmerged chunks on
         // top, because we'll merge them with each other.
-        let mut working_hash;
-        let mut next_subtree_index;
+        let mut working_hash: [u8; OUT_LEN];
+        let mut next_subtree_index: usize;
         if self.chunk.len() > 0 {
             debug_assert!(!self.needs_merge(self.chunk.offset));
             working_hash = self
                 .chunk
                 .finalize(IsRoot::NotRoot, self.flags, self.platform)
-                .read();
+                .to_hash()
+                .into();
             next_subtree_index = self.subtree_hashes.len() - 1;
         } else {
             debug_assert!(self.subtree_hashes.len() >= 2);
@@ -971,7 +996,7 @@ impl Hasher {
             } else {
                 IsRoot::NotRoot
             };
-            let mut output = hash_one_parent(
+            let output = hash_one_parent(
                 &self.subtree_hashes[next_subtree_index],
                 &working_hash,
                 &self.key,
@@ -982,7 +1007,7 @@ impl Hasher {
             if next_subtree_index == 0 {
                 return output;
             }
-            working_hash = output.read();
+            working_hash = output.to_hash().into();
             next_subtree_index -= 1;
         }
     }

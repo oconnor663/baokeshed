@@ -125,7 +125,7 @@ fn test_zero_bytes() {
     let mut state = iv(&key_words);
     let block = [0; BLOCK_LEN];
     let flags = Flags::CHUNK_START | Flags::CHUNK_END | Flags::ROOT | Flags::KEYED_HASH;
-    portable::compress(&mut state, &block, 0, 0, flags.bits());
+    portable::compress_in_place(&mut state, &block, 0, 0, flags.bits());
     let expected_hash: Hash = bytes_from_state_words(&state).into();
 
     assert_eq!(expected_hash, keyed_hash(&[], &key,));
@@ -143,7 +143,7 @@ fn test_one_byte() {
     let mut block = [0; BLOCK_LEN];
     block[0] = 9;
     let flags = Flags::CHUNK_START | Flags::CHUNK_END | Flags::ROOT | Flags::KEYED_HASH;
-    portable::compress(&mut state, &block, 1, 0, flags.bits());
+    portable::compress_in_place(&mut state, &block, 1, 0, flags.bits());
     let expected_hash: Hash = bytes_from_state_words(&state).into();
 
     assert_eq!(expected_hash, keyed_hash(&[9], &key,));
@@ -169,7 +169,7 @@ fn exercise_construction(construction: Construction, input_len: usize) {
     );
     assert_eq!(
         expected_default_hash,
-        Hasher::new().update(&input).finalize_xof().read(),
+        Hasher::new().update(&input).finalize_xof().to_hash(),
     );
 
     // Check the keyed hash.
@@ -182,13 +182,16 @@ fn exercise_construction(construction: Construction, input_len: usize) {
     );
     assert_eq!(
         expected_keyed_hash,
-        Hasher::new_keyed(key).update(&input).finalize_xof().read(),
+        Hasher::new_keyed(key)
+            .update(&input)
+            .finalize_xof()
+            .to_hash(),
     );
 
     // Check the KDF.
     let key = array_ref!(input, 7, KEY_LEN);
     let expected_kdf_out = construction(&input, key, Flags::DERIVE_KEY);
-    assert_eq!(expected_kdf_out, derive_key(key, &input).read());
+    assert_eq!(expected_kdf_out, derive_key(key, &input).to_hash());
     assert_eq!(
         expected_kdf_out,
         Hasher::new_derive_key(key).update(&input).finalize(),
@@ -198,7 +201,7 @@ fn exercise_construction(construction: Construction, input_len: usize) {
         Hasher::new_derive_key(key)
             .update(&input)
             .finalize_xof()
-            .read(),
+            .to_hash(),
     );
 }
 
@@ -207,7 +210,7 @@ fn three_blocks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], flags: Flags
     let mut state = iv(&key_words);
 
     let block0 = array_ref!(input_buf, 0, BLOCK_LEN);
-    portable::compress(
+    portable::compress_in_place(
         &mut state,
         &block0,
         BLOCK_LEN as u8,
@@ -216,7 +219,7 @@ fn three_blocks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], flags: Flags
     );
 
     let block1 = array_ref!(input_buf, BLOCK_LEN, BLOCK_LEN);
-    portable::compress(
+    portable::compress_in_place(
         &mut state,
         &block1,
         BLOCK_LEN as u8,
@@ -226,7 +229,7 @@ fn three_blocks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], flags: Flags
 
     let mut block2 = [0; BLOCK_LEN];
     block2[0] = input_buf[2 * BLOCK_LEN];
-    portable::compress(
+    portable::compress_in_place(
         &mut state,
         &block2,
         1,
@@ -254,7 +257,7 @@ fn hash_whole_chunk_for_testing(
     let blocks = CHUNK_LEN / BLOCK_LEN;
     let mut state = iv(&key);
     // First block.
-    portable::compress(
+    portable::compress_in_place(
         &mut state,
         array_ref!(chunk, 0, BLOCK_LEN),
         BLOCK_LEN as u8,
@@ -263,7 +266,7 @@ fn hash_whole_chunk_for_testing(
     );
     // Middle blocks.
     for block_index in 1..blocks - 1 {
-        portable::compress(
+        portable::compress_in_place(
             &mut state,
             array_ref!(chunk, block_index * BLOCK_LEN, BLOCK_LEN),
             BLOCK_LEN as u8,
@@ -272,7 +275,7 @@ fn hash_whole_chunk_for_testing(
         );
     }
     // Last block.
-    portable::compress(
+    portable::compress_in_place(
         &mut state,
         array_ref!(chunk, (blocks - 1) * BLOCK_LEN, BLOCK_LEN),
         BLOCK_LEN as u8,
@@ -300,7 +303,7 @@ fn three_chunks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], flags: Flags
     let mut chunk2_block = [0; BLOCK_LEN];
     chunk2_block[0] = input_buf[2 * CHUNK_LEN];
     let mut chunk2_state = iv(&key_words);
-    portable::compress(
+    portable::compress_in_place(
         &mut chunk2_state,
         &chunk2_block,
         1,
@@ -314,7 +317,7 @@ fn three_chunks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], flags: Flags
     let mut left_parent_block = [0; BLOCK_LEN];
     left_parent_block[..OUT_LEN].copy_from_slice(&chunk0_out);
     left_parent_block[OUT_LEN..].copy_from_slice(&chunk1_out);
-    portable::compress(
+    portable::compress_in_place(
         &mut left_parent_state,
         &left_parent_block,
         BLOCK_LEN as u8,
@@ -328,7 +331,7 @@ fn three_chunks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], flags: Flags
     let mut root_block = [0; BLOCK_LEN];
     root_block[..OUT_LEN].copy_from_slice(&left_parent_out);
     root_block[OUT_LEN..].copy_from_slice(&chunk2_out);
-    portable::compress(
+    portable::compress_in_place(
         &mut root_state,
         &root_block,
         BLOCK_LEN as u8,
@@ -352,21 +355,21 @@ fn test_xof_output() {
     let mut xof = Hasher::new_keyed(key).update(input).finalize_xof();
 
     let first_bytes = xof.read();
-    assert_eq!(&first_bytes, expected_hash.as_bytes());
+    assert_eq!(&first_bytes[..OUT_LEN], expected_hash.as_bytes());
 
     let second_bytes = xof.read();
-    assert!(first_bytes != second_bytes);
+    assert!(&first_bytes[..] != &second_bytes[..]);
 
     let third_bytes = xof.read();
-    assert!(first_bytes != third_bytes);
-    assert!(second_bytes != third_bytes);
+    assert!(&first_bytes[..] != &third_bytes[..]);
+    assert!(&second_bytes[..] != &third_bytes[..]);
 }
 
 #[test]
 fn test_domain_separation() {
     let h1 = hash(b"foo");
     let h2 = keyed_hash(b"foo", ZERO_KEY);
-    let h3 = derive_key(ZERO_KEY, b"foo").read();
+    let h3 = derive_key(ZERO_KEY, b"foo").to_hash();
     assert!(h1 != h2);
     assert!(h2 != h3);
 }

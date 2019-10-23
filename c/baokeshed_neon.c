@@ -272,14 +272,14 @@ void hash4_neon(const uint8_t *const *inputs, size_t blocks,
     round_fn4(v, msg_vecs, 4);
     round_fn4(v, msg_vecs, 5);
     round_fn4(v, msg_vecs, 6);
-    h_vecs[0] = xor_128(v[0], v[8]);
-    h_vecs[1] = xor_128(v[1], v[9]);
-    h_vecs[2] = xor_128(v[2], v[10]);
-    h_vecs[3] = xor_128(v[3], v[11]);
-    h_vecs[4] = xor_128(v[4], v[12]);
-    h_vecs[5] = xor_128(v[5], v[13]);
-    h_vecs[6] = xor_128(v[6], v[14]);
-    h_vecs[7] = xor_128(v[7], v[15]);
+    h_vecs[0] = xor_128(h_vecs[0], v[0]);
+    h_vecs[1] = xor_128(h_vecs[1], v[1]);
+    h_vecs[2] = xor_128(h_vecs[2], v[2]);
+    h_vecs[3] = xor_128(h_vecs[3], v[3]);
+    h_vecs[4] = xor_128(h_vecs[4], v[4]);
+    h_vecs[5] = xor_128(h_vecs[5], v[5]);
+    h_vecs[6] = xor_128(h_vecs[6], v[6]);
+    h_vecs[7] = xor_128(h_vecs[7], v[7]);
 
     block_flags = flags;
   }

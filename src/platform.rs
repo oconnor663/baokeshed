@@ -1,4 +1,5 @@
 use crate::{portable, Word, BLOCK_LEN};
+use arrayref::array_ref;
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 use crate::{avx2, sse41};
@@ -52,20 +53,32 @@ impl Platform {
 
     pub fn compress(
         &self,
+        cv: &[Word; 8],
+        block: &[u8; BLOCK_LEN],
+        block_len: u8,
+        offset: u64,
+        flags: u8,
+    ) -> [Word; 16] {
+        match self {
+            Platform::Portable => portable::compress(cv, block, block_len, offset, flags),
+            // Safe because detect() checked for platform support.
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+            Platform::SSE41 | Platform::AVX2 => unsafe {
+                sse41::compress(cv, block, block_len, offset, flags)
+            },
+        }
+    }
+
+    pub fn compress_in_place(
+        &self,
         state: &mut [Word; 8],
         block: &[u8; BLOCK_LEN],
         block_len: u8,
         offset: u64,
         flags: u8,
     ) {
-        match self {
-            Platform::Portable => portable::compress(state, block, block_len, offset, flags),
-            // Safe because detect() checked for platform support.
-            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-            Platform::SSE41 | Platform::AVX2 => unsafe {
-                sse41::compress(state, block, block_len, offset, flags)
-            },
-        }
+        let out = self.compress(state, block, block_len, offset, flags);
+        *state = *array_ref!(out, 0, 8);
     }
 
     pub fn hash_many<A: arrayvec::Array<Item = u8>>(
