@@ -116,7 +116,7 @@ fn bench_hasher_04_block(b: &mut Bencher) {
 fn bench_ffihasher_01_long(b: &mut Bencher) {
     let mut input = RandomInput::new(b, LONG);
     b.iter(|| {
-        let mut hasher = c::Hasher::new(&[0; KEY_LEN], 0, false);
+        let mut hasher = c::Hasher::new(&[0; KEY_LEN], 0);
         hasher.update(input.get());
         hasher.finalize()
     });
@@ -130,7 +130,7 @@ fn bench_ffihasher_02_medium(b: &mut Bencher) {
     // benchmarking C.
     let mut input = RandomInput::new(b, 16 * CHUNK_LEN);
     b.iter(|| {
-        let mut hasher = c::Hasher::new(&[0; KEY_LEN], 0, false);
+        let mut hasher = c::Hasher::new(&[0; KEY_LEN], 0);
         hasher.update(input.get());
         hasher.finalize()
     });
@@ -141,7 +141,7 @@ fn bench_ffihasher_02_medium(b: &mut Bencher) {
 fn bench_ffihasher_03_chunk(b: &mut Bencher) {
     let mut input = RandomInput::new(b, CHUNK_LEN);
     b.iter(|| {
-        let mut hasher = c::Hasher::new(&[0; KEY_LEN], 0, false);
+        let mut hasher = c::Hasher::new(&[0; KEY_LEN], 0);
         hasher.update(input.get());
         hasher.finalize()
     });
@@ -152,7 +152,7 @@ fn bench_ffihasher_03_chunk(b: &mut Bencher) {
 fn bench_ffihasher_04_block(b: &mut Bencher) {
     let mut input = RandomInput::new(b, BLOCK_LEN);
     b.iter(|| {
-        let mut hasher = c::Hasher::new(&[0; KEY_LEN], 0, false);
+        let mut hasher = c::Hasher::new(&[0; KEY_LEN], 0);
         hasher.update(input.get());
         hasher.finalize()
     });
@@ -176,7 +176,7 @@ fn bench_compress(b: &mut Bencher) {
     let mut input = RandomInput::new(b, BLOCK_LEN);
     b.iter(|| unsafe {
         let block_ptr = input.get().as_ptr() as *const [u8; BLOCK_LEN];
-        compress_sse41(&mut state, &*block_ptr, BLOCK_LEN as u8, 0, 0, 0);
+        compress_sse41(&mut state, &*block_ptr, BLOCK_LEN as u8, 0, 0);
         state
     });
 }
