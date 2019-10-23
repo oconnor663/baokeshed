@@ -1,6 +1,4 @@
-use crate::{
-    block_frame_word, offset_high, offset_low, Word, BLOCK_LEN, IV, MSG_SCHEDULE, OUT_LEN,
-};
+use crate::{offset_high, offset_low, Word, BLOCK_LEN, IV, MSG_SCHEDULE, OUT_LEN};
 use arrayref::{array_mut_ref, array_ref, array_refs};
 
 #[inline(always)]
@@ -62,7 +60,6 @@ pub fn compress(
     block_len: u8,
     offset: u64,
     flags: u8,
-    domain: Word,
 ) {
     let block_words = words_from_block(block);
     let mut full_state = [
@@ -80,8 +77,8 @@ pub fn compress(
         IV[3],
         IV[4] ^ offset_low(offset),
         IV[5] ^ offset_high(offset),
-        IV[6] ^ block_frame_word(block_len, flags),
-        IV[7] ^ domain,
+        IV[6] ^ block_len as Word,
+        IV[7] ^ flags as Word,
     ];
 
     round(&mut full_state, &block_words, 0);
@@ -109,7 +106,6 @@ pub fn hash1<A: arrayvec::Array<Item = u8>>(
     flags: u8,
     flags_start: u8,
     flags_end: u8,
-    domain: Word,
     out: &mut [u8; OUT_LEN],
 ) {
     debug_assert_eq!(A::CAPACITY % BLOCK_LEN, 0, "uneven blocks");
@@ -126,7 +122,6 @@ pub fn hash1<A: arrayvec::Array<Item = u8>>(
             BLOCK_LEN as u8,
             offset,
             block_flags,
-            domain,
         );
         block_flags = flags;
         slice = &slice[BLOCK_LEN..];
@@ -142,7 +137,6 @@ pub fn hash_many<A: arrayvec::Array<Item = u8>>(
     flags: u8,
     flags_start: u8,
     flags_end: u8,
-    domain: Word,
     out: &mut [u8],
 ) {
     debug_assert!(out.len() >= inputs.len() * OUT_LEN, "out too short");
@@ -154,7 +148,6 @@ pub fn hash_many<A: arrayvec::Array<Item = u8>>(
             flags,
             flags_start,
             flags_end,
-            domain,
             array_mut_ref!(output, 0, OUT_LEN),
         );
         offset += offset_delta;
@@ -173,7 +166,6 @@ mod test {
         let flags = 4;
         let flags_start = 8;
         let flags_end = 16;
-        let domain = 5;
 
         let mut expected_state = crate::iv(&key);
         compress(
@@ -182,7 +174,6 @@ mod test {
             BLOCK_LEN as u8,
             offset,
             flags | flags_start | flags_end,
-            domain,
         );
         let expected_out = crate::bytes_from_state_words(&expected_state);
 
@@ -194,7 +185,6 @@ mod test {
             flags,
             flags_start,
             flags_end,
-            domain,
             &mut test_out,
         );
 
@@ -210,7 +200,6 @@ mod test {
         let flags = 4;
         let flags_start = 8;
         let flags_end = 16;
-        let domain = 5;
 
         let mut expected_state = crate::iv(&key);
         compress(
@@ -219,7 +208,6 @@ mod test {
             BLOCK_LEN as u8,
             offset,
             flags | flags_start,
-            domain,
         );
         compress(
             &mut expected_state,
@@ -227,7 +215,6 @@ mod test {
             BLOCK_LEN as u8,
             offset,
             flags,
-            domain,
         );
         compress(
             &mut expected_state,
@@ -235,7 +222,6 @@ mod test {
             BLOCK_LEN as u8,
             offset,
             flags | flags_end,
-            domain,
         );
         let expected_out = crate::bytes_from_state_words(&expected_state);
 
@@ -247,7 +233,6 @@ mod test {
             flags,
             flags_start,
             flags_end,
-            domain,
             &mut test_out,
         );
 
@@ -269,7 +254,6 @@ mod test {
         let flags = 4;
         let flags_start = 8;
         let flags_end = 16;
-        let domain = 5;
 
         let mut expected_out = [0; 3 * OUT_LEN];
         hash1(
@@ -279,7 +263,6 @@ mod test {
             flags,
             flags_start,
             flags_end,
-            domain,
             array_mut_ref!(&mut expected_out, 0 * OUT_LEN, OUT_LEN),
         );
         hash1(
@@ -289,7 +272,6 @@ mod test {
             flags,
             flags_start,
             flags_end,
-            domain,
             array_mut_ref!(&mut expected_out, 1 * OUT_LEN, OUT_LEN),
         );
         hash1(
@@ -299,7 +281,6 @@ mod test {
             flags,
             flags_start,
             flags_end,
-            domain,
             array_mut_ref!(&mut expected_out, 2 * OUT_LEN, OUT_LEN),
         );
 
@@ -312,7 +293,6 @@ mod test {
             flags,
             flags_start,
             flags_end,
-            domain,
             &mut test_out,
         );
 

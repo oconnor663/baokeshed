@@ -55,7 +55,7 @@ fn test_hash_length() {
 #[test]
 fn test_hash_key() {
     let key = [42; baokeshed::KEY_LEN];
-    let expected = baokeshed::hash_keyed(b"foo", &key).to_hex();
+    let expected = baokeshed::keyed_hash(b"foo", &key).to_hex();
     let output = cmd!(baokeshed_exe(), "--key", hex::encode(&key))
         .stdin_bytes("foo")
         .read()
@@ -64,28 +64,11 @@ fn test_hash_key() {
 }
 
 #[test]
-fn test_hash_domain() {
-    let domain = 99;
-
+fn test_derive_key() {
     let key = &[99; baokeshed::KEY_LEN];
-    let expected = baokeshed::hash_keyed_with_domain(b"foo", key, domain).to_hex();
-    let output = cmd!(
-        baokeshed_exe(),
-        "--key",
-        hex::encode(key),
-        "--domain",
-        domain.to_string()
-    )
-    .stdin_bytes("foo")
-    .read()
-    .unwrap();
-    assert_eq!(&*expected, &*output);
-
-    // Check that when no key is supplied, the key default to zeros.
-    let default_key = &[0; baokeshed::KEY_LEN];
-    let expected = baokeshed::hash_keyed_with_domain(b"foo", default_key, domain).to_hex();
-    let output = cmd!(baokeshed_exe(), "--domain", domain.to_string())
-        .stdin_bytes("foo")
+    let expected = hex::encode(baokeshed::derive_key(key, b"context").read());
+    let output = cmd!(baokeshed_exe(), "--derive-key", hex::encode(key))
+        .stdin_bytes("context")
         .read()
         .unwrap();
     assert_eq!(&*expected, &*output);

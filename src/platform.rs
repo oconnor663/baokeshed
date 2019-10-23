@@ -57,16 +57,13 @@ impl Platform {
         block_len: u8,
         offset: u64,
         flags: u8,
-        domain: Word,
     ) {
         match self {
-            Platform::Portable => {
-                portable::compress(state, block, block_len, offset, flags, domain)
-            }
+            Platform::Portable => portable::compress(state, block, block_len, offset, flags),
             // Safe because detect() checked for platform support.
             #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
             Platform::SSE41 | Platform::AVX2 => unsafe {
-                sse41::compress(state, block, block_len, offset, flags, domain)
+                sse41::compress(state, block, block_len, offset, flags)
             },
         }
     }
@@ -80,7 +77,6 @@ impl Platform {
         flags: u8,
         flags_start: u8,
         flags_end: u8,
-        domain: Word,
         out: &mut [u8],
     ) {
         match self {
@@ -92,7 +88,6 @@ impl Platform {
                 flags,
                 flags_start,
                 flags_end,
-                domain,
                 out,
             ),
             // Safe because detect() checked for platform support.
@@ -106,7 +101,6 @@ impl Platform {
                     flags,
                     flags_start,
                     flags_end,
-                    domain,
                     out,
                 )
             },
@@ -121,7 +115,6 @@ impl Platform {
                     flags,
                     flags_start,
                     flags_end,
-                    domain,
                     out,
                 )
             },

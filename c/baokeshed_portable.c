@@ -31,8 +31,7 @@ INLINE void round_fn(uint32_t *state, const uint32_t *msg, size_t round) {
 }
 
 void compress_portable(uint32_t state[8], const uint8_t block[BLOCK_LEN],
-                       uint8_t block_len, uint64_t offset, uint8_t flags,
-                       uint32_t domain) {
+                       uint8_t block_len, uint64_t offset, uint8_t flags) {
   uint32_t block_words[16];
   load_msg_words(block, block_words); // This handles big-endianness.
 
@@ -51,8 +50,8 @@ void compress_portable(uint32_t state[8], const uint8_t block[BLOCK_LEN],
       IV[3],
       IV[4] ^ offset_low(offset),
       IV[5] ^ offset_high(offset),
-      IV[6] ^ block_frame_word(block_len, flags),
-      IV[7] ^ domain,
+      IV[6] ^ (uint32_t)block_len,
+      IV[7] ^ (uint32_t)flags,
   };
 
   round_fn(&full_state[0], &block_words[0], 0);
@@ -76,8 +75,7 @@ void compress_portable(uint32_t state[8], const uint8_t block[BLOCK_LEN],
 INLINE void hash_one_portable(const uint8_t *input, size_t blocks,
                               const uint32_t key_words[8], uint64_t offset,
                               uint8_t flags, uint8_t flags_start,
-                              uint8_t flags_end, uint32_t domain,
-                              uint8_t out[OUT_LEN]) {
+                              uint8_t flags_end, uint8_t out[OUT_LEN]) {
   uint32_t state[8];
   init_iv(key_words, state);
   uint8_t block_flags = flags | flags_start;
@@ -85,7 +83,7 @@ INLINE void hash_one_portable(const uint8_t *input, size_t blocks,
     if (blocks == 1) {
       block_flags |= flags_end;
     }
-    compress_portable(state, input, BLOCK_LEN, offset, block_flags, domain);
+    compress_portable(state, input, BLOCK_LEN, offset, block_flags);
     input = &input[BLOCK_LEN];
     blocks -= 1;
     block_flags = flags;
@@ -97,10 +95,10 @@ void hash_many_portable(const uint8_t *const *inputs, size_t num_inputs,
                         size_t blocks, const uint32_t key_words[8],
                         uint64_t offset, const uint64_t offset_deltas[2],
                         uint8_t flags, uint8_t flags_start, uint8_t flags_end,
-                        uint32_t domain, uint8_t *out) {
+                        uint8_t *out) {
   while (num_inputs > 0) {
     hash_one_portable(inputs[0], blocks, key_words, offset, flags, flags_start,
-                      flags_end, domain, out);
+                      flags_end, out);
     inputs += 1;
     num_inputs -= 1;
     offset += offset_deltas[1];

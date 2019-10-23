@@ -223,8 +223,7 @@ INLINE void load_offsets4(uint64_t offset, const uint64_t deltas[4],
 void hash4_neon(const uint8_t *const *inputs, size_t blocks,
                 const uint32_t key_words[8], uint64_t offset,
                 const uint64_t offset_deltas[4], uint8_t flags,
-                uint8_t flags_start, uint8_t flags_end, uint32_t domain,
-                uint8_t *out) {
+                uint8_t flags_start, uint8_t flags_end, uint8_t *out) {
   uint32x4_t h_vecs[8] = {
       xor_128(set1_128(IV[0]), set1_128(key_words[0])),
       xor_128(set1_128(IV[1]), set1_128(key_words[1])),
@@ -237,15 +236,14 @@ void hash4_neon(const uint8_t *const *inputs, size_t blocks,
   };
   uint32x4_t offset_low_vec, offset_high_vec;
   load_offsets4(offset, offset_deltas, &offset_low_vec, &offset_high_vec);
-  const uint32x4_t domain_vec = set1_128(domain);
   uint8_t block_flags = flags | flags_start;
 
   for (size_t block = 0; block < blocks; block++) {
     if (block + 1 == blocks) {
       block_flags |= flags_end;
     }
-    uint32x4_t block_flags_vec =
-        set1_128(block_frame_word(BLOCK_LEN, block_flags));
+    uint32x4_t block_len_vec = set1_128(BLOCK_LEN);
+    uint32x4_t block_flags_vec = set1_128(block_flags);
     uint32x4_t msg_vecs[16];
     transpose_msg_vecs4(inputs, block * BLOCK_LEN, msg_vecs);
 
@@ -264,8 +262,8 @@ void hash4_neon(const uint8_t *const *inputs, size_t blocks,
         set1_128(IV[3]),
         xor_128(set1_128(IV[4]), offset_low_vec),
         xor_128(set1_128(IV[5]), offset_high_vec),
-        xor_128(set1_128(IV[6]), block_flags_vec),
-        xor_128(set1_128(IV[7]), domain_vec),
+        xor_128(set1_128(IV[6]), block_len_vec),
+        xor_128(set1_128(IV[7]), block_flags_vec),
     };
     round_fn4(v, msg_vecs, 0);
     round_fn4(v, msg_vecs, 1);
@@ -309,7 +307,7 @@ void hash4_neon(const uint8_t *const *inputs, size_t blocks,
 INLINE void hash_one_neon(const uint8_t *input, size_t blocks,
                           const uint32_t key_words[8], uint64_t offset,
                           uint8_t flags, uint8_t flags_start, uint8_t flags_end,
-                          uint32_t domain, uint8_t out[OUT_LEN]) {
+                          uint8_t out[OUT_LEN]) {
   uint32_t state[8];
   init_iv(key_words, state);
   uint8_t block_flags = flags | flags_start;
@@ -318,7 +316,7 @@ INLINE void hash_one_neon(const uint8_t *input, size_t blocks,
       block_flags |= flags_end;
     }
     // TODO: use compress_neon
-    compress_portable(state, input, BLOCK_LEN, offset, block_flags, domain);
+    compress_portable(state, input, BLOCK_LEN, offset, block_flags);
     input = &input[BLOCK_LEN];
     blocks -= 1;
     block_flags = flags;
@@ -329,11 +327,10 @@ INLINE void hash_one_neon(const uint8_t *input, size_t blocks,
 void hash_many_neon(const uint8_t *const *inputs, size_t num_inputs,
                     size_t blocks, const uint32_t key_words[8], uint64_t offset,
                     const uint64_t offset_deltas[17], uint8_t flags,
-                    uint8_t flags_start, uint8_t flags_end, uint32_t domain,
-                    uint8_t *out) {
+                    uint8_t flags_start, uint8_t flags_end, uint8_t *out) {
   while (num_inputs >= 4) {
     hash4_neon(inputs, blocks, key_words, offset, offset_deltas, flags,
-               flags_start, flags_end, domain, out);
+               flags_start, flags_end, out);
     inputs += 4;
     num_inputs -= 4;
     offset += offset_deltas[4];
@@ -341,7 +338,7 @@ void hash_many_neon(const uint8_t *const *inputs, size_t num_inputs,
   }
   while (num_inputs > 0) {
     hash_one_neon(inputs[0], blocks, key_words, offset, flags, flags_start,
-                  flags_end, domain, out);
+                  flags_end, out);
     inputs += 1;
     num_inputs -= 1;
     offset += offset_deltas[1];

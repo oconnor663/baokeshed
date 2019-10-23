@@ -19,11 +19,12 @@
 #define MAX_SIMD_DEGREE 16
 
 // internal flags
-#define ROOT 128
-#define PARENT 64
-#define CHUNK_END 32
-#define CHUNK_START 16
-#define PRIVATE_DOMAIN 8
+#define ROOT 1
+#define PARENT 2
+#define CHUNK_END 4
+#define CHUNK_START 8
+#define KEYED_HASH 16
+#define DERIVE_KEY 32
 
 // This C implementation tries to support recent versions of GCC, Clang, and
 // MSVC.
@@ -93,13 +94,6 @@ INLINE uint32_t offset_high(uint64_t offset) {
   return (uint32_t)(offset >> 32);
 }
 
-INLINE uint32_t block_frame_word(uint8_t block_len, uint8_t flags) {
-  // The lower bits of the block flags word are the block length. The higher
-  // bits are the internal flags (ROOT etc.). The middle bits are currently
-  // unused.
-  return ((uint32_t)block_len) | (((uint32_t)flags) << 24);
-}
-
 INLINE void load_msg_words(const uint8_t block[BLOCK_LEN], uint32_t words[8]) {
   words[0] = load32(block + 4 * 0);
   words[1] = load32(block + 4 * 1);
@@ -154,36 +148,31 @@ INLINE void init_iv(const uint32_t key_words[8], uint32_t state[8]) {
 
 // Declarations for implementation-specific functions.
 void compress_portable(uint32_t state[8], const uint8_t block[BLOCK_LEN],
-                       uint8_t block_len, uint64_t offset, uint8_t flags,
-                       uint32_t domain);
+                       uint8_t block_len, uint64_t offset, uint8_t flags);
 void compress_sse41(uint32_t state[8], const uint8_t block[BLOCK_LEN],
-                    uint8_t block_len, uint64_t offset, uint8_t flags,
-                    uint32_t domain);
+                    uint8_t block_len, uint64_t offset, uint8_t flags);
 void compress_avx512(uint32_t state[8], const uint8_t block[BLOCK_LEN],
-                     uint8_t block_len, uint64_t offset, uint8_t flags,
-                     uint32_t domain);
+                     uint8_t block_len, uint64_t offset, uint8_t flags);
 void hash_many_portable(const uint8_t *const *inputs, size_t num_inputs,
                         size_t blocks, const uint32_t key_words[8],
                         uint64_t offset, const uint64_t offset_deltas[2],
                         uint8_t flags, uint8_t flags_start, uint8_t flags_end,
-                        uint32_t domain, uint8_t *out);
+                        uint8_t *out);
 void hash_many_sse41(const uint8_t *const *inputs, size_t num_inputs,
                      size_t blocks, const uint32_t key_words[8],
                      uint64_t offset, const uint64_t offset_deltas[5],
                      uint8_t flags, uint8_t flags_start, uint8_t flags_end,
-                     uint32_t domain, uint8_t *out);
+                     uint8_t *out);
 void hash_many_avx2(const uint8_t *const *inputs, size_t num_inputs,
                     size_t blocks, const uint32_t key_words[8], uint64_t offset,
                     const uint64_t offset_deltas[9], uint8_t flags,
-                    uint8_t flags_start, uint8_t flags_end, uint32_t domain,
-                    uint8_t *out);
+                    uint8_t flags_start, uint8_t flags_end, uint8_t *out);
 void hash_many_avx512(const uint8_t *const *inputs, size_t num_inputs,
                       size_t blocks, const uint32_t key_words[8],
                       uint64_t offset, const uint64_t offset_deltas[17],
                       uint8_t flags, uint8_t flags_start, uint8_t flags_end,
-                      uint32_t domain, uint8_t *out);
+                      uint8_t *out);
 void hash_many_neon(const uint8_t *const *inputs, size_t num_inputs,
                     size_t blocks, const uint32_t key_words[8], uint64_t offset,
                     const uint64_t offset_deltas[17], uint8_t flags,
-                    uint8_t flags_start, uint8_t flags_end, uint32_t domain,
-                    uint8_t *out);
+                    uint8_t flags_start, uint8_t flags_end, uint8_t *out);

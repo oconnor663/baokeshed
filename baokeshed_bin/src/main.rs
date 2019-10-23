@@ -9,16 +9,16 @@ use std::path::{Path, PathBuf};
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const USAGE: &str = "
-Usage: baokeshed [<inputs>...] [--length=<bytes>] [--key=<hex>] [--domain=<int>]
+Usage: baokeshed [<inputs>...] [--length=<bytes>] [--key=<hex> | --derive-key=<hex>]
        baokeshed (--help | --version)
 ";
 
 #[derive(Debug, Deserialize)]
 struct Args {
     arg_inputs: Vec<PathBuf>,
-    flag_domain: Option<u32>,
     flag_help: bool,
     flag_key: Option<String>,
+    flag_derive_key: Option<String>,
     flag_length: Option<u64>,
     flag_version: bool,
 }
@@ -27,7 +27,6 @@ fn main() -> Result<(), Error> {
     let args: Args = docopt::Docopt::new(USAGE)
         .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());
-
     if args.flag_help {
         print!("{}", USAGE);
     } else if args.flag_version {
@@ -42,29 +41,27 @@ fn main() -> Result<(), Error> {
 fn hash_one(
     maybe_path: &Option<PathBuf>,
     key: Option<&[u8; baokeshed::KEY_LEN]>,
-    domain: Option<u32>,
+    derive_key: bool,
 ) -> Result<baokeshed::Output, Error> {
     let mut input = open_input(maybe_path)?;
     if let Some(map) = maybe_memmap_input(&input)? {
-        let output = if let Some(domain) = domain {
-            // If a domain is supplied without a key, the key defaults to all
-            // zeros.
-            let key = key.unwrap_or(&[0; baokeshed::KEY_LEN]);
-            baokeshed::hash_keyed_with_domain_xof(&map, key, domain)
-        } else if let Some(key) = key {
-            baokeshed::hash_keyed_xof(&map, key)
+        let output = if let Some(key) = key {
+            if derive_key {
+                baokeshed::derive_key(key, &map)
+            } else {
+                baokeshed::keyed_hash_xof(&map, key)
+            }
         } else {
             baokeshed::hash_xof(&map)
         };
         Ok(output)
     } else {
-        let mut hasher = if let Some(domain) = domain {
-            // If a domain is supplied without a key, the key defaults to all
-            // zeros.
-            let key = key.unwrap_or(&[0; baokeshed::KEY_LEN]);
-            baokeshed::Hasher::new_keyed_with_domain(key, domain)
-        } else if let Some(key) = key {
-            baokeshed::Hasher::new_keyed(key)
+        let mut hasher = if let Some(key) = key {
+            if derive_key {
+                baokeshed::Hasher::new_derive_key(key)
+            } else {
+                baokeshed::Hasher::new_keyed(key)
+            }
         } else {
             baokeshed::Hasher::new()
         };
@@ -85,8 +82,8 @@ fn print_hex(output: &mut baokeshed::Output, byte_length: u64) {
 
 fn hash(args: &Args) -> Result<(), Error> {
     let byte_length = args.flag_length.unwrap_or(baokeshed::OUT_LEN as u64);
-    let mut key = None;
-    if let Some(key_str) = &args.flag_key {
+    let derive_key = args.flag_derive_key.is_some();
+    let key = if let Some(key_str) = args.flag_key.as_ref().or(args.flag_derive_key.as_ref()) {
         let key_bytes = hex::decode(key_str)?;
         if key_bytes.len() != baokeshed::KEY_LEN {
             failure::bail!(
@@ -97,8 +94,10 @@ fn hash(args: &Args) -> Result<(), Error> {
         }
         let mut key_array = [0; baokeshed::KEY_LEN];
         key_array.copy_from_slice(&key_bytes);
-        key = Some(key_array);
-    }
+        Some(key_array)
+    } else {
+        None
+    };
 
     if !args.arg_inputs.is_empty() {
         let mut did_error = false;
@@ -107,7 +106,7 @@ fn hash(args: &Args) -> Result<(), Error> {
             // As with b2sum or sha1sum, the multi-arg hash loop prints errors and keeps going.
             // This is more convenient for the user in cases like `bao hash *`, where it's common
             // that some of the inputs will error on read e.g. because they're directories.
-            match hash_one(&Some(input.clone()), key.as_ref(), args.flag_domain) {
+            match hash_one(&Some(input.clone()), key.as_ref(), derive_key) {
                 Ok(mut output) => {
                     print_hex(&mut output, byte_length);
                     if args.arg_inputs.len() > 1 {
@@ -126,7 +125,7 @@ fn hash(args: &Args) -> Result<(), Error> {
             std::process::exit(1);
         }
     } else {
-        let mut output = hash_one(&None, key.as_ref(), args.flag_domain)?;
+        let mut output = hash_one(&None, key.as_ref(), derive_key)?;
         print_hex(&mut output, byte_length);
         println!();
     }
