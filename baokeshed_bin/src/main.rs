@@ -1,4 +1,4 @@
-use failure::Error;
+use anyhow::{bail, Result};
 use serde::Deserialize;
 use std::cmp;
 use std::fs::File;
@@ -23,7 +23,7 @@ struct Args {
     flag_version: bool,
 }
 
-fn main() -> Result<(), Error> {
+fn main() -> Result<()> {
     let args: Args = docopt::Docopt::new(USAGE)
         .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());
@@ -42,7 +42,7 @@ fn hash_one(
     maybe_path: &Option<PathBuf>,
     key: Option<&[u8; baokeshed::KEY_LEN]>,
     derive_key: bool,
-) -> Result<baokeshed::Output, Error> {
+) -> Result<baokeshed::Output> {
     let mut input = open_input(maybe_path)?;
     if let Some(map) = maybe_memmap_input(&input)? {
         let output = if let Some(key) = key {
@@ -80,13 +80,13 @@ fn print_hex(output: &mut baokeshed::Output, byte_length: u64) {
     }
 }
 
-fn hash(args: &Args) -> Result<(), Error> {
+fn hash(args: &Args) -> Result<()> {
     let byte_length = args.flag_length.unwrap_or(baokeshed::OUT_LEN as u64);
     let derive_key = args.flag_derive_key.is_some();
     let key = if let Some(key_str) = args.flag_key.as_ref().or(args.flag_derive_key.as_ref()) {
         let key_bytes = hex::decode(key_str)?;
         if key_bytes.len() != baokeshed::KEY_LEN {
-            failure::bail!(
+            bail!(
                 "keys must be {} bytes, found {}",
                 baokeshed::KEY_LEN,
                 key_bytes.len()
@@ -133,7 +133,7 @@ fn hash(args: &Args) -> Result<(), Error> {
     Ok(())
 }
 
-fn open_input(maybe_path: &Option<PathBuf>) -> Result<Input, Error> {
+fn open_input(maybe_path: &Option<PathBuf>) -> Result<Input> {
     Ok(
         if let Some(ref path) = path_if_some_and_not_dash(maybe_path) {
             Input::File(File::open(path)?)
@@ -169,7 +169,7 @@ fn path_if_some_and_not_dash(maybe_path: &Option<PathBuf>) -> Option<&Path> {
     }
 }
 
-fn maybe_memmap_input(input: &Input) -> Result<Option<memmap::Mmap>, Error> {
+fn maybe_memmap_input(input: &Input) -> Result<Option<memmap::Mmap>> {
     let in_file = match *input {
         Input::Stdin => return Ok(None),
         Input::File(ref file) => file,

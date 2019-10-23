@@ -11,9 +11,9 @@ name = "baokeshed"
 path = "src/main.rs"
 
 [dependencies]
+anyhow = "1.0.17"
 baokeshed = { path = "..", version = "0.1" }
 docopt = "1.1.0"
-failure = "0.1.5"
 hex = "0.4.0"
 memmap = "0.7.0"
 serde = { version = "1.0.100", features = ["derive"] }
