@@ -43,9 +43,9 @@ fn test_hash_many() {
 fn test_hash_length() {
     let mut xof = baokeshed::Hasher::new().update(b"foo").finalize_xof();
     let mut expected = String::new();
-    expected.push_str(baokeshed::Hash::from(xof.read()).to_hex().as_ref());
-    expected.push_str(baokeshed::Hash::from(xof.read()).to_hex().as_ref());
-    let output = cmd!(baokeshed_exe(), "--length=64")
+    expected.push_str(&hex::encode(&xof.read()[..]));
+    expected.push_str(&hex::encode(&xof.read()[..36]));
+    let output = cmd!(baokeshed_exe(), "--length=100")
         .stdin_bytes("foo")
         .read()
         .unwrap();
@@ -66,7 +66,7 @@ fn test_hash_key() {
 #[test]
 fn test_derive_key() {
     let key = &[99; baokeshed::KEY_LEN];
-    let expected = hex::encode(baokeshed::derive_key(key, b"context").read());
+    let expected = baokeshed::derive_key(key, b"context").to_hash().to_hex();
     let output = cmd!(baokeshed_exe(), "--derive-key", hex::encode(key))
         .stdin_bytes("context")
         .read()

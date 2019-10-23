@@ -73,9 +73,15 @@ fn hash_one(
 fn print_hex(output: &mut baokeshed::Output, byte_length: u64) {
     let mut hex_bytes_remaining = 2 * byte_length;
     while hex_bytes_remaining > 0 {
-        let hex = baokeshed::Hash::from(output.read()).to_hex();
-        let take = cmp::min(hex_bytes_remaining, hex.len() as u64);
-        print!("{}", &hex[..take as usize]);
+        let bytes = output.read();
+        let (hash1, hash2) = arrayref::array_refs!(&bytes, baokeshed::OUT_LEN, baokeshed::OUT_LEN);
+        let hex1 = baokeshed::Hash::from(*hash1).to_hex();
+        let take = cmp::min(hex_bytes_remaining, hex1.len() as u64);
+        print!("{}", &hex1[..take as usize]);
+        hex_bytes_remaining -= take;
+        let hex2 = baokeshed::Hash::from(*hash2).to_hex();
+        let take = cmp::min(hex_bytes_remaining, hex2.len() as u64);
+        print!("{}", &hex2[..take as usize]);
         hex_bytes_remaining -= take;
     }
 }
