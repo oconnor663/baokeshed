@@ -633,22 +633,36 @@ pub fn derive_key(key: &[u8; KEY_LEN], context: &[u8]) -> Output {
 #[derive(Clone)]
 struct ChunkState {
     state: [Word; 8],
+    key: [Word; 8],
     offset: u64,
     count: u16,
     buf: [u8; BLOCK_LEN],
     buf_len: u8,
+    flags: Flags,
+    platform: Platform,
 }
 
 impl ChunkState {
-    fn new(key: &[Word; 8], offset: u64) -> Self {
-        debug_assert_eq!(offset % CHUNK_LEN as u64, 0);
+    fn new(key: &[Word; 8], flags: Flags) -> Self {
         Self {
             state: iv(key),
-            offset,
+            key: *key,
+            offset: 0,
             count: 0,
             buf: [0; BLOCK_LEN],
             buf_len: 0,
+            flags,
+            platform: Platform::detect(),
         }
+    }
+
+    fn reset(&mut self, new_offset: u64) {
+        debug_assert_eq!(new_offset % CHUNK_LEN as u64, 0);
+        self.state = iv(&self.key);
+        self.offset = new_offset;
+        self.count = 0;
+        self.buf = [0; BLOCK_LEN];
+        self.buf_len = 0;
     }
 
     // The length of the current chunk, including buffered bytes.
@@ -673,13 +687,13 @@ impl ChunkState {
         }
     }
 
-    fn update(&mut self, mut input: &[u8], flags: Flags, platform: Platform) {
+    fn update(&mut self, mut input: &[u8]) {
         if self.buf_len > 0 {
             self.fill_buf(&mut input);
             if !input.is_empty() {
                 debug_assert_eq!(self.buf_len as usize, BLOCK_LEN);
-                let block_flags = flags | self.maybe_chunk_start_flag(); // borrowck
-                platform.compress_in_place(
+                let block_flags = self.flags | self.maybe_chunk_start_flag(); // borrowck
+                self.platform.compress_in_place(
                     &mut self.state,
                     &self.buf,
                     BLOCK_LEN as u8,
@@ -694,8 +708,8 @@ impl ChunkState {
 
         while input.len() > BLOCK_LEN {
             debug_assert_eq!(self.buf_len, 0);
-            let block_flags = flags | self.maybe_chunk_start_flag(); // borrowck
-            platform.compress_in_place(
+            let block_flags = self.flags | self.maybe_chunk_start_flag(); // borrowck
+            self.platform.compress_in_place(
                 &mut self.state,
                 array_ref!(input, 0, BLOCK_LEN),
                 BLOCK_LEN as u8,
@@ -715,20 +729,21 @@ impl ChunkState {
     // internally, we might build Output objects without the root flag and with
     // non-zero offsets. But Output objects returned publicly are always root
     // finalizations starting at offset zero.
-    fn finalize(&self, is_root: IsRoot, flags: Flags, platform: Platform) -> Output {
+    fn finalize(&self, is_root: IsRoot) -> Output {
         if let IsRoot::Root = is_root {
             // Root finalization starts with offset 0 to support the XOF, so
             // it's convenient that only the chunk at offset 0 can be the root.
             debug_assert_eq!(self.offset, 0);
         }
-        let block_flags = flags | self.maybe_chunk_start_flag() | Flags::CHUNK_END | is_root.flag();
+        let block_flags =
+            self.flags | self.maybe_chunk_start_flag() | Flags::CHUNK_END | is_root.flag();
         Output {
             cv: self.state,
             block: self.buf,
             block_len: self.buf_len,
             offset: self.offset,
             flags: block_flags,
-            platform,
+            platform: self.platform,
         }
     }
 }
@@ -772,9 +787,6 @@ fn hash_one_parent(
 pub struct Hasher {
     subtree_hashes: ArrayVec<[[u8; OUT_LEN]; MAX_DEPTH]>,
     chunk: ChunkState,
-    key: [Word; 8],
-    flags: Flags,
-    platform: Platform,
 }
 
 impl Hasher {
@@ -782,10 +794,7 @@ impl Hasher {
         let key_words = words_from_key_bytes(key_bytes);
         Self {
             subtree_hashes: ArrayVec::new(),
-            chunk: ChunkState::new(&key_words, 0),
-            key: key_words,
-            flags,
-            platform: Platform::detect(),
+            chunk: ChunkState::new(&key_words, flags),
         }
     }
 
@@ -829,10 +838,10 @@ impl Hasher {
         let parent_hash = hash_one_parent(
             &self.subtree_hashes[num_subtrees - 2],
             &self.subtree_hashes[num_subtrees - 1],
-            &self.key,
+            &self.chunk.key,
             IsRoot::NotRoot,
-            self.flags,
-            self.platform,
+            self.chunk.flags,
+            self.chunk.platform,
         )
         .to_hash();
         self.subtree_hashes[num_subtrees - 2] = parent_hash.into();
@@ -866,19 +875,16 @@ impl Hasher {
         if maybe_root || self.chunk.len() > 0 {
             let want = CHUNK_LEN - self.chunk.len();
             let take = cmp::min(want, input.len());
-            self.chunk.update(&input[..take], self.flags, self.platform);
+            self.chunk.update(&input[..take]);
             input = &input[take..];
             if !input.is_empty() {
                 // We've filled the current chunk, and there's more input
                 // coming, so we know it's not the root and we can finalize it.
                 // Then we'll proceed to hashing whole chunks below.
                 debug_assert_eq!(self.chunk.len(), CHUNK_LEN);
-                let chunk_hash = self
-                    .chunk
-                    .finalize(IsRoot::NotRoot, self.flags, self.platform)
-                    .to_hash();
+                let chunk_hash = self.chunk.finalize(IsRoot::NotRoot).to_hash();
                 self.push_chunk_hash(chunk_hash.as_bytes(), self.chunk.offset);
-                self.chunk = ChunkState::new(&self.key, self.chunk.offset + CHUNK_LEN as u64);
+                self.chunk.reset(self.chunk.offset + CHUNK_LEN as u64);
             } else {
                 return self;
             }
@@ -903,12 +909,12 @@ impl Hasher {
                 // the ChunkState below.
                 break;
             }
-            self.platform.hash_many(
+            self.chunk.platform.hash_many(
                 &chunks_array,
-                &self.key,
+                &self.chunk.key,
                 self.chunk.offset,
                 CHUNK_LEN as u64,
-                self.flags.bits(),
+                self.chunk.flags.bits(),
                 Flags::CHUNK_START.bits(),
                 Flags::CHUNK_END.bits(),
                 &mut out_array,
@@ -938,8 +944,7 @@ impl Hasher {
             while self.needs_merge(self.chunk.offset) {
                 self.merge_parent();
             }
-            self.chunk
-                .update(chunks_exact.remainder(), self.flags, self.platform);
+            self.chunk.update(chunks_exact.remainder());
         }
         self
     }
@@ -961,7 +966,7 @@ impl Hasher {
         // also. Convert it directly into an Output. Otherwise, we need to
         // merge subtrees below.
         if self.subtree_hashes.is_empty() {
-            return self.chunk.finalize(IsRoot::Root, self.flags, self.platform);
+            return self.chunk.finalize(IsRoot::Root);
         }
 
         // If there are any bytes in the ChunkState, finalize that chunk and
@@ -979,11 +984,7 @@ impl Hasher {
         let mut next_subtree_index: usize;
         if self.chunk.len() > 0 {
             debug_assert!(!self.needs_merge(self.chunk.offset));
-            working_hash = self
-                .chunk
-                .finalize(IsRoot::NotRoot, self.flags, self.platform)
-                .to_hash()
-                .into();
+            working_hash = self.chunk.finalize(IsRoot::NotRoot).to_hash().into();
             next_subtree_index = self.subtree_hashes.len() - 1;
         } else {
             debug_assert!(self.subtree_hashes.len() >= 2);
@@ -999,10 +1000,10 @@ impl Hasher {
             let output = hash_one_parent(
                 &self.subtree_hashes[next_subtree_index],
                 &working_hash,
-                &self.key,
+                &self.chunk.key,
                 is_root,
-                self.flags,
-                self.platform,
+                self.chunk.flags,
+                self.chunk.platform,
             );
             if next_subtree_index == 0 {
                 return output;

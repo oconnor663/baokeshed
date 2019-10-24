@@ -9,20 +9,31 @@
 
 typedef struct {
   uint32_t state[8];
+  uint32_t key[8];
   uint64_t offset;
   uint16_t count;
   uint8_t buf[BLOCK_LEN];
   uint8_t buf_len;
+  uint8_t flags;
 } chunk_state;
 
 // Non-inline for unit testing.
-void chunk_state_init(chunk_state *self, const uint32_t key_words[8],
-                      uint64_t offset) {
-  init_iv(key_words, self->state);
-  self->offset = offset;
+void chunk_state_init(chunk_state *self, const uint32_t key[8], uint8_t flags) {
+  init_iv(key, self->state);
+  memcpy(self->key, key, 32);
+  self->offset = 0;
   self->count = 0;
-  self->buf_len = 0;
   memset(self->buf, 0, BLOCK_LEN);
+  self->buf_len = 0;
+  self->flags = flags;
+}
+
+void chunk_state_reset(chunk_state *self, uint64_t new_offset) {
+  init_iv(self->key, self->state);
+  self->offset = new_offset;
+  self->count = 0;
+  memset(self->buf, 0, BLOCK_LEN);
+  self->buf_len = 0;
 }
 
 INLINE size_t chunk_state_len(const chunk_state *self) {
@@ -62,14 +73,14 @@ INLINE void compress(uint32_t state[8], const uint8_t block[BLOCK_LEN],
 
 // Non-inline for unit testing.
 void chunk_state_update(chunk_state *self, const uint8_t *input,
-                        size_t input_len, uint8_t flags) {
+                        size_t input_len) {
   if (self->buf_len > 0) {
     size_t take = chunk_state_fill_buf(self, input, input_len);
     input += take;
     input_len -= take;
     if (input_len > 0) {
       compress(self->state, self->buf, BLOCK_LEN, self->offset,
-               flags | chunk_state_maybe_start_flag(self));
+               self->flags | chunk_state_maybe_start_flag(self));
       self->count += (uint16_t)BLOCK_LEN;
       self->buf_len = 0;
       memset(self->buf, 0, BLOCK_LEN);
@@ -78,7 +89,7 @@ void chunk_state_update(chunk_state *self, const uint8_t *input,
 
   while (input_len > BLOCK_LEN) {
     compress(self->state, input, BLOCK_LEN, self->offset,
-             flags | chunk_state_maybe_start_flag(self));
+             self->flags | chunk_state_maybe_start_flag(self));
     self->count += (uint16_t)BLOCK_LEN;
     input += BLOCK_LEN;
     input_len -= BLOCK_LEN;
@@ -90,11 +101,12 @@ void chunk_state_update(chunk_state *self, const uint8_t *input,
 }
 
 // Non-inline for unit testing.
-void chunk_state_finalize(const chunk_state *self, uint8_t flags, bool is_root,
+void chunk_state_finalize(const chunk_state *self, bool is_root,
                           uint8_t out[OUT_LEN]) {
   uint32_t state_copy[8];
   memcpy(state_copy, self->state, sizeof(state_copy));
-  uint8_t block_flags = flags | chunk_state_maybe_start_flag(self) | CHUNK_END;
+  uint8_t block_flags =
+      self->flags | chunk_state_maybe_start_flag(self) | CHUNK_END;
   if (is_root) {
     block_flags |= ROOT;
   }
@@ -103,30 +115,28 @@ void chunk_state_finalize(const chunk_state *self, uint8_t flags, bool is_root,
 }
 
 INLINE void hash_one_parent(const uint8_t block[BLOCK_LEN],
-                            const uint32_t key_words[8], bool is_root,
-                            uint8_t flags, uint8_t out[OUT_LEN]) {
+                            const uint32_t key[8], bool is_root, uint8_t flags,
+                            uint8_t out[OUT_LEN]) {
   uint8_t block_flags = flags | PARENT;
   if (is_root) {
     block_flags |= ROOT;
   }
   uint32_t state[8];
-  init_iv(key_words, state);
+  init_iv(key, state);
   compress(state, block, BLOCK_LEN, 0, block_flags);
   write_state_bytes(state, out);
 }
 
 typedef struct {
   chunk_state chunk;
-  uint32_t key_words[8];
-  uint8_t flags;
   uint8_t subtree_hashes_len;
   uint8_t subtree_hashes[MAX_DEPTH * OUT_LEN];
 } hasher;
 
 void hasher_init(hasher *self, const uint8_t key[KEY_LEN], uint8_t flags) {
-  load_key_words(key, self->key_words); // This handles big-endianness.
-  chunk_state_init(&self->chunk, self->key_words, 0);
-  self->flags = flags;
+  uint32_t key_words[8];
+  load_key_words(key, key_words); // This handles big-endianness.
+  chunk_state_init(&self->chunk, key_words, flags);
   self->subtree_hashes_len = 0;
 }
 
@@ -139,8 +149,8 @@ INLINE void hasher_merge_parent(hasher *self) {
   size_t parent_block_start =
       (((size_t)self->subtree_hashes_len) - 2) * OUT_LEN;
   uint8_t out[OUT_LEN];
-  hash_one_parent(&self->subtree_hashes[parent_block_start], self->key_words,
-                  false, self->flags, out);
+  hash_one_parent(&self->subtree_hashes[parent_block_start], self->chunk.key,
+                  false, self->chunk.flags, out);
   memcpy(&self->subtree_hashes[parent_block_start], out, OUT_LEN);
   self->subtree_hashes_len -= 1;
 }
@@ -191,17 +201,16 @@ void hasher_update(hasher *self, const void *input, size_t input_len) {
     if (take > input_len) {
       take = input_len;
     }
-    chunk_state_update(&self->chunk, input_bytes, take, self->flags);
+    chunk_state_update(&self->chunk, input_bytes, take);
     input_bytes += take;
     input_len -= take;
     // If we've filled the current chunk and there's more coming, finalize this
     // chunk and proceed. In this case we know it's not the root.
     if (input_len > 0) {
       uint8_t out[OUT_LEN];
-      chunk_state_finalize(&self->chunk, self->flags, false, out);
+      chunk_state_finalize(&self->chunk, false, out);
       hasher_push_chunk_hash(self, out, self->chunk.offset);
-      chunk_state_init(&self->chunk, self->key_words,
-                       self->chunk.offset + CHUNK_LEN);
+      chunk_state_reset(&self->chunk, self->chunk.offset + CHUNK_LEN);
     } else {
       return;
     }
@@ -219,9 +228,9 @@ void hasher_update(hasher *self, const void *input, size_t input_len) {
       input_len -= CHUNK_LEN;
       num_chunks += 1;
     }
-    hash_many(chunks, num_chunks, CHUNK_LEN / BLOCK_LEN, self->key_words,
-              self->chunk.offset, CHUNK_OFFSET_DELTAS, self->flags, CHUNK_START,
-              CHUNK_END, out);
+    hash_many(chunks, num_chunks, CHUNK_LEN / BLOCK_LEN, self->chunk.key,
+              self->chunk.offset, CHUNK_OFFSET_DELTAS, self->chunk.flags,
+              CHUNK_START, CHUNK_END, out);
     for (size_t chunk_index = 0; chunk_index < num_chunks; chunk_index++) {
       // The chunk state is empty here, but it stores the offset of the next
       // chunk hash we need to push. Use that offset, and then move it forward.
@@ -242,14 +251,14 @@ void hasher_update(hasher *self, const void *input, size_t input_len) {
     while (hasher_needs_merge(self, self->chunk.offset)) {
       hasher_merge_parent(self);
     }
-    chunk_state_update(&self->chunk, input_bytes, input_len, self->flags);
+    chunk_state_update(&self->chunk, input_bytes, input_len);
   }
 }
 
 void hasher_finalize(const hasher *self, uint8_t out[OUT_LEN]) {
   // If the subtree stack is empty, then the current chunk is the root.
   if (self->subtree_hashes_len == 0) {
-    chunk_state_finalize(&self->chunk, self->flags, true, out);
+    chunk_state_finalize(&self->chunk, true, out);
     return;
   }
   // If there are any bytes in the chunk state, finalize that chunk and do a
@@ -261,7 +270,7 @@ void hasher_finalize(const hasher *self, uint8_t out[OUT_LEN]) {
   uint8_t working_hash[OUT_LEN];
   size_t next_subtree_start;
   if (chunk_state_len(&self->chunk) > 0) {
-    chunk_state_finalize(&self->chunk, self->flags, false, working_hash);
+    chunk_state_finalize(&self->chunk, false, working_hash);
     next_subtree_start = (self->subtree_hashes_len - 1) * OUT_LEN;
   } else {
     size_t last_hash_start = (self->subtree_hashes_len - 1) * OUT_LEN;
@@ -273,7 +282,8 @@ void hasher_finalize(const hasher *self, uint8_t out[OUT_LEN]) {
     uint8_t block[BLOCK_LEN];
     memcpy(block, &self->subtree_hashes[next_subtree_start], OUT_LEN);
     memcpy(&block[OUT_LEN], working_hash, OUT_LEN);
-    hash_one_parent(block, self->key_words, is_root, self->flags, working_hash);
+    hash_one_parent(block, self->chunk.key, is_root, self->chunk.flags,
+                    working_hash);
     if (is_root) {
       memcpy(out, working_hash, OUT_LEN);
       return;

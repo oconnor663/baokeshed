@@ -12,18 +12,18 @@ use std::mem::MaybeUninit;
 #[derive(Copy, Clone)]
 pub struct ChunkState {
     state: [u32; 8usize],
+    key: [u32; 8usize],
     offset: u64,
     count: u16,
     buf: [u8; 64usize],
     buf_len: u8,
+    flags: u8,
 }
 
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct Hasher {
     chunk: ChunkState,
-    key_words: [u32; 8usize],
-    flags: u8,
     subtree_hashes_len: u8,
     subtree_hashes: [u8; 1664usize],
 }
@@ -54,13 +54,13 @@ impl Hasher {
 
 mod ffi {
     extern "C" {
-        pub fn hasher_init(hasher: *mut super::Hasher, key: *const u8, flags: u8);
+        pub fn hasher_init(self_: *mut super::Hasher, key: *const u8, flags: u8);
         pub fn hasher_update(
-            hasher: *mut super::Hasher,
+            self_: *mut super::Hasher,
             input: *const ::std::os::raw::c_void,
             input_len: usize,
         );
-        pub fn hasher_finalize(hasher: *const super::Hasher, out: *mut u8);
+        pub fn hasher_finalize(self_: *const super::Hasher, out: *mut u8);
     }
 }
 
@@ -194,20 +194,14 @@ mod test {
                 flags_end: u8,
                 out: *mut u8,
             );
-            pub fn chunk_state_init(
-                state: *mut super::ChunkState,
-                key_words: *const u32,
-                offset: u64,
-            );
+            pub fn chunk_state_init(self_: *mut super::ChunkState, key: *const u32, flags: u8);
             pub fn chunk_state_update(
-                state: *mut super::ChunkState,
+                self_: *mut super::ChunkState,
                 input: *const u8,
                 input_len: usize,
-                flags: u8,
             );
             pub fn chunk_state_finalize(
-                state: *const super::ChunkState,
-                flags: u8,
+                self_: *const super::ChunkState,
                 is_root: bool,
                 out: *mut u8,
             );
@@ -215,24 +209,24 @@ mod test {
     }
 
     impl ChunkState {
-        pub fn new(key_words: &[Word; 8], offset: u64) -> ChunkState {
+        pub fn new(key_words: &[Word; 8], flags: u8) -> ChunkState {
             let mut state: MaybeUninit<ChunkState> = MaybeUninit::uninit();
             unsafe {
-                ffi::chunk_state_init(state.as_mut_ptr(), key_words.as_ptr(), offset);
+                ffi::chunk_state_init(state.as_mut_ptr(), key_words.as_ptr(), flags);
                 state.assume_init()
             }
         }
 
-        pub fn update(&mut self, input: &[u8], flags: u8) {
+        pub fn update(&mut self, input: &[u8]) {
             unsafe {
-                ffi::chunk_state_update(self, input.as_ptr(), input.len(), flags);
+                ffi::chunk_state_update(self, input.as_ptr(), input.len());
             }
         }
 
-        pub fn finalize(&self, flags: u8, is_root: bool) -> [u8; OUT_LEN] {
+        pub fn finalize(&self, is_root: bool) -> [u8; OUT_LEN] {
             let mut out = [0; OUT_LEN];
             unsafe {
-                ffi::chunk_state_finalize(self, flags, is_root, out.as_mut_ptr());
+                ffi::chunk_state_finalize(self, is_root, out.as_mut_ptr());
             }
             out
         }
@@ -463,7 +457,6 @@ mod test {
         let mut input_buf = [0; CHUNK_LEN];
         crate::test::paint_test_input(&mut input_buf);
         let key_words = [10, 11, 12, 13, 14, 15, 16, 17];
-        let offset = 0;
         let flags = Flags::KEYED_HASH;
         for &is_root in &[crate::IsRoot::NotRoot, crate::IsRoot::Root] {
             dbg!(is_root);
@@ -471,25 +464,24 @@ mod test {
                 dbg!(case);
                 let input = &input_buf[..case];
 
-                let mut rust_chunk = crate::ChunkState::new(&key_words, offset);
-                let platform = crate::platform::Platform::detect();
-                rust_chunk.update(input, flags, platform);
-                let rust_out = rust_chunk.finalize(is_root, flags, platform).to_hash();
+                let mut rust_chunk = crate::ChunkState::new(&key_words, flags);
+                rust_chunk.update(input);
+                let rust_out = rust_chunk.finalize(is_root).to_hash();
 
                 // First test at once.
                 let is_root_bool = is_root.flag().bits() > 0;
-                let mut c_chunk = super::ChunkState::new(&key_words, offset);
-                c_chunk.update(input, flags.bits());
-                let c_out = c_chunk.finalize(flags.bits(), is_root_bool);
+                let mut c_chunk = super::ChunkState::new(&key_words, flags.bits());
+                c_chunk.update(input);
+                let c_out = c_chunk.finalize(is_root_bool);
                 assert_eq!(rust_out, c_out);
 
                 // Then test one byte at a time.
                 let is_root_bool = is_root.flag().bits() > 0;
-                let mut c_chunk = super::ChunkState::new(&key_words, offset);
+                let mut c_chunk = super::ChunkState::new(&key_words, flags.bits());
                 for &byte in input {
-                    c_chunk.update(&[byte], flags.bits());
+                    c_chunk.update(&[byte]);
                 }
-                let c_out = c_chunk.finalize(flags.bits(), is_root_bool);
+                let c_out = c_chunk.finalize(is_root_bool);
                 assert_eq!(rust_out, c_out);
             }
         }
