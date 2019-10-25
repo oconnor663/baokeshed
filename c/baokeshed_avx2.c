@@ -244,14 +244,14 @@ void hash8_avx2(const uint8_t *const *inputs, size_t blocks,
                 const uint64_t offset_deltas[8], uint8_t flags,
                 uint8_t flags_start, uint8_t flags_end, uint8_t *out) {
   __m256i h_vecs[8] = {
-      xorv(set1(IV[0]), set1(key_words[0])),
-      xorv(set1(IV[1]), set1(key_words[1])),
-      xorv(set1(IV[2]), set1(key_words[2])),
-      xorv(set1(IV[3]), set1(key_words[3])),
-      xorv(set1(IV[4]), set1(key_words[4])),
-      xorv(set1(IV[5]), set1(key_words[5])),
-      xorv(set1(IV[6]), set1(key_words[6])),
-      xorv(set1(IV[7]), set1(key_words[7])),
+      set1(key_words[0]),
+      set1(key_words[1]),
+      set1(key_words[2]),
+      set1(key_words[3]),
+      set1(key_words[4]),
+      set1(key_words[5]),
+      set1(key_words[6]),
+      set1(key_words[7]),
   };
   __m256i offset_low_vec, offset_high_vec;
   load_offsets(offset, offset_deltas, &offset_low_vec, &offset_high_vec);

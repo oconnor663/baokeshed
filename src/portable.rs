@@ -134,7 +134,7 @@ pub fn hash1<A: arrayvec::Array<Item = u8>>(
     out: &mut [u8; OUT_LEN],
 ) {
     debug_assert_eq!(A::CAPACITY % BLOCK_LEN, 0, "uneven blocks");
-    let mut cv = crate::iv(key);
+    let mut cv = *key;
     let mut block_flags = flags | flags_start;
     let mut slice = input.as_slice();
     while slice.len() >= BLOCK_LEN {
@@ -192,15 +192,15 @@ pub mod test {
         let flags_start = 8;
         let flags_end = 16;
 
-        let mut expected_state = crate::iv(&key);
+        let mut expected_cv = key;
         compress(
-            &mut expected_state,
+            &mut expected_cv,
             &block,
             BLOCK_LEN as u8,
             offset,
             flags | flags_start | flags_end,
         );
-        let expected_out = crate::bytes_from_state_words(&expected_state);
+        let expected_out = crate::bytes_from_state_words(&expected_cv);
 
         let mut test_out = [0; OUT_LEN];
         hash1(
@@ -226,29 +226,29 @@ pub mod test {
         let flags_start = 8;
         let flags_end = 16;
 
-        let mut expected_state = crate::iv(&key);
+        let mut expected_cv = key;
         compress(
-            &mut expected_state,
+            &mut expected_cv,
             array_ref!(blocks, 0, BLOCK_LEN),
             BLOCK_LEN as u8,
             offset,
             flags | flags_start,
         );
         compress(
-            &mut expected_state,
+            &mut expected_cv,
             array_ref!(blocks, BLOCK_LEN, BLOCK_LEN),
             BLOCK_LEN as u8,
             offset,
             flags,
         );
         compress(
-            &mut expected_state,
+            &mut expected_cv,
             array_ref!(blocks, 2 * BLOCK_LEN, BLOCK_LEN),
             BLOCK_LEN as u8,
             offset,
             flags | flags_end,
         );
-        let expected_out = crate::bytes_from_state_words(&expected_state);
+        let expected_out = crate::bytes_from_state_words(&expected_cv);
 
         let mut test_out = [0; OUT_LEN];
         hash1(

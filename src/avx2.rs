@@ -308,14 +308,14 @@ pub unsafe fn hash8(
     out: &mut [u8; DEGREE * OUT_LEN],
 ) {
     let mut h_vecs = [
-        xor(set1(IV[0]), set1(key[0])),
-        xor(set1(IV[1]), set1(key[1])),
-        xor(set1(IV[2]), set1(key[2])),
-        xor(set1(IV[3]), set1(key[3])),
-        xor(set1(IV[4]), set1(key[4])),
-        xor(set1(IV[5]), set1(key[5])),
-        xor(set1(IV[6]), set1(key[6])),
-        xor(set1(IV[7]), set1(key[7])),
+        set1(key[0]),
+        set1(key[1]),
+        set1(key[2]),
+        set1(key[3]),
+        set1(key[4]),
+        set1(key[5]),
+        set1(key[6]),
+        set1(key[7]),
     ];
     let (offset_low_vec, offset_high_vec) = load_offsets(offset, offset_delta);
     let mut block_flags = flags | flags_start;
@@ -483,9 +483,9 @@ mod test {
 
         let mut portable_out = [0; DEGREE * OUT_LEN];
         for (parent, out) in parents.iter().zip(portable_out.chunks_exact_mut(OUT_LEN)) {
-            let mut state = iv(&key);
-            portable::compress(&mut state, parent, BLOCK_LEN as u8, 0, Flags::PARENT.bits());
-            out.copy_from_slice(&bytes_from_state_words(&state));
+            let mut cv = key;
+            portable::compress(&mut cv, parent, BLOCK_LEN as u8, 0, Flags::PARENT.bits());
+            out.copy_from_slice(&bytes_from_state_words(&cv));
         }
 
         let mut simd_out = [0; DEGREE * OUT_LEN];
@@ -544,7 +544,7 @@ mod test {
             .enumerate()
             .zip(portable_out.chunks_exact_mut(OUT_LEN))
         {
-            let mut state = iv(&key);
+            let mut cv = key;
             for (block_index, block) in chunk.chunks_exact(BLOCK_LEN).enumerate() {
                 let mut flags = Flags::KEYED_HASH;
                 if block_index == 0 {
@@ -554,14 +554,14 @@ mod test {
                     flags |= Flags::CHUNK_END;
                 }
                 portable::compress(
-                    &mut state,
+                    &mut cv,
                     array_ref!(block, 0, BLOCK_LEN),
                     BLOCK_LEN as u8,
                     initial_offset + (chunk_index * CHUNK_LEN) as u64,
                     flags.bits(),
                 );
             }
-            out.copy_from_slice(&bytes_from_state_words(&state));
+            out.copy_from_slice(&bytes_from_state_words(&cv));
         }
 
         let mut simd_out = [0; DEGREE * OUT_LEN];

@@ -135,17 +135,6 @@ INLINE void write_state_bytes(const uint32_t state[8], uint8_t out[OUT_LEN]) {
   store32(&out[4 * 7], state[7]);
 }
 
-INLINE void init_iv(const uint32_t key_words[8], uint32_t state[8]) {
-  state[0] = IV[0] ^ key_words[0];
-  state[1] = IV[1] ^ key_words[1];
-  state[2] = IV[2] ^ key_words[2];
-  state[3] = IV[3] ^ key_words[3];
-  state[4] = IV[4] ^ key_words[4];
-  state[5] = IV[5] ^ key_words[5];
-  state[6] = IV[6] ^ key_words[6];
-  state[7] = IV[7] ^ key_words[7];
-}
-
 // Declarations for implementation-specific functions.
 void compress_portable(uint32_t state[8], const uint8_t block[BLOCK_LEN],
                        uint8_t block_len, uint64_t offset, uint8_t flags);

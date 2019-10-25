@@ -428,14 +428,14 @@ void hash4_sse41(const uint8_t *const *inputs, size_t blocks,
                  const uint64_t offset_deltas[4], uint8_t flags,
                  uint8_t flags_start, uint8_t flags_end, uint8_t *out) {
   __m128i h_vecs[8] = {
-      xorv(set1(IV[0]), set1(key_words[0])),
-      xorv(set1(IV[1]), set1(key_words[1])),
-      xorv(set1(IV[2]), set1(key_words[2])),
-      xorv(set1(IV[3]), set1(key_words[3])),
-      xorv(set1(IV[4]), set1(key_words[4])),
-      xorv(set1(IV[5]), set1(key_words[5])),
-      xorv(set1(IV[6]), set1(key_words[6])),
-      xorv(set1(IV[7]), set1(key_words[7])),
+      set1(key_words[0]),
+      set1(key_words[1]),
+      set1(key_words[2]),
+      set1(key_words[3]),
+      set1(key_words[4]),
+      set1(key_words[5]),
+      set1(key_words[6]),
+      set1(key_words[7]),
   };
   __m128i offset_low_vec, offset_high_vec;
   load_offsets(offset, offset_deltas, &offset_low_vec, &offset_high_vec);
@@ -506,7 +506,7 @@ INLINE void hash_one_sse41(const uint8_t *input, size_t blocks,
                            uint8_t flags, uint8_t flags_start,
                            uint8_t flags_end, uint8_t out[OUT_LEN]) {
   uint32_t state[8];
-  init_iv(key_words, state);
+  memcpy(state, key_words, KEY_LEN);
   uint8_t block_flags = flags | flags_start;
   while (blocks > 0) {
     if (blocks == 1) {

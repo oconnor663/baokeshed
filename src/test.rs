@@ -122,11 +122,11 @@ fn test_zero_bytes() {
     let mut key = [42; KEY_LEN];
     paint_test_input(&mut key);
     let key_words = words_from_key_bytes(&key);
-    let mut state = iv(&key_words);
+    let mut cv = key_words;
     let block = [0; BLOCK_LEN];
     let flags = Flags::CHUNK_START | Flags::CHUNK_END | Flags::ROOT | Flags::KEYED_HASH;
-    portable::compress(&mut state, &block, 0, 0, flags.bits());
-    let expected_hash: Hash = bytes_from_state_words(&state).into();
+    portable::compress(&mut cv, &block, 0, 0, flags.bits());
+    let expected_hash: Hash = bytes_from_state_words(&cv).into();
 
     assert_eq!(expected_hash, keyed_hash(&[], &key,));
 
@@ -139,12 +139,12 @@ fn test_one_byte() {
     let mut key = [42; KEY_LEN];
     paint_test_input(&mut key);
     let key_words = words_from_key_bytes(&key);
-    let mut state = iv(&key_words);
+    let mut cv = key_words;
     let mut block = [0; BLOCK_LEN];
     block[0] = 9;
     let flags = Flags::CHUNK_START | Flags::CHUNK_END | Flags::ROOT | Flags::KEYED_HASH;
-    portable::compress(&mut state, &block, 1, 0, flags.bits());
-    let expected_hash: Hash = bytes_from_state_words(&state).into();
+    portable::compress(&mut cv, &block, 1, 0, flags.bits());
+    let expected_hash: Hash = bytes_from_state_words(&cv).into();
 
     assert_eq!(expected_hash, keyed_hash(&[9], &key,));
 
@@ -161,7 +161,7 @@ fn exercise_construction(construction: Construction, input_len: usize) {
     let input = &input_buf[..input_len];
 
     // Check the default hash.
-    let expected_default_hash = construction(&input, &[0; KEY_LEN], Flags::empty());
+    let expected_default_hash = construction(&input, &bytes_from_state_words(&IV), Flags::empty());
     assert_eq!(expected_default_hash, hash(&input));
     assert_eq!(
         expected_default_hash,
@@ -207,11 +207,11 @@ fn exercise_construction(construction: Construction, input_len: usize) {
 
 fn three_blocks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], flags: Flags) -> Hash {
     let key_words = words_from_key_bytes(&key);
-    let mut state = iv(&key_words);
+    let mut cv = key_words;
 
     let block0 = array_ref!(input_buf, 0, BLOCK_LEN);
     portable::compress(
-        &mut state,
+        &mut cv,
         &block0,
         BLOCK_LEN as u8,
         0,
@@ -220,7 +220,7 @@ fn three_blocks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], flags: Flags
 
     let block1 = array_ref!(input_buf, BLOCK_LEN, BLOCK_LEN);
     portable::compress(
-        &mut state,
+        &mut cv,
         &block1,
         BLOCK_LEN as u8,
         0, // Subsequent blocks keep using the chunk's starting offset.
@@ -230,14 +230,14 @@ fn three_blocks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], flags: Flags
     let mut block2 = [0; BLOCK_LEN];
     block2[0] = input_buf[2 * BLOCK_LEN];
     portable::compress(
-        &mut state,
+        &mut cv,
         &block2,
         1,
         0, // Subsequent blocks keep using the chunk's starting offset.
         (flags | Flags::CHUNK_END | Flags::ROOT).bits(),
     );
 
-    bytes_from_state_words(&state).into()
+    bytes_from_state_words(&cv).into()
 }
 
 #[test]
@@ -255,10 +255,10 @@ fn hash_whole_chunk_for_testing(
 ) -> [u8; OUT_LEN] {
     assert_eq!(chunk.len(), CHUNK_LEN);
     let blocks = CHUNK_LEN / BLOCK_LEN;
-    let mut state = iv(&key);
+    let mut cv = *key;
     // First block.
     portable::compress(
-        &mut state,
+        &mut cv,
         array_ref!(chunk, 0, BLOCK_LEN),
         BLOCK_LEN as u8,
         offset,
@@ -267,7 +267,7 @@ fn hash_whole_chunk_for_testing(
     // Middle blocks.
     for block_index in 1..blocks - 1 {
         portable::compress(
-            &mut state,
+            &mut cv,
             array_ref!(chunk, block_index * BLOCK_LEN, BLOCK_LEN),
             BLOCK_LEN as u8,
             offset,
@@ -276,13 +276,13 @@ fn hash_whole_chunk_for_testing(
     }
     // Last block.
     portable::compress(
-        &mut state,
+        &mut cv,
         array_ref!(chunk, (blocks - 1) * BLOCK_LEN, BLOCK_LEN),
         BLOCK_LEN as u8,
         offset,
         (flags | Flags::CHUNK_END).bits(),
     );
-    bytes_from_state_words(&state)
+    bytes_from_state_words(&cv)
 }
 
 fn three_chunks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], flags: Flags) -> Hash {
@@ -302,43 +302,43 @@ fn three_chunks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], flags: Flags
     // The third and final chunk is one byte.
     let mut chunk2_block = [0; BLOCK_LEN];
     chunk2_block[0] = input_buf[2 * CHUNK_LEN];
-    let mut chunk2_state = iv(&key_words);
+    let mut chunk2_cv = key_words;
     portable::compress(
-        &mut chunk2_state,
+        &mut chunk2_cv,
         &chunk2_block,
         1,
         2 * CHUNK_LEN as u64,
         (flags | Flags::CHUNK_START | Flags::CHUNK_END).bits(),
     );
-    let chunk2_out = bytes_from_state_words(&chunk2_state);
+    let chunk2_out = bytes_from_state_words(&chunk2_cv);
 
     // The parent of the first two chunks.
-    let mut left_parent_state = iv(&key_words);
+    let mut left_parent_cv = key_words;
     let mut left_parent_block = [0; BLOCK_LEN];
     left_parent_block[..OUT_LEN].copy_from_slice(&chunk0_out);
     left_parent_block[OUT_LEN..].copy_from_slice(&chunk1_out);
     portable::compress(
-        &mut left_parent_state,
+        &mut left_parent_cv,
         &left_parent_block,
         BLOCK_LEN as u8,
         0,
         (flags | Flags::PARENT).bits(),
     );
-    let left_parent_out = bytes_from_state_words(&left_parent_state);
+    let left_parent_out = bytes_from_state_words(&left_parent_cv);
 
     // The root node.
-    let mut root_state = iv(&key_words);
+    let mut root_cv = key_words;
     let mut root_block = [0; BLOCK_LEN];
     root_block[..OUT_LEN].copy_from_slice(&left_parent_out);
     root_block[OUT_LEN..].copy_from_slice(&chunk2_out);
     portable::compress(
-        &mut root_state,
+        &mut root_cv,
         &root_block,
         BLOCK_LEN as u8,
         0,
         (flags | Flags::PARENT | Flags::ROOT).bits(),
     );
-    bytes_from_state_words(&root_state).into()
+    bytes_from_state_words(&root_cv).into()
 }
 
 #[test]
@@ -356,6 +356,7 @@ fn test_xof_output() {
 
     let first_bytes = xof.read();
     assert_eq!(&first_bytes[..OUT_LEN], expected_hash.as_bytes());
+    assert!(&first_bytes[OUT_LEN..] != expected_hash.as_bytes());
 
     let second_bytes = xof.read();
     assert!(&first_bytes[..] != &second_bytes[..]);
@@ -368,8 +369,8 @@ fn test_xof_output() {
 #[test]
 fn test_domain_separation() {
     let h1 = hash(b"foo");
-    let h2 = keyed_hash(b"foo", ZERO_KEY);
-    let h3 = derive_key(ZERO_KEY, b"foo").to_hash();
+    let h2 = keyed_hash(b"foo", &bytes_from_state_words(&IV));
+    let h3 = derive_key(&bytes_from_state_words(&IV), b"foo").to_hash();
     assert!(h1 != h2);
     assert!(h2 != h3);
 }

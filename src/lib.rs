@@ -61,8 +61,6 @@ const WORD_BYTES: usize = core::mem::size_of::<Word>();
 const WORD_BITS: usize = 8 * WORD_BYTES;
 const MAX_DEPTH: usize = 52; // 2^52 * 4096 = 2^64
 
-const ZERO_KEY: &[u8; KEY_LEN] = &[0; KEY_LEN];
-
 /// The default number of bytes in a hash, 32.
 pub const OUT_LEN: usize = 8 * WORD_BYTES;
 
@@ -150,19 +148,6 @@ fn bytes_from_state_words(words: &[Word; 8]) -> [u8; OUT_LEN] {
         *refs.7 = words[7].to_le_bytes();
     }
     bytes
-}
-
-fn iv(key: &[Word; 8]) -> [Word; 8] {
-    [
-        IV[0] ^ key[0],
-        IV[1] ^ key[1],
-        IV[2] ^ key[2],
-        IV[3] ^ key[3],
-        IV[4] ^ key[4],
-        IV[5] ^ key[5],
-        IV[6] ^ key[6],
-        IV[7] ^ key[7],
-    ]
 }
 
 fn offset_low(offset: u64) -> Word {
@@ -311,7 +296,7 @@ fn hash_one_chunk(
     if let IsRoot::Root = is_root {
         debug_assert_eq!(offset, 0, "root chunk must be offset 0");
     }
-    let mut cv = iv(key);
+    let mut cv = *key;
     let mut block_flags = flags | Flags::CHUNK_START;
     let mut block_offset = 0;
     while block_offset + BLOCK_LEN <= chunk.len() {
@@ -553,7 +538,7 @@ fn condense_root(
         children = &mut children[..out_n * OUT_LEN];
     }
     Output {
-        cv: iv(key),
+        cv: *key,
         block: *array_ref!(children, 0, BLOCK_LEN),
         block_len: BLOCK_LEN as u8,
         offset: 0,
@@ -562,9 +547,8 @@ fn condense_root(
     }
 }
 
-fn hash_internal(input: &[u8], key_bytes: &[u8; KEY_LEN], flags: Flags) -> Output {
+fn hash_internal(input: &[u8], key_words: &[Word; 8], flags: Flags) -> Output {
     let platform = Platform::detect();
-    let key_words = words_from_key_bytes(key_bytes);
     if input.len() <= CHUNK_LEN {
         return hash_one_chunk(input, &key_words, 0, IsRoot::Root, flags, platform);
     }
@@ -586,7 +570,7 @@ pub fn hash(input: &[u8]) -> Hash {
 
 /// The default hash function, returning an extensible output.
 pub fn hash_xof(input: &[u8]) -> Output {
-    hash_internal(input, ZERO_KEY, Flags::empty())
+    hash_internal(input, &IV, Flags::empty())
 }
 
 /// The hash function with a key.
@@ -600,7 +584,8 @@ pub fn keyed_hash(input: &[u8], key: &[u8; KEY_LEN]) -> Hash {
 ///
 /// This is domain separated from `hash`.
 pub fn keyed_hash_xof(input: &[u8], key: &[u8; KEY_LEN]) -> Output {
-    hash_internal(input, key, Flags::KEYED_HASH)
+    let key_words = words_from_key_bytes(key);
+    hash_internal(input, &key_words, Flags::KEYED_HASH)
 }
 
 /// The key derivation function.
@@ -609,7 +594,8 @@ pub fn keyed_hash_xof(input: &[u8], key: &[u8; KEY_LEN]) -> Output {
 /// the same as `keyed_hash_xof`, except that `context` is intended to be a
 /// hardcoded, application-specific string.
 pub fn derive_key(key: &[u8; KEY_LEN], context: &[u8]) -> Output {
-    hash_internal(context, key, Flags::DERIVE_KEY)
+    let key_words = words_from_key_bytes(key);
+    hash_internal(context, &key_words, Flags::DERIVE_KEY)
 }
 
 // =======================================================================
@@ -618,7 +604,7 @@ pub fn derive_key(key: &[u8; KEY_LEN], context: &[u8]) -> Output {
 
 #[derive(Clone)]
 struct ChunkState {
-    state: [Word; 8],
+    cv: [Word; 8],
     key: [Word; 8],
     offset: u64,
     count: u16,
@@ -631,7 +617,7 @@ struct ChunkState {
 impl ChunkState {
     fn new(key: &[Word; 8], flags: Flags) -> Self {
         Self {
-            state: iv(key),
+            cv: *key,
             key: *key,
             offset: 0,
             count: 0,
@@ -644,7 +630,7 @@ impl ChunkState {
 
     fn reset(&mut self, new_offset: u64) {
         debug_assert_eq!(new_offset % CHUNK_LEN as u64, 0);
-        self.state = iv(&self.key);
+        self.cv = self.key;
         self.offset = new_offset;
         self.count = 0;
         self.buf = [0; BLOCK_LEN];
@@ -680,7 +666,7 @@ impl ChunkState {
                 debug_assert_eq!(self.buf_len as usize, BLOCK_LEN);
                 let block_flags = self.flags | self.maybe_chunk_start_flag(); // borrowck
                 self.platform.compress(
-                    &mut self.state,
+                    &mut self.cv,
                     &self.buf,
                     BLOCK_LEN as u8,
                     self.offset,
@@ -696,7 +682,7 @@ impl ChunkState {
             debug_assert_eq!(self.buf_len, 0);
             let block_flags = self.flags | self.maybe_chunk_start_flag(); // borrowck
             self.platform.compress(
-                &mut self.state,
+                &mut self.cv,
                 array_ref!(input, 0, BLOCK_LEN),
                 BLOCK_LEN as u8,
                 self.offset,
@@ -724,7 +710,7 @@ impl ChunkState {
         let block_flags =
             self.flags | self.maybe_chunk_start_flag() | Flags::CHUNK_END | is_root.flag();
         Output {
-            cv: self.state,
+            cv: self.cv,
             block: self.buf,
             block_len: self.buf_len,
             offset: self.offset,
@@ -753,7 +739,7 @@ fn hash_one_parent(
     *refs.0 = *left_child;
     *refs.1 = *right_child;
     Output {
-        cv: iv(key),
+        cv: *key,
         block,
         block_len: BLOCK_LEN as u8,
         offset: 0,
@@ -776,8 +762,7 @@ pub struct Hasher {
 }
 
 impl Hasher {
-    fn new_internal(key_bytes: &[u8; KEY_LEN], flags: Flags) -> Self {
-        let key_words = words_from_key_bytes(key_bytes);
+    fn new_internal(key_words: &[Word; 8], flags: Flags) -> Self {
         Self {
             subtree_hashes: ArrayVec::new(),
             chunk: ChunkState::new(&key_words, flags),
@@ -786,12 +771,13 @@ impl Hasher {
 
     /// Construct an incremental hasher for the default hash function.
     pub fn new() -> Self {
-        Self::new_internal(ZERO_KEY, Flags::empty())
+        Self::new_internal(&IV, Flags::empty())
     }
 
     /// Construct an incremental hasher with a key.
     pub fn new_keyed(key: &[u8; KEY_LEN]) -> Self {
-        Self::new_internal(key, Flags::KEYED_HASH)
+        let key_words = words_from_key_bytes(key);
+        Self::new_internal(&key_words, Flags::KEYED_HASH)
     }
 
     /// Construct an incremental hasher for key derivation.
@@ -800,7 +786,8 @@ impl Hasher {
     /// application-specific context string. Most callers should hardcode such
     /// strings and prefer the `derive_key` function.
     pub fn new_derive_key(key: &[u8; KEY_LEN]) -> Self {
-        Self::new_internal(key, Flags::DERIVE_KEY)
+        let key_words = words_from_key_bytes(key);
+        Self::new_internal(&key_words, Flags::DERIVE_KEY)
     }
 
     // We keep subtree hashes in the subtree_hashes array without storing

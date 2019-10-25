@@ -67,7 +67,7 @@ mod ffi {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{Flags, Word, BLOCK_LEN, CHUNK_LEN, WORD_BITS};
+    use crate::{bytes_from_state_words, Flags, Word, BLOCK_LEN, CHUNK_LEN, WORD_BITS};
     use arrayref::array_ref;
 
     const CHUNK_OFFSET_DELTAS: &[u64; 17] = &[
@@ -491,22 +491,23 @@ mod test {
     fn test_compare_hash_tree() {
         let mut input_buf = [0; crate::test::TEST_CASES_MAX];
         crate::test::paint_test_input(&mut input_buf);
-        let key = [5; KEY_LEN];
+        let key_words = [5; 8];
+        let key_bytes = bytes_from_state_words(&key_words);
 
         for &case in crate::test::TEST_CASES {
             dbg!(case);
             let input = &input_buf[..case];
 
-            let rust_hash = crate::hash_internal(input, &key, Flags::KEYED_HASH).to_hash();
+            let rust_hash = crate::hash_internal(input, &key_words, Flags::KEYED_HASH).to_hash();
 
             // First test at once.
-            let mut c_hasher = super::Hasher::new(&key, Flags::KEYED_HASH.bits());
+            let mut c_hasher = super::Hasher::new(&key_bytes, Flags::KEYED_HASH.bits());
             c_hasher.update(input);
             let c_hash = c_hasher.finalize();
             assert_eq!(rust_hash, c_hash);
 
             // Then test one byte at a time.
-            let mut c_hasher = super::Hasher::new(&key, Flags::KEYED_HASH.bits());
+            let mut c_hasher = super::Hasher::new(&key_bytes, Flags::KEYED_HASH.bits());
             for &byte in input {
                 c_hasher.update(&[byte]);
             }

@@ -19,8 +19,8 @@ typedef struct {
 
 // Non-inline for unit testing.
 void chunk_state_init(chunk_state *self, const uint32_t key[8], uint8_t flags) {
-  init_iv(key, self->state);
-  memcpy(self->key, key, 32);
+  memcpy(self->state, key, KEY_LEN);
+  memcpy(self->key, key, KEY_LEN);
   self->offset = 0;
   self->count = 0;
   memset(self->buf, 0, BLOCK_LEN);
@@ -29,7 +29,7 @@ void chunk_state_init(chunk_state *self, const uint32_t key[8], uint8_t flags) {
 }
 
 void chunk_state_reset(chunk_state *self, uint64_t new_offset) {
-  init_iv(self->key, self->state);
+  memcpy(self->state, self->key, KEY_LEN);
   self->offset = new_offset;
   self->count = 0;
   memset(self->buf, 0, BLOCK_LEN);
@@ -122,7 +122,7 @@ INLINE void hash_one_parent(const uint8_t block[BLOCK_LEN],
     block_flags |= ROOT;
   }
   uint32_t state[8];
-  init_iv(key, state);
+  memcpy(state, key, KEY_LEN);
   compress(state, block, BLOCK_LEN, 0, block_flags);
   write_state_bytes(state, out);
 }
