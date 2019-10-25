@@ -291,14 +291,14 @@ void hash8_avx2(const uint8_t *const *inputs, size_t blocks,
     round_fn(v, msg_vecs, 4);
     round_fn(v, msg_vecs, 5);
     round_fn(v, msg_vecs, 6);
-    h_vecs[0] = xorv(h_vecs[0], v[0]);
-    h_vecs[1] = xorv(h_vecs[1], v[1]);
-    h_vecs[2] = xorv(h_vecs[2], v[2]);
-    h_vecs[3] = xorv(h_vecs[3], v[3]);
-    h_vecs[4] = xorv(h_vecs[4], v[4]);
-    h_vecs[5] = xorv(h_vecs[5], v[5]);
-    h_vecs[6] = xorv(h_vecs[6], v[6]);
-    h_vecs[7] = xorv(h_vecs[7], v[7]);
+    h_vecs[0] = xorv(v[0], v[8]);
+    h_vecs[1] = xorv(v[1], v[9]);
+    h_vecs[2] = xorv(v[2], v[10]);
+    h_vecs[3] = xorv(v[3], v[11]);
+    h_vecs[4] = xorv(v[4], v[12]);
+    h_vecs[5] = xorv(v[5], v[13]);
+    h_vecs[6] = xorv(v[6], v[14]);
+    h_vecs[7] = xorv(v[7], v[15]);
 
     block_flags = flags;
   }

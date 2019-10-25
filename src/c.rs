@@ -250,7 +250,7 @@ mod test {
         let flags = Flags::CHUNK_END | Flags::ROOT;
 
         let mut rust_state = initial_state;
-        crate::portable::compress_in_place(
+        crate::portable::compress(
             &mut rust_state,
             &block,
             block_len,

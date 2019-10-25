@@ -279,10 +279,8 @@ void compress_avx512(uint32_t state[8], const uint8_t block[BLOCK_LEN],
   g2(&row1, &row2, &row3, &row4, buf);
   undiagonalize(&row1, &row3, &row4);
 
-  row1 = xor_128(row1, loadu_128((uint8_t *)&state[0]));
-  row2 = xor_128(row2, loadu_128((uint8_t *)&state[4]));
-  storeu_128(row1, (uint8_t *)&state[0]);
-  storeu_128(row2, (uint8_t *)&state[4]);
+  storeu_128(xor_128(row1, row3), (uint8_t *)&state[0]);
+  storeu_128(xor_128(row2, row4), (uint8_t *)&state[4]);
 }
 
 /*
@@ -512,14 +510,14 @@ void hash4_avx512(const uint8_t *const *inputs, size_t blocks,
     round_fn4(v, msg_vecs, 4);
     round_fn4(v, msg_vecs, 5);
     round_fn4(v, msg_vecs, 6);
-    h_vecs[0] = xor_128(h_vecs[0], v[0]);
-    h_vecs[1] = xor_128(h_vecs[1], v[1]);
-    h_vecs[2] = xor_128(h_vecs[2], v[2]);
-    h_vecs[3] = xor_128(h_vecs[3], v[3]);
-    h_vecs[4] = xor_128(h_vecs[4], v[4]);
-    h_vecs[5] = xor_128(h_vecs[5], v[5]);
-    h_vecs[6] = xor_128(h_vecs[6], v[6]);
-    h_vecs[7] = xor_128(h_vecs[7], v[7]);
+    h_vecs[0] = xor_128(v[0], v[8]);
+    h_vecs[1] = xor_128(v[1], v[9]);
+    h_vecs[2] = xor_128(v[2], v[10]);
+    h_vecs[3] = xor_128(v[3], v[11]);
+    h_vecs[4] = xor_128(v[4], v[12]);
+    h_vecs[5] = xor_128(v[5], v[13]);
+    h_vecs[6] = xor_128(v[6], v[14]);
+    h_vecs[7] = xor_128(v[7], v[15]);
 
     block_flags = flags;
   }
@@ -776,14 +774,14 @@ void hash8_avx512(const uint8_t *const *inputs, size_t blocks,
     round_fn8(v, msg_vecs, 4);
     round_fn8(v, msg_vecs, 5);
     round_fn8(v, msg_vecs, 6);
-    h_vecs[0] = xor_256(h_vecs[0], v[0]);
-    h_vecs[1] = xor_256(h_vecs[1], v[1]);
-    h_vecs[2] = xor_256(h_vecs[2], v[2]);
-    h_vecs[3] = xor_256(h_vecs[3], v[3]);
-    h_vecs[4] = xor_256(h_vecs[4], v[4]);
-    h_vecs[5] = xor_256(h_vecs[5], v[5]);
-    h_vecs[6] = xor_256(h_vecs[6], v[6]);
-    h_vecs[7] = xor_256(h_vecs[7], v[7]);
+    h_vecs[0] = xor_256(v[0], v[8]);
+    h_vecs[1] = xor_256(v[1], v[9]);
+    h_vecs[2] = xor_256(v[2], v[10]);
+    h_vecs[3] = xor_256(v[3], v[11]);
+    h_vecs[4] = xor_256(v[4], v[12]);
+    h_vecs[5] = xor_256(v[5], v[13]);
+    h_vecs[6] = xor_256(v[6], v[14]);
+    h_vecs[7] = xor_256(v[7], v[15]);
 
     block_flags = flags;
   }
@@ -1104,14 +1102,14 @@ void hash16_avx512(const uint8_t *const *inputs, size_t blocks,
     round_fn16(v, msg_vecs, 4);
     round_fn16(v, msg_vecs, 5);
     round_fn16(v, msg_vecs, 6);
-    h_vecs[0] = xor_512(h_vecs[0], v[0]);
-    h_vecs[1] = xor_512(h_vecs[1], v[1]);
-    h_vecs[2] = xor_512(h_vecs[2], v[2]);
-    h_vecs[3] = xor_512(h_vecs[3], v[3]);
-    h_vecs[4] = xor_512(h_vecs[4], v[4]);
-    h_vecs[5] = xor_512(h_vecs[5], v[5]);
-    h_vecs[6] = xor_512(h_vecs[6], v[6]);
-    h_vecs[7] = xor_512(h_vecs[7], v[7]);
+    h_vecs[0] = xor_512(v[0], v[8]);
+    h_vecs[1] = xor_512(v[1], v[9]);
+    h_vecs[2] = xor_512(v[2], v[10]);
+    h_vecs[3] = xor_512(v[3], v[11]);
+    h_vecs[4] = xor_512(v[4], v[12]);
+    h_vecs[5] = xor_512(v[5], v[13]);
+    h_vecs[6] = xor_512(v[6], v[14]);
+    h_vecs[7] = xor_512(v[7], v[15]);
 
     block_flags = flags;
   }

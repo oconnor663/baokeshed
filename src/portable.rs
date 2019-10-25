@@ -54,7 +54,8 @@ fn round(state: &mut [Word; 16], msg: &[Word; 16], round: usize) {
     g(state, 3, 4, 9, 14, msg[schedule[14]], msg[schedule[15]]);
 }
 
-pub fn compress(
+#[inline(always)]
+fn compress_inner(
     cv: &[Word; 8],
     block: &[u8; BLOCK_LEN],
     block_len: u8,
@@ -89,27 +90,38 @@ pub fn compress(
     round(&mut state, &block_words, 5);
     round(&mut state, &block_words, 6);
 
-    state[0] ^= cv[0];
-    state[1] ^= cv[1];
-    state[2] ^= cv[2];
-    state[3] ^= cv[3];
-    state[4] ^= cv[4];
-    state[5] ^= cv[5];
-    state[6] ^= cv[6];
-    state[7] ^= cv[7];
-
     state
 }
 
-pub fn compress_in_place(
+pub fn compress(
     cv: &mut [Word; 8],
     block: &[u8; BLOCK_LEN],
     block_len: u8,
     offset: u64,
     flags: u8,
 ) {
-    let out = compress(cv, block, block_len, offset, flags);
-    *cv = *array_ref!(out, 0, 8);
+    let state = compress_inner(cv, block, block_len, offset, flags);
+    for i in 0..8 {
+        cv[i] = state[i] ^ state[i + 8];
+    }
+}
+
+pub fn compress_xof(
+    cv: &[Word; 8],
+    block: &[u8; BLOCK_LEN],
+    block_len: u8,
+    offset: u64,
+    flags: u8,
+) -> [u8; 64] {
+    let state = compress_inner(cv, block, block_len, offset, flags);
+    let mut output = [0u8; 64];
+    for i in 0..8 {
+        output[i * 4..][..4].copy_from_slice(&(state[i] ^ state[i + 8]).to_le_bytes());
+    }
+    for i in 9..16 {
+        output[i * 4..][..4].copy_from_slice(&(state[i] ^ cv[i - 8]).to_le_bytes());
+    }
+    output
 }
 
 pub fn hash1<A: arrayvec::Array<Item = u8>>(
@@ -129,7 +141,7 @@ pub fn hash1<A: arrayvec::Array<Item = u8>>(
         if slice.len() == BLOCK_LEN {
             block_flags |= flags_end;
         }
-        compress_in_place(
+        compress(
             &mut cv,
             array_ref!(slice, 0, BLOCK_LEN),
             BLOCK_LEN as u8,
@@ -181,7 +193,7 @@ pub mod test {
         let flags_end = 16;
 
         let mut expected_state = crate::iv(&key);
-        compress_in_place(
+        compress(
             &mut expected_state,
             &block,
             BLOCK_LEN as u8,
@@ -215,21 +227,21 @@ pub mod test {
         let flags_end = 16;
 
         let mut expected_state = crate::iv(&key);
-        compress_in_place(
+        compress(
             &mut expected_state,
             array_ref!(blocks, 0, BLOCK_LEN),
             BLOCK_LEN as u8,
             offset,
             flags | flags_start,
         );
-        compress_in_place(
+        compress(
             &mut expected_state,
             array_ref!(blocks, BLOCK_LEN, BLOCK_LEN),
             BLOCK_LEN as u8,
             offset,
             flags,
         );
-        compress_in_place(
+        compress(
             &mut expected_state,
             array_ref!(blocks, 2 * BLOCK_LEN, BLOCK_LEN),
             BLOCK_LEN as u8,

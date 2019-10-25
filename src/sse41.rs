@@ -122,14 +122,14 @@ unsafe fn undiagonalize(row1: &mut __m128i, row3: &mut __m128i, row4: &mut __m12
     *row3 = _mm_shuffle_epi32(*row3, _MM_SHUFFLE!(2, 1, 0, 3));
 }
 
-#[target_feature(enable = "sse4.1")]
-pub unsafe fn compress(
+#[inline(always)]
+unsafe fn compress_inner(
     cv: &[Word; 8],
     block: &[u8; BLOCK_LEN],
     block_len: u8,
     offset: u64,
     flags: u8,
-) -> [Word; 16] {
+) -> [__m128i; 4] {
     let row1 = &mut loadu(cv.as_ptr().add(0) as _);
     let row2 = &mut loadu(cv.as_ptr().add(4) as _);
     let row3 = &mut set4(IV[0], IV[1], IV[2], IV[3]);
@@ -303,21 +303,36 @@ pub unsafe fn compress(
     g2(row1, row2, row3, row4, buf);
     undiagonalize(row1, row3, row4);
 
-    *row1 = xor(*row1, loadu(cv.as_ptr().add(0) as _));
-    *row2 = xor(*row2, loadu(cv.as_ptr().add(4) as _));
-    core::mem::transmute([*row1, *row2, *row3, *row4])
+    [*row1, *row2, *row3, *row4]
 }
 
 #[target_feature(enable = "sse4.1")]
-pub unsafe fn compress_in_place(
+pub unsafe fn compress(
     cv: &mut [Word; 8],
     block: &[u8; BLOCK_LEN],
     block_len: u8,
     offset: u64,
     flags: u8,
 ) {
-    let out = compress(cv, block, block_len, offset, flags);
-    *cv = *array_ref!(out, 0, 8);
+    let [row1, row2, row3, row4] = compress_inner(cv, block, block_len, offset, flags);
+    storeu(xor(row1, row3), cv.as_mut_ptr().add(0) as *mut u8);
+    storeu(xor(row2, row4), cv.as_mut_ptr().add(4) as *mut u8);
+}
+
+#[target_feature(enable = "sse4.1")]
+pub unsafe fn compress_xof(
+    cv: &[Word; 8],
+    block: &[u8; BLOCK_LEN],
+    block_len: u8,
+    offset: u64,
+    flags: u8,
+) -> [u8; 64] {
+    let mut rows = compress_inner(cv, block, block_len, offset, flags);
+    rows[0] = xor(rows[0], rows[2]);
+    rows[1] = xor(rows[1], rows[3]);
+    rows[2] = xor(rows[2], loadu(cv.as_ptr().add(0) as *const u8));
+    rows[3] = xor(rows[3], loadu(cv.as_ptr().add(4) as *const u8));
+    core::mem::transmute(rows) // x86 is little endian
 }
 
 #[inline(always)]
@@ -567,14 +582,14 @@ pub unsafe fn hash4(
         round(&mut v, &msg_vecs, 4);
         round(&mut v, &msg_vecs, 5);
         round(&mut v, &msg_vecs, 6);
-        h_vecs[0] = xor(h_vecs[0], v[0]);
-        h_vecs[1] = xor(h_vecs[1], v[1]);
-        h_vecs[2] = xor(h_vecs[2], v[2]);
-        h_vecs[3] = xor(h_vecs[3], v[3]);
-        h_vecs[4] = xor(h_vecs[4], v[4]);
-        h_vecs[5] = xor(h_vecs[5], v[5]);
-        h_vecs[6] = xor(h_vecs[6], v[6]);
-        h_vecs[7] = xor(h_vecs[7], v[7]);
+        h_vecs[0] = xor(v[0], v[8]);
+        h_vecs[1] = xor(v[1], v[9]);
+        h_vecs[2] = xor(v[2], v[10]);
+        h_vecs[3] = xor(v[3], v[11]);
+        h_vecs[4] = xor(v[4], v[12]);
+        h_vecs[5] = xor(v[5], v[13]);
+        h_vecs[6] = xor(v[6], v[14]);
+        h_vecs[7] = xor(v[7], v[15]);
 
         block_flags = flags;
     }
@@ -612,7 +627,7 @@ unsafe fn hash1<A: arrayvec::Array<Item = u8>>(
         if slice.len() == BLOCK_LEN {
             block_flags |= flags_end;
         }
-        compress_in_place(
+        compress(
             &mut cv,
             array_ref!(slice, 0, BLOCK_LEN),
             BLOCK_LEN as u8,
@@ -622,7 +637,7 @@ unsafe fn hash1<A: arrayvec::Array<Item = u8>>(
         block_flags = flags;
         slice = &slice[BLOCK_LEN..];
     }
-    *out = crate::bytes_from_state_words(&cv);
+    *out = core::mem::transmute(cv) // x86 is little endian
 }
 
 #[target_feature(enable = "sse4.1")]
@@ -723,7 +738,7 @@ mod test {
         let flags = crate::Flags::CHUNK_END | crate::Flags::ROOT;
 
         let mut portable_state = initial_state;
-        portable::compress_in_place(
+        portable::compress(
             &mut portable_state,
             &block,
             block_len,
@@ -733,7 +748,7 @@ mod test {
 
         let mut simd_state = initial_state;
         unsafe {
-            super::compress_in_place(
+            super::compress(
                 &mut simd_state,
                 &block,
                 block_len,
@@ -764,13 +779,7 @@ mod test {
         let mut portable_out = [0; DEGREE * OUT_LEN];
         for (parent, out) in parents.iter().zip(portable_out.chunks_exact_mut(OUT_LEN)) {
             let mut state = iv(&key);
-            portable::compress_in_place(
-                &mut state,
-                parent,
-                BLOCK_LEN as u8,
-                0,
-                Flags::PARENT.bits(),
-            );
+            portable::compress(&mut state, parent, BLOCK_LEN as u8, 0, Flags::PARENT.bits());
             out.copy_from_slice(&bytes_from_state_words(&state));
         }
 
@@ -831,7 +840,7 @@ mod test {
                 if block_index == CHUNK_LEN / BLOCK_LEN - 1 {
                     block_flags |= Flags::CHUNK_END;
                 }
-                portable::compress_in_place(
+                portable::compress(
                     &mut state,
                     array_ref!(block, 0, BLOCK_LEN),
                     BLOCK_LEN as u8,

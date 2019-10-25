@@ -245,7 +245,7 @@ pub struct Output {
 
 impl Output {
     pub fn read(&mut self) -> [u8; 2 * OUT_LEN] {
-        let out = self.platform.compress(
+        let output = self.platform.compress_xof(
             &self.cv,
             &self.block,
             self.block_len,
@@ -253,32 +253,18 @@ impl Output {
             self.flags.bits(),
         );
         self.offset += 2 * OUT_LEN as u64;
-        let mut bytes = [0; 2 * OUT_LEN];
-        {
-            let refs = mut_array_refs!(&mut bytes, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4);
-            *refs.0 = out[0].to_le_bytes();
-            *refs.1 = out[1].to_le_bytes();
-            *refs.2 = out[2].to_le_bytes();
-            *refs.3 = out[3].to_le_bytes();
-            *refs.4 = out[4].to_le_bytes();
-            *refs.5 = out[5].to_le_bytes();
-            *refs.6 = out[6].to_le_bytes();
-            *refs.7 = out[7].to_le_bytes();
-            *refs.8 = out[8].to_le_bytes();
-            *refs.9 = out[9].to_le_bytes();
-            *refs.10 = out[10].to_le_bytes();
-            *refs.11 = out[11].to_le_bytes();
-            *refs.12 = out[12].to_le_bytes();
-            *refs.13 = out[13].to_le_bytes();
-            *refs.14 = out[14].to_le_bytes();
-            *refs.15 = out[15].to_le_bytes();
-        }
-        bytes
+        output
     }
 
     pub fn to_hash(mut self) -> Hash {
-        let out = self.read();
-        (*array_ref!(out, 0, OUT_LEN)).into()
+        self.platform.compress(
+            &mut self.cv,
+            &self.block,
+            self.block_len,
+            self.offset,
+            self.flags.bits(),
+        );
+        bytes_from_state_words(&self.cv).into()
     }
 }
 
@@ -293,12 +279,12 @@ impl fmt::Debug for Output {
 #[doc(hidden)]
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 pub unsafe fn compress_sse41(
-    state: &[Word; 8],
+    state: &mut [Word; 8],
     block: &[u8; BLOCK_LEN],
     block_len: u8,
     offset: u64,
     flags: u8,
-) -> [Word; 16] {
+) {
     sse41::compress(state, block, block_len, offset, flags)
 }
 
@@ -339,7 +325,7 @@ fn hash_one_chunk(
                 platform,
             };
         }
-        platform.compress_in_place(
+        platform.compress(
             &mut cv,
             array_ref!(chunk, block_offset, BLOCK_LEN),
             BLOCK_LEN as u8,
@@ -693,7 +679,7 @@ impl ChunkState {
             if !input.is_empty() {
                 debug_assert_eq!(self.buf_len as usize, BLOCK_LEN);
                 let block_flags = self.flags | self.maybe_chunk_start_flag(); // borrowck
-                self.platform.compress_in_place(
+                self.platform.compress(
                     &mut self.state,
                     &self.buf,
                     BLOCK_LEN as u8,
@@ -709,7 +695,7 @@ impl ChunkState {
         while input.len() > BLOCK_LEN {
             debug_assert_eq!(self.buf_len, 0);
             let block_flags = self.flags | self.maybe_chunk_start_flag(); // borrowck
-            self.platform.compress_in_place(
+            self.platform.compress(
                 &mut self.state,
                 array_ref!(input, 0, BLOCK_LEN),
                 BLOCK_LEN as u8,

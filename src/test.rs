@@ -125,7 +125,7 @@ fn test_zero_bytes() {
     let mut state = iv(&key_words);
     let block = [0; BLOCK_LEN];
     let flags = Flags::CHUNK_START | Flags::CHUNK_END | Flags::ROOT | Flags::KEYED_HASH;
-    portable::compress_in_place(&mut state, &block, 0, 0, flags.bits());
+    portable::compress(&mut state, &block, 0, 0, flags.bits());
     let expected_hash: Hash = bytes_from_state_words(&state).into();
 
     assert_eq!(expected_hash, keyed_hash(&[], &key,));
@@ -143,7 +143,7 @@ fn test_one_byte() {
     let mut block = [0; BLOCK_LEN];
     block[0] = 9;
     let flags = Flags::CHUNK_START | Flags::CHUNK_END | Flags::ROOT | Flags::KEYED_HASH;
-    portable::compress_in_place(&mut state, &block, 1, 0, flags.bits());
+    portable::compress(&mut state, &block, 1, 0, flags.bits());
     let expected_hash: Hash = bytes_from_state_words(&state).into();
 
     assert_eq!(expected_hash, keyed_hash(&[9], &key,));
@@ -210,7 +210,7 @@ fn three_blocks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], flags: Flags
     let mut state = iv(&key_words);
 
     let block0 = array_ref!(input_buf, 0, BLOCK_LEN);
-    portable::compress_in_place(
+    portable::compress(
         &mut state,
         &block0,
         BLOCK_LEN as u8,
@@ -219,7 +219,7 @@ fn three_blocks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], flags: Flags
     );
 
     let block1 = array_ref!(input_buf, BLOCK_LEN, BLOCK_LEN);
-    portable::compress_in_place(
+    portable::compress(
         &mut state,
         &block1,
         BLOCK_LEN as u8,
@@ -229,7 +229,7 @@ fn three_blocks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], flags: Flags
 
     let mut block2 = [0; BLOCK_LEN];
     block2[0] = input_buf[2 * BLOCK_LEN];
-    portable::compress_in_place(
+    portable::compress(
         &mut state,
         &block2,
         1,
@@ -257,7 +257,7 @@ fn hash_whole_chunk_for_testing(
     let blocks = CHUNK_LEN / BLOCK_LEN;
     let mut state = iv(&key);
     // First block.
-    portable::compress_in_place(
+    portable::compress(
         &mut state,
         array_ref!(chunk, 0, BLOCK_LEN),
         BLOCK_LEN as u8,
@@ -266,7 +266,7 @@ fn hash_whole_chunk_for_testing(
     );
     // Middle blocks.
     for block_index in 1..blocks - 1 {
-        portable::compress_in_place(
+        portable::compress(
             &mut state,
             array_ref!(chunk, block_index * BLOCK_LEN, BLOCK_LEN),
             BLOCK_LEN as u8,
@@ -275,7 +275,7 @@ fn hash_whole_chunk_for_testing(
         );
     }
     // Last block.
-    portable::compress_in_place(
+    portable::compress(
         &mut state,
         array_ref!(chunk, (blocks - 1) * BLOCK_LEN, BLOCK_LEN),
         BLOCK_LEN as u8,
@@ -303,7 +303,7 @@ fn three_chunks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], flags: Flags
     let mut chunk2_block = [0; BLOCK_LEN];
     chunk2_block[0] = input_buf[2 * CHUNK_LEN];
     let mut chunk2_state = iv(&key_words);
-    portable::compress_in_place(
+    portable::compress(
         &mut chunk2_state,
         &chunk2_block,
         1,
@@ -317,7 +317,7 @@ fn three_chunks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], flags: Flags
     let mut left_parent_block = [0; BLOCK_LEN];
     left_parent_block[..OUT_LEN].copy_from_slice(&chunk0_out);
     left_parent_block[OUT_LEN..].copy_from_slice(&chunk1_out);
-    portable::compress_in_place(
+    portable::compress(
         &mut left_parent_state,
         &left_parent_block,
         BLOCK_LEN as u8,
@@ -331,7 +331,7 @@ fn three_chunks_construction(input_buf: &[u8], key: &[u8; KEY_LEN], flags: Flags
     let mut root_block = [0; BLOCK_LEN];
     root_block[..OUT_LEN].copy_from_slice(&left_parent_out);
     root_block[OUT_LEN..].copy_from_slice(&chunk2_out);
-    portable::compress_in_place(
+    portable::compress(
         &mut root_state,
         &root_block,
         BLOCK_LEN as u8,

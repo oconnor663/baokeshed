@@ -52,12 +52,12 @@ impl Platform {
 
     pub fn compress(
         &self,
-        cv: &[Word; 8],
+        cv: &mut [Word; 8],
         block: &[u8; BLOCK_LEN],
         block_len: u8,
         offset: u64,
         flags: u8,
-    ) -> [Word; 16] {
+    ) {
         match self {
             Platform::Portable => portable::compress(cv, block, block_len, offset, flags),
             // Safe because detect() checked for platform support.
@@ -68,20 +68,20 @@ impl Platform {
         }
     }
 
-    pub fn compress_in_place(
+    pub fn compress_xof(
         &self,
-        cv: &mut [Word; 8],
+        cv: &[Word; 8],
         block: &[u8; BLOCK_LEN],
         block_len: u8,
         offset: u64,
         flags: u8,
-    ) {
+    ) -> [u8; 64] {
         match self {
-            Platform::Portable => portable::compress_in_place(cv, block, block_len, offset, flags),
+            Platform::Portable => portable::compress_xof(cv, block, block_len, offset, flags),
             // Safe because detect() checked for platform support.
             #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
             Platform::SSE41 | Platform::AVX2 => unsafe {
-                sse41::compress_in_place(cv, block, block_len, offset, flags)
+                sse41::compress_xof(cv, block, block_len, offset, flags)
             },
         }
     }
