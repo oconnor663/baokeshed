@@ -15,6 +15,13 @@ CASES = [
     baokeshed.BLOCK_LEN + 1,
     baokeshed.CHUNK_LEN - 1,
     baokeshed.CHUNK_LEN,
+    baokeshed.CHUNK_LEN + 1,
+    2 * baokeshed.CHUNK_LEN - 1,
+    2 * baokeshed.CHUNK_LEN,
+    2 * baokeshed.CHUNK_LEN + 1,
+    3 * baokeshed.CHUNK_LEN,
+    4 * baokeshed.CHUNK_LEN,
+    5 * baokeshed.CHUNK_LEN,
 ]
 
 

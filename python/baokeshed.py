@@ -141,16 +141,34 @@ def hash_node(node, key_words, offset, flags, flags_start, flags_end):
     block = bytearray(BLOCK_LEN)
     block[0:block_len] = node[position:]
     compress(cv, block, block_len, offset, block_flags | flags_end)
-    return cv
+    return bytes_from_words(cv)
+
+
+# Left subtrees contain the largest possible power of two chunks, with at least
+# one byte left for the right subtree.
+def left_len(parent_len):
+    available_chunks = (parent_len - 1) // CHUNK_LEN
+    power_of_two_chunks = 2**(available_chunks.bit_length() - 1)
+    return CHUNK_LEN * power_of_two_chunks
+
+
+def hash_recurse(input_bytes, key_words, offset, flags, is_root):
+    maybe_root = ROOT if is_root else 0
+    if len(input_bytes) <= CHUNK_LEN:
+        return hash_node(input_bytes, key_words, offset, flags, CHUNK_START,
+                         CHUNK_END | maybe_root)
+    left = input_bytes[:left_len(len(input_bytes))]
+    right = input_bytes[len(left):]
+    right_offset = offset + len(left)
+    left_hash = hash_recurse(left, key_words, offset, flags, False)
+    right_hash = hash_recurse(right, key_words, right_offset, flags, False)
+    node_bytes = left_hash + right_hash
+    return hash_node(node_bytes, key_words, 0, flags | PARENT | maybe_root, 0,
+                     0)
 
 
 def hash_internal(input_bytes, key_words, flags):
-    if len(input_bytes) > CHUNK_LEN:
-        raise NotImplementedError
-    offset = 0
-    out_words = hash_node(input_bytes, key_words, offset, flags, CHUNK_START,
-                          CHUNK_END | ROOT)
-    return bytes_from_words(out_words)
+    return hash_recurse(input_bytes, key_words, 0, flags, True)
 
 
 def hash(input_bytes):
