@@ -1,3 +1,5 @@
+#! /usr/bin/env python3
+
 IV = [
     0x6A09E667,
     0xBB67AE85,
@@ -37,7 +39,7 @@ DERIVE_KEY = 1 << 5
 
 
 def rotate_right(x, n):
-    (x >> n & x << (32 - n)) & WORD_MAX
+    return (x >> n | x << (32 - n)) & WORD_MAX
 
 
 def g(state, a, b, c, d, x, y):
@@ -66,7 +68,7 @@ def round(state, msg_words, r):
 
 
 def words_from_bytes(buf):
-    words = [0] * (len(buf) / WORD_BYTES)
+    words = [0] * (len(buf) // WORD_BYTES)
     for word_i in range(len(words)):
         words[word_i] = int.from_bytes(
             buf[word_i * WORD_BYTES:(word_i + 1) * WORD_BYTES], "little")
@@ -77,7 +79,7 @@ def bytes_from_words(words):
     buf = bytearray(OUT_LEN)
     for word_i in range(len(words)):
         buf[WORD_BYTES * word_i:WORD_BYTES *
-            (word_i + 1)] = words[word_i].to_bytes("little")
+            (word_i + 1)] = words[word_i].to_bytes(WORD_BYTES, "little")
     return buf
 
 
@@ -109,48 +111,44 @@ def compress_inner(cv, block, block_len, offset, flags):
         IV[6] ^ block_len,
         IV[7] ^ flags,
     ]
-    round(state, block_words, 0)
-    round(state, block_words, 1)
-    round(state, block_words, 2)
-    round(state, block_words, 3)
-    round(state, block_words, 4)
-    round(state, block_words, 5)
-    round(state, block_words, 6)
+    for r in range(7):
+        round(state, block_words, r)
     return state
 
 
 def compress(cv, block, block_len, offset, flags):
     state = compress_inner(cv, block, block_len, offset, flags)
-    cv[0] = state[0] ^ state[8],
-    cv[1] = state[1] ^ state[9],
-    cv[2] = state[2] ^ state[10],
-    cv[3] = state[3] ^ state[11],
-    cv[4] = state[4] ^ state[12],
-    cv[5] = state[5] ^ state[13],
-    cv[6] = state[6] ^ state[14],
-    cv[7] = state[7] ^ state[15],
+    cv[0] = state[0] ^ state[8]
+    cv[1] = state[1] ^ state[9]
+    cv[2] = state[2] ^ state[10]
+    cv[3] = state[3] ^ state[11]
+    cv[4] = state[4] ^ state[12]
+    cv[5] = state[5] ^ state[13]
+    cv[6] = state[6] ^ state[14]
+    cv[7] = state[7] ^ state[15]
 
 
 def hash_node(node, key_words, offset, flags, flags_start, flags_end):
     cv = key_words[:]
     block_flags = flags | flags_start
-    i = 0
-    while len(node) - i > BLOCK_LEN:
-        block = node[BLOCK_LEN * i:BLOCK_LEN * (i + 1)]
+    position = 0
+    while len(node) - position > BLOCK_LEN:
+        block = node[position:position + BLOCK_LEN]
         compress(cv, block, BLOCK_LEN, offset, block_flags)
         block_flags = flags
-        i += BLOCK_LEN
-    block_len = len(node) - i
+        position += BLOCK_LEN
+    block_len = len(node) - position
     block = bytearray(BLOCK_LEN)
-    block[0:block_len] = node[i:]
+    block[0:block_len] = node[position:]
     compress(cv, block, block_len, offset, block_flags | flags_end)
     return cv
 
 
 def hash_internal(input_bytes, key_words, flags):
-    if len(input_bytes) > BLOCK_LEN:
+    if len(input_bytes) > CHUNK_LEN:
         raise NotImplementedError
-    out_words = hash_node(input_bytes, key_words, flags, CHUNK_START,
+    offset = 0
+    out_words = hash_node(input_bytes, key_words, offset, flags, CHUNK_START,
                           CHUNK_END | ROOT)
     return bytes_from_words(out_words)
 
