@@ -191,7 +191,7 @@ fn exercise_construction(construction: Construction, input_len: usize) {
     // Check the KDF.
     let key = array_ref!(input, 7, KEY_LEN);
     let expected_kdf_out = construction(&input, key, Flags::DERIVE_KEY);
-    assert_eq!(expected_kdf_out, derive_key(key, &input).to_hash());
+    assert_eq!(expected_kdf_out, derive_key_xof(key, &input).to_hash());
     assert_eq!(
         expected_kdf_out,
         Hasher::new_derive_key(key).update(&input).finalize(),
@@ -370,7 +370,20 @@ fn test_xof_output() {
 fn test_domain_separation() {
     let h1 = hash(b"foo");
     let h2 = keyed_hash(b"foo", &bytes_from_state_words(&IV));
-    let h3 = derive_key(&bytes_from_state_words(&IV), b"foo").to_hash();
+    let h3 = derive_key_xof(&bytes_from_state_words(&IV), b"foo").to_hash();
     assert!(h1 != h2);
     assert!(h2 != h3);
+}
+
+#[test]
+fn test_regular_xof_match() {
+    assert_eq!(hash(b"foo"), hash_xof(b"foo").to_hash());
+    assert_eq!(
+        keyed_hash(b"foo", &[5; KEY_LEN]),
+        keyed_hash_xof(b"foo", &[5; KEY_LEN]).to_hash()
+    );
+    assert_eq!(
+        &derive_key(&[5; KEY_LEN], b"foo")[..],
+        &derive_key_xof(&[5; KEY_LEN], b"foo").read()[..OUT_LEN],
+    );
 }

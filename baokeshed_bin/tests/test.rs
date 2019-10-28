@@ -66,7 +66,9 @@ fn test_hash_key() {
 #[test]
 fn test_derive_key() {
     let key = &[99; baokeshed::KEY_LEN];
-    let expected = baokeshed::derive_key(key, b"context").to_hash().to_hex();
+    let expected = baokeshed::derive_key_xof(key, b"context")
+        .to_hash()
+        .to_hex();
     let output = cmd!(baokeshed_exe(), "--derive-key", hex::encode(key))
         .stdin_bytes("context")
         .read()

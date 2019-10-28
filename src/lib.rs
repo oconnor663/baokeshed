@@ -593,7 +593,16 @@ pub fn keyed_hash_xof(input: &[u8], key: &[u8; KEY_LEN]) -> Output {
 /// This is domain separated from `hash` and `keyed_hash`. It's functionally
 /// the same as `keyed_hash_xof`, except that `context` is intended to be a
 /// hardcoded, application-specific string.
-pub fn derive_key(key: &[u8; KEY_LEN], context: &[u8]) -> Output {
+pub fn derive_key(key: &[u8; KEY_LEN], context: &[u8]) -> [u8; OUT_LEN] {
+    derive_key_xof(key, context).to_hash().into()
+}
+
+/// The key derivation function, returning an extensible output.
+///
+/// This is domain separated from `hash` and `keyed_hash`. It's functionally
+/// the same as `keyed_hash_xof`, except that `context` is intended to be a
+/// hardcoded, application-specific string.
+pub fn derive_key_xof(key: &[u8; KEY_LEN], context: &[u8]) -> Output {
     let key_words = words_from_key_bytes(key);
     hash_internal(context, &key_words, Flags::DERIVE_KEY)
 }

@@ -47,7 +47,7 @@ fn hash_one(
     if let Some(map) = maybe_memmap_input(&input)? {
         let output = if let Some(key) = key {
             if derive_key {
-                baokeshed::derive_key(key, &map)
+                baokeshed::derive_key_xof(key, &map)
             } else {
                 baokeshed::keyed_hash_xof(&map, key)
             }
