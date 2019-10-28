@@ -157,6 +157,9 @@ def compress_xof(cv, block, block_len, offset, flags):
     return bytes_from_words(state)
 
 
+# The XOF output object. This can provide any number of output bytes. Note that
+# Output objects returned from public functions always set the ROOT flag, but
+# Output objects used internally do not.
 class Output:
     def __init__(self, cv, block, block_len, offset, flags):
         self.cv = cv
@@ -182,8 +185,8 @@ class Output:
                                   self.flags)
             take = min(len(output), num_bytes - i)
             buf[i:i + take] = output[:take]
-            offset += take
-            i += take
+            offset += len(output)
+            i += len(output)
         return buf
 
 
@@ -214,7 +217,7 @@ def left_len(parent_len):
     return CHUNK_LEN * power_of_two_chunks
 
 
-# Hash an entire subtree recursively.
+# Hash an entire subtree recursively, returning an Output object.
 def hash_recurse(input_bytes, key_words, offset, flags, is_root):
     maybe_root = ROOT if is_root else 0
     # If this subtree is just one chunk, hash it as a single node and return.
@@ -243,7 +246,7 @@ def hash_recurse(input_bytes, key_words, offset, flags, is_root):
 
 # The core hash function, taking an input of any length, a 32-byte key, and any
 # domain separation flags that will apply to all nodes (namely KEYED_HASH or
-# DERIVE_KEY).
+# DERIVE_KEY). Returns an Output object.
 def hash_internal(input_bytes, key_words, flags):
     return hash_recurse(input_bytes, key_words, 0, flags, True)
 
@@ -251,27 +254,33 @@ def hash_internal(input_bytes, key_words, flags):
 # ==================== Public API ====================
 
 
+# The default hash function, returning a 32-byte hash.
 def hash(input_bytes):
     return hash_xof(input_bytes).to_hash()
 
 
+# The default hash function, returning an extensible Output object.
 def hash_xof(input_bytes):
     return hash_internal(input_bytes, IV, 0)
 
 
+# The keyed hash function, returning a 32-byte hash.
 def keyed_hash(input_bytes, key_bytes):
     return keyed_hash_xof(input_bytes, key_bytes).to_hash()
 
 
+# The keyed hash function, returning an extensible Output object.
 def keyed_hash_xof(input_bytes, key_bytes):
     key_words = words_from_bytes(key_bytes)
     return hash_internal(input_bytes, key_words, KEYED_HASH)
 
 
+# The KDF, returning a 32 byte key.
 def derive_key(key_bytes, context_bytes):
     return derive_key_xof(key_bytes, context_bytes).to_hash()
 
 
+# The KDF, returning an extensible Output object.
 def derive_key_xof(key_bytes, context_bytes):
     key_words = words_from_bytes(key_bytes)
     return hash_internal(context_bytes, key_words, DERIVE_KEY)
