@@ -95,6 +95,6 @@ jobs:
         toolchain: stable
         override: true
     - run: python3 --version && pip3 --version
-    - run: sudo apt-get install python3-setuptools
+    - run: sudo apt-get install python3-setuptools python3-pytest
     - run: pip3 install --requirement python/requirements.txt
     - run: pytest
