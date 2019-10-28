@@ -220,25 +220,28 @@ def hash_internal(input_bytes, key_words, flags):
     return hash_recurse(input_bytes, key_words, 0, flags, True)
 
 
+# ==================== Public API ====================
+
+
 def hash(input_bytes):
     return hash_xof(input_bytes).to_hash()
-
-
-def keyed_hash(input_bytes, key_bytes):
-    return keyed_hash_xof(input_bytes, key_bytes).to_hash()
-
-
-def derive_key(key_bytes, context_bytes):
-    return derive_key_xof(key_bytes, context_bytes).to_hash()
 
 
 def hash_xof(input_bytes):
     return hash_internal(input_bytes, IV, 0)
 
 
+def keyed_hash(input_bytes, key_bytes):
+    return keyed_hash_xof(input_bytes, key_bytes).to_hash()
+
+
 def keyed_hash_xof(input_bytes, key_bytes):
     key_words = words_from_bytes(key_bytes)
     return hash_internal(input_bytes, key_words, KEYED_HASH)
+
+
+def derive_key(key_bytes, context_bytes):
+    return derive_key_xof(key_bytes, context_bytes).to_hash()
 
 
 def derive_key_xof(key_bytes, context_bytes):
