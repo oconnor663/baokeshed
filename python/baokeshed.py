@@ -191,7 +191,11 @@ class Output:
 
 
 # Hash a node, which might be either a parent or a chunk, and return an Output
-# object.
+# object. Parent nodes will always be exactly one block, but chunks may be more
+# than one. The `flags` argument applies to all blocks in a chunk, while
+# `flags_start` is only included for the first block, and `flags_end` is only
+# included for the last block. Note that if a chunk is just a single block,
+# that block will get both start and end flags.
 def hash_node(node, key_words, offset, flags, flags_start, flags_end):
     cv = key_words[:]
     block_flags = flags | flags_start
@@ -237,11 +241,10 @@ def hash_recurse(input_bytes, key_words, offset, flags, is_root):
     right_hash = hash_recurse(right, key_words, right_offset, flags,
                               False).to_hash()
     node_bytes = left_hash + right_hash
-    # Note that parent nodes are a single block, so they just use 0 for the
-    # flags_start or flags_end parameters. Also all parent nodes use an offset
-    # of 0.
-    return hash_node(node_bytes, key_words, 0, flags | PARENT | maybe_root, 0,
-                     0)
+    # Parent nodes always use an offset of 0. And because they're a single
+    # block, they don't need start or end flags, so those are 0 too.
+    parent_flags = flags | PARENT | maybe_root
+    return hash_node(node_bytes, key_words, 0, parent_flags, 0, 0)
 
 
 # The core hash function, taking an input of any length, a 32-byte key, and any
