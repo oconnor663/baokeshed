@@ -116,6 +116,10 @@ def compress_inner(cv, block, block_len, offset, flags):
     return state
 
 
+# The standard compression function. Used for chaining values in the interior
+# of the tree, and to compute the default OUT_LEN output. This updates the
+# chaining value in place. Note that the output of compress() is a prefix of
+# the output of compress_xof().
 def compress(cv, block, block_len, offset, flags):
     state = compress_inner(cv, block, block_len, offset, flags)
     cv[0] = state[0] ^ state[8]
@@ -128,6 +132,10 @@ def compress(cv, block, block_len, offset, flags):
     cv[7] = state[7] ^ state[15]
 
 
+# The wide compression function. Used to compute XOF output larger than
+# OUT_LEN. This returns output bytes without modifying the chaining value that
+# produced it. Note that the output of compress() is a prefix of the output of
+# compress_xof().
 def compress_xof(cv, block, block_len, offset, flags):
     state = compress_inner(cv, block, block_len, offset, flags)
     state[0] ^= state[8]
@@ -157,12 +165,15 @@ class Output:
         self.offset = offset
         self.flags = flags
 
+    # Return a hash of the default size, OUT_LEN.
     def to_hash(self):
         words = self.cv[:]
         compress(words, self.block, self.block_len, self.offset, self.flags)
         return bytes_from_words(words)
 
-    def to_output(self, num_bytes):
+    # Return any number of output bytes. Note that this interface doesn't
+    # mutate the Output object, so calling it twice will give the same bytes.
+    def to_bytes(self, num_bytes):
         buf = bytearray(num_bytes)
         offset = self.offset
         i = 0
@@ -176,6 +187,8 @@ class Output:
         return buf
 
 
+# Hash a node, which might be either a parent or a chunk, and return an Output
+# object.
 def hash_node(node, key_words, offset, flags, flags_start, flags_end):
     cv = key_words[:]
     block_flags = flags | flags_start
@@ -192,30 +205,45 @@ def hash_node(node, key_words, offset, flags, flags_start, flags_end):
     return Output(cv, block, block_len, offset, block_flags)
 
 
-# Left subtrees contain the largest possible power of two number of chunks,
-# with at least one byte left for the right subtree.
+# The left subtree is the largest possible complete tree that still leaves at
+# least one byte for the right subtree. That is, the number of chunks in the
+# left subtree is the largest power of two that fits.
 def left_len(parent_len):
     available_chunks = (parent_len - 1) // CHUNK_LEN
     power_of_two_chunks = 2**(available_chunks.bit_length() - 1)
     return CHUNK_LEN * power_of_two_chunks
 
 
+# Hash an entire subtree recursively.
 def hash_recurse(input_bytes, key_words, offset, flags, is_root):
     maybe_root = ROOT if is_root else 0
+    # If this subtree is just one chunk, hash it as a single node and return.
+    # Note that if that chunk is the root, the root flag will only be set for
+    # the final block.
     if len(input_bytes) <= CHUNK_LEN:
         return hash_node(input_bytes, key_words, offset, flags, CHUNK_START,
                          CHUNK_END | maybe_root)
+    # The subtree is larger than one chunk. Split it into left and right
+    # subtrees, recurse to compute their hashes, and combine those hashes into
+    # a parent node.
     left = input_bytes[:left_len(len(input_bytes))]
     right = input_bytes[len(left):]
     right_offset = offset + len(left)
+    # Note that the left and right subtrees always use is_root=False.
     left_hash = hash_recurse(left, key_words, offset, flags, False).to_hash()
-    right_hash = hash_recurse(right, key_words, right_offset, flags, False)\
-        .to_hash()
+    right_hash = hash_recurse(right, key_words, right_offset, flags,
+                              False).to_hash()
     node_bytes = left_hash + right_hash
+    # Note that parent nodes are a single block, so they just use 0 for the
+    # flags_start or flags_end parameters. Also all parent nodes use an offset
+    # of 0.
     return hash_node(node_bytes, key_words, 0, flags | PARENT | maybe_root, 0,
                      0)
 
 
+# The core hash function, taking an input of any length, a 32-byte key, and any
+# domain separation flags that will apply to all nodes (namely KEYED_HASH or
+# DERIVE_KEY).
 def hash_internal(input_bytes, key_words, flags):
     return hash_recurse(input_bytes, key_words, 0, flags, True)
 

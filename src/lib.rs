@@ -579,7 +579,7 @@ pub fn keyed_hash_xof(input: &[u8], key: &[u8; KEY_LEN]) -> Output {
 /// The key derivation function.
 ///
 /// This is domain separated from `hash` and `keyed_hash`. It's functionally
-/// the same as `keyed_hash_xof`, except that `context` is intended to be a
+/// the same as `keyed_hash`, except that `context` is intended to be a
 /// hardcoded, application-specific string.
 pub fn derive_key(key: &[u8; KEY_LEN], context: &[u8]) -> [u8; OUT_LEN] {
     derive_key_xof(key, context).to_hash().into()
