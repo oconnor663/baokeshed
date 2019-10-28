@@ -128,6 +128,54 @@ def compress(cv, block, block_len, offset, flags):
     cv[7] = state[7] ^ state[15]
 
 
+def compress_xof(cv, block, block_len, offset, flags):
+    state = compress_inner(cv, block, block_len, offset, flags)
+    state[0] ^= state[8]
+    state[1] ^= state[9]
+    state[2] ^= state[10]
+    state[3] ^= state[11]
+    state[4] ^= state[12]
+    state[5] ^= state[13]
+    state[6] ^= state[14]
+    state[7] ^= state[15]
+    state[8] ^= cv[0]
+    state[9] ^= cv[1]
+    state[10] ^= cv[2]
+    state[11] ^= cv[3]
+    state[12] ^= cv[4]
+    state[13] ^= cv[5]
+    state[14] ^= cv[6]
+    state[15] ^= cv[7]
+    return bytes_from_words(state)
+
+
+class Output:
+    def __init__(self, cv, block, block_len, offset, flags):
+        self.cv = cv
+        self.block = block
+        self.block_len = block_len
+        self.offset = offset
+        self.flags = flags
+
+    def to_hash(self):
+        words = self.cv[:]
+        compress(words, self.block, self.block_len, self.offset, self.flags)
+        return bytes_from_words(words)
+
+    def to_output(self, num_bytes):
+        buf = bytearray(num_bytes)
+        offset = self.offset
+        i = 0
+        while i < num_bytes:
+            output = compress_xof(self.cv, self.block, self.block_len, offset,
+                                  self.flags)
+            take = min(len(output), num_bytes - i)
+            buf[i:i + take] = output[:take]
+            offset += take
+            i += take
+        return buf
+
+
 def hash_node(node, key_words, offset, flags, flags_start, flags_end):
     cv = key_words[:]
     block_flags = flags | flags_start
@@ -140,8 +188,8 @@ def hash_node(node, key_words, offset, flags, flags_start, flags_end):
     block_len = len(node) - position
     block = bytearray(BLOCK_LEN)
     block[0:block_len] = node[position:]
-    compress(cv, block, block_len, offset, block_flags | flags_end)
-    return bytes_from_words(cv)
+    block_flags |= flags_end
+    return Output(cv, block, block_len, offset, block_flags)
 
 
 # Left subtrees contain the largest possible power of two number of chunks,
@@ -160,8 +208,9 @@ def hash_recurse(input_bytes, key_words, offset, flags, is_root):
     left = input_bytes[:left_len(len(input_bytes))]
     right = input_bytes[len(left):]
     right_offset = offset + len(left)
-    left_hash = hash_recurse(left, key_words, offset, flags, False)
-    right_hash = hash_recurse(right, key_words, right_offset, flags, False)
+    left_hash = hash_recurse(left, key_words, offset, flags, False).to_hash()
+    right_hash = hash_recurse(right, key_words, right_offset, flags, False)\
+        .to_hash()
     node_bytes = left_hash + right_hash
     return hash_node(node_bytes, key_words, 0, flags | PARENT | maybe_root, 0,
                      0)
@@ -172,14 +221,26 @@ def hash_internal(input_bytes, key_words, flags):
 
 
 def hash(input_bytes):
-    return hash_internal(input_bytes, IV, 0)
+    return hash_xof(input_bytes).to_hash()
 
 
 def keyed_hash(input_bytes, key_bytes):
+    return keyed_hash_xof(input_bytes, key_bytes).to_hash()
+
+
+def derive_key(key_bytes, context_bytes):
+    return derive_key_xof(key_bytes, context_bytes).to_hash()
+
+
+def hash_xof(input_bytes):
+    return hash_internal(input_bytes, IV, 0)
+
+
+def keyed_hash_xof(input_bytes, key_bytes):
     key_words = words_from_bytes(key_bytes)
     return hash_internal(input_bytes, key_words, KEYED_HASH)
 
 
-def derive_key(key_bytes, context_bytes):
+def derive_key_xof(key_bytes, context_bytes):
     key_words = words_from_bytes(key_bytes)
     return hash_internal(context_bytes, key_words, DERIVE_KEY)

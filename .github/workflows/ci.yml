@@ -98,4 +98,4 @@ jobs:
     - run: sudo apt-get install python3-setuptools python3-pytest
     - run: pip3 install --requirement python/requirements.txt
     # This is what Ubuntu 18.04 calls it :p
-    - run: pytest-3
+    - run: pytest-3 --verbose
