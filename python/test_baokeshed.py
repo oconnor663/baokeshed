@@ -87,14 +87,16 @@ def test_xof_functions():
         # The default hash function.
         rust_output = cmd(baokeshed_path(), "--length",
                           str(output_len)).stdin_bytes(input_bytes).read()
-        python_output = to_hex(baokeshed.hash_xof(input_bytes).to_output(300))
+        python_output = to_hex(
+            baokeshed.hash_xof(input_bytes).to_output(output_len))
         assert rust_output == python_output
 
         # The keyed hash function.
         rust_output = cmd(baokeshed_path(), "--key", key_hex, "--length",
                           str(output_len)).stdin_bytes(input_bytes).read()
         python_output = to_hex(
-            baokeshed.keyed_hash_xof(input_bytes, key_bytes).to_output(300))
+            baokeshed.keyed_hash_xof(input_bytes,
+                                     key_bytes).to_output(output_len))
         assert rust_output == python_output
 
         # The KDF.
@@ -102,5 +104,6 @@ def test_xof_functions():
                           "--length",
                           str(output_len)).stdin_bytes(input_bytes).read()
         python_output = to_hex(
-            baokeshed.derive_key_xof(key_bytes, input_bytes).to_output(300))
+            baokeshed.derive_key_xof(key_bytes,
+                                     input_bytes).to_output(output_len))
         assert rust_output == python_output
