@@ -1,40 +1,28 @@
-//! There are three domain-separated variants of the hash function:
+//! The Baokeshed API is split into three functions:
 //!
-//! - `hash(input)`
-//! - `keyed_hash(input, key)`
-//! - `derive_key(key, context)`
+//! - `hash(input)`, the default hash function
+//! - `keyed_hash(input, key)`, the keyed variant, taking a 32-byte key
+//! - `derive_key(key, context)`, the KDF, taking an arbitrary-length context string
 //!
-//! All three are intended to be collectively collision resistant. The
-//! incremental `Hasher` type provides three equivalent constructors.
+//! These functions share a single implementation, and they all have the same
+//! performance characteristics. But they are domain separated from each other,
+//! and intended to be collectively collision resistant.
+//!
+//! The `derive_key` function should only be used with globally unique,
+//! application-specific context strings. For example, `"example.com
+//! 2019-10-11-09:59:41 session token MACs"`.
+//!
+//! Baokeshed is an XOF, and it can generate any number of output bytes. In
+//! addition to the above API functions returning the default output length,
+//! `_xof` variants are provided that expose the underlying XOF. An iterative
+//! `Hasher` implementation is also provided, with three constructors.
 //!
 //! The standalone functions in this module use both SIMD and
-//! [Rayon](https://github.com/rayon-rs/rayon)-based multithreading. The
-//! streaming [`Hasher`](struct.Hasher.html) implementation uses SIMD but not
-//! threads.
-//!
-//! Encoding and streaming/seeking verification are not yet implemented.
+//! [Rayon](https://github.com/rayon-rs/rayon)-based multithreading for
+//! performance. The [`Hasher`](struct.Hasher.html) implementation uses SIMD
+//! but not threads.
 //!
 //! - [GitHub repo](https://github.com/oconnor663/baokeshed)
-
-// Design notes:
-//
-// The CHUNK_END and PARENT flags aren't strictly necessary, the former because
-// the keyed root node makes it impossible to extend a chunk hash without the
-// key, and the latter because CHUNK_START already effectively domain-separates
-// chunks from parent nodes. But do we want to have to think about what happens
-// when someone length-extends a non-root keyed chunk, or what happens when
-// someone "smuggles" a chunk CV into a parent IV via the key? It doesn't cost
-// much to be conservative here.
-//
-// Rather than incrementing the count for each chunk, we can keep it set to the
-// chunk offset for all the blocks of that chunk, and start calling it the
-// "offset". That preserves the "no dangerous caching optimizations" behavior,
-// and it leads to two nice simplifications: 1) Setting the offset back to zero
-// when we finalize a root chunk is no longer a special case. It's already
-// zero. 2) The SIMD chunk compression loop doesn't need to increment the
-// offset. The offset is split into two vectors of 32-bit words at that point,
-// and leaving those words constant lets us delete the instructions that were
-// doing wrapping addition.
 
 use arrayref::{array_mut_ref, array_ref, array_refs, mut_array_refs};
 use arrayvec::{ArrayString, ArrayVec};
