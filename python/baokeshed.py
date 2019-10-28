@@ -144,8 +144,8 @@ def hash_node(node, key_words, offset, flags, flags_start, flags_end):
     return bytes_from_words(cv)
 
 
-# Left subtrees contain the largest possible power of two chunks, with at least
-# one byte left for the right subtree.
+# Left subtrees contain the largest possible power of two number of chunks,
+# with at least one byte left for the right subtree.
 def left_len(parent_len):
     available_chunks = (parent_len - 1) // CHUNK_LEN
     power_of_two_chunks = 2**(available_chunks.bit_length() - 1)

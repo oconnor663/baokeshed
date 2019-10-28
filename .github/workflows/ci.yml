@@ -83,3 +83,17 @@ jobs:
       env:
         CC: clang
       run: cargo test -vv --features=c_native --release
+
+  test_python:
+    name: Python implementation on Linux
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v1
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+    - run: python3 --version && pip3 --version
+    - run: pip3 install --requirement python/requirements.txt
+    - run: pytest
