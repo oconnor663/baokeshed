@@ -34,16 +34,10 @@
 #define INLINE __attribute__((always_inline)) static inline
 #endif
 
-static const uint64_t IV[8] = {
-    0x6A09E667F3BCC908,
-    0xBB67AE8584CAA73B,
-    0x3C6EF372FE94F82B,
-    0xA54FF53A5F1D36F1,
-    0x510E527FADE682D1,
-    0x9B05688C2B3E6C1F,
-    0x1F83D9ABFB41BD6B,
-    0x5BE0CD19137E2179
-    };
+static const uint64_t IV[8] = {0x6A09E667F3BCC908, 0xBB67AE8584CAA73B,
+                               0x3C6EF372FE94F82B, 0xA54FF53A5F1D36F1,
+                               0x510E527FADE682D1, 0x9B05688C2B3E6C1F,
+                               0x1F83D9ABFB41BD6B, 0x5BE0CD19137E2179};
 
 static const uint8_t MSG_SCHEDULE[8][16] = {
     {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
@@ -66,14 +60,10 @@ static const uint64_t CHUNK_OFFSET_DELTAS[17] = {
 
 INLINE uint64_t load64(const void *src) {
   const uint8_t *p = (const uint8_t *)src;
-  return ((uint64_t)(p[0]) << 0) |
-         ((uint64_t)(p[1]) << 8) |
-         ((uint64_t)(p[2]) << 16) |
-         ((uint64_t)(p[3]) << 24) |
-         ((uint64_t)(p[3]) << 32) |
-         ((uint64_t)(p[3]) << 40) |
-         ((uint64_t)(p[3]) << 48) |
-         ((uint64_t)(p[3]) << 56);
+  return ((uint64_t)(p[0]) << 0) | ((uint64_t)(p[1]) << 8) |
+         ((uint64_t)(p[2]) << 16) | ((uint64_t)(p[3]) << 24) |
+         ((uint64_t)(p[3]) << 32) | ((uint64_t)(p[3]) << 40) |
+         ((uint64_t)(p[3]) << 48) | ((uint64_t)(p[3]) << 56);
 }
 
 INLINE void store64(void *dst, uint64_t w) {
@@ -143,33 +133,26 @@ INLINE void write_state_bytes(const uint64_t state[8], uint8_t out[OUT_LEN]) {
   store64(&out[8 * 7], state[7]);
 }
 
+INLINE void init_cv(const uint64_t key[4], uint64_t out[8]) {
+    out[0] = key[0];
+    out[1] = key[1];
+    out[2] = key[2];
+    out[3] = key[3];
+    out[4] = IV[4];
+    out[5] = IV[5];
+    out[6] = IV[6];
+    out[7] = IV[7];
+}
+
 // Declarations for implementation-specific functions.
-void compress_portable(uint64_t state[8], const uint8_t block[BLOCK_LEN],
-                       uint8_t block_len, uint64_t offset, uint8_t flags);
-void compress_sse41(uint64_t state[8], const uint8_t block[BLOCK_LEN],
-                    uint8_t block_len, uint64_t offset, uint8_t flags);
-void compress_avx512(uint64_t state[8], const uint8_t block[BLOCK_LEN],
-                     uint8_t block_len, uint64_t offset, uint8_t flags);
-void hash_many_portable(const uint8_t *const *inputs, size_t num_inputs,
-                        size_t blocks, const uint64_t key_words[4],
-                        uint64_t offset, const uint64_t offset_deltas[2],
-                        uint8_t flags, uint8_t flags_start, uint8_t flags_end,
-                        uint8_t *out);
-void hash_many_sse41(const uint8_t *const *inputs, size_t num_inputs,
-                     size_t blocks, const uint64_t key_words[4],
-                     uint64_t offset, const uint64_t offset_deltas[5],
-                     uint8_t flags, uint8_t flags_start, uint8_t flags_end,
-                     uint8_t *out);
-void hash_many_avx2(const uint8_t *const *inputs, size_t num_inputs,
-                    size_t blocks, const uint64_t key_words[4], uint64_t offset,
-                    const uint64_t offset_deltas[9], uint8_t flags,
-                    uint8_t flags_start, uint8_t flags_end, uint8_t *out);
-void hash_many_avx512(const uint8_t *const *inputs, size_t num_inputs,
-                      size_t blocks, const uint64_t key_words[4],
-                      uint64_t offset, const uint64_t offset_deltas[17],
-                      uint8_t flags, uint8_t flags_start, uint8_t flags_end,
-                      uint8_t *out);
-void hash_many_neon(const uint8_t *const *inputs, size_t num_inputs,
-                    size_t blocks, const uint64_t key_words[4], uint64_t offset,
-                    const uint64_t offset_deltas[17], uint8_t flags,
-                    uint8_t flags_start, uint8_t flags_end, uint8_t *out);
+void baokeshed64_compress_portable(uint64_t state[8],
+                                   const uint8_t block[BLOCK_LEN],
+                                   uint8_t block_len, uint64_t offset,
+                                   uint8_t flags);
+void baokeshed64_hash_many_portable(const uint8_t *const *inputs,
+                                    size_t num_inputs, size_t blocks,
+                                    const uint64_t key_words[4],
+                                    uint64_t offset,
+                                    const uint64_t offset_deltas[2],
+                                    uint8_t flags, uint8_t flags_start,
+                                    uint8_t flags_end, uint8_t *out);

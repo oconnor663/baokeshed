@@ -20,6 +20,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // To keep this build portable, we use the system default compiler. This
     // builder respects the $CC env var to override
     let mut build = cc::Build::new();
+    build.file("c64/baokeshed64.c");
+    build.file("c64/baokeshed64_portable.c");
     build.file("c/baokeshed.c");
     build.file("c/baokeshed_portable.c");
     build.file("c/baokeshed_sse41.c");

@@ -18,8 +18,9 @@ typedef struct {
 } chunk_state;
 
 // Non-inline for unit testing.
-void chunk_state_init(chunk_state *self, const uint64_t key[4], uint8_t flags) {
-  memcpy(self->state, key, KEY_LEN);
+void baokeshed64_chunk_state_init(chunk_state *self, const uint64_t key[4],
+                                  uint8_t flags) {
+  init_cv(key, self->state);
   memcpy(self->key, key, KEY_LEN);
   self->offset = 0;
   self->count = 0;
@@ -28,8 +29,8 @@ void chunk_state_init(chunk_state *self, const uint64_t key[4], uint8_t flags) {
   self->flags = flags;
 }
 
-void chunk_state_reset(chunk_state *self, uint64_t new_offset) {
-  memcpy(self->state, self->key, KEY_LEN);
+void baokeshed64_chunk_state_reset(chunk_state *self, uint64_t new_offset) {
+  init_cv(self->key, self->state);
   self->offset = new_offset;
   self->count = 0;
   memset(self->buf, 0, BLOCK_LEN);
@@ -62,18 +63,12 @@ INLINE uint8_t chunk_state_maybe_start_flag(const chunk_state *self) {
 
 INLINE void compress(uint64_t state[8], const uint8_t block[BLOCK_LEN],
                      uint8_t block_len, uint64_t offset, uint8_t flags) {
-#if defined(__AVX512F__) && defined(__AVX512VL__)
-  compress_avx512(state, block, block_len, offset, flags);
-#elif __SSE4_1__
-  compress_sse41(state, block, block_len, offset, flags);
-#else
-  compress_portable(state, block, block_len, offset, flags);
-#endif
+  baokeshed64_compress_portable(state, block, block_len, offset, flags);
 }
 
 // Non-inline for unit testing.
-void chunk_state_update(chunk_state *self, const uint8_t *input,
-                        size_t input_len) {
+void baokeshed64_chunk_state_update(chunk_state *self, const uint8_t *input,
+                                    size_t input_len) {
   if (self->buf_len > 0) {
     size_t take = chunk_state_fill_buf(self, input, input_len);
     input += take;
@@ -101,8 +96,8 @@ void chunk_state_update(chunk_state *self, const uint8_t *input,
 }
 
 // Non-inline for unit testing.
-void chunk_state_finalize(const chunk_state *self, bool is_root,
-                          uint8_t out[OUT_LEN]) {
+void baokeshed64_chunk_state_finalize(const chunk_state *self, bool is_root,
+                                      uint8_t out[OUT_LEN]) {
   uint64_t state_copy[8];
   memcpy(state_copy, self->state, sizeof(state_copy));
   uint8_t block_flags =
@@ -122,7 +117,7 @@ INLINE void hash_one_parent(const uint8_t block[BLOCK_LEN],
     block_flags |= ROOT;
   }
   uint64_t state[8];
-  memcpy(state, key, KEY_LEN);
+  init_cv(key, state);
   compress(state, block, BLOCK_LEN, 0, block_flags);
   write_state_bytes(state, out);
 }
@@ -133,10 +128,11 @@ typedef struct {
   uint8_t subtree_hashes[MAX_DEPTH * OUT_LEN];
 } hasher;
 
-void hasher_init(hasher *self, const uint8_t key[KEY_LEN], uint8_t flags) {
+void baokeshed64_hasher_init(hasher *self, const uint8_t key[KEY_LEN],
+                             uint8_t flags) {
   uint64_t key_words[4];
   load_key_words(key, key_words); // This handles big-endianness.
-  chunk_state_init(&self->chunk, key_words, flags);
+  baokeshed64_chunk_state_init(&self->chunk, key_words, flags);
   self->subtree_hashes_len = 0;
 }
 
@@ -171,25 +167,13 @@ INLINE void hash_many(const uint8_t *const *inputs, size_t num_inputs,
                       uint64_t offset, const uint64_t offset_deltas[17],
                       uint8_t flags, uint8_t flags_start, uint8_t flags_end,
                       uint8_t *out) {
-#if defined(__AVX512F__) && defined(__AVX512VL__)
-  hash_many_avx512(inputs, num_inputs, blocks, key_words, offset, offset_deltas,
-                   flags, flags_start, flags_end, out);
-#elif __AVX2__
-  hash_many_avx2(inputs, num_inputs, blocks, key_words, offset, offset_deltas,
-                 flags, flags_start, flags_end, out);
-#elif __SSE4_1__
-  hash_many_sse41(inputs, num_inputs, blocks, key_words, offset, offset_deltas,
-                  flags, flags_start, flags_end, out);
-#elif __ARM_NEON
-  hash_many_neon(inputs, num_inputs, blocks, key_words, offset, offset_deltas,
-                 flags, flags_start, flags_end, out);
-#else
-  hash_many_portable(inputs, num_inputs, blocks, key_words, offset,
-                     offset_deltas, flags, flags_start, flags_end, out);
-#endif
+  baokeshed64_hash_many_portable(inputs, num_inputs, blocks, key_words, offset,
+                                 offset_deltas, flags, flags_start, flags_end,
+                                 out);
 }
 
-void hasher_update(hasher *self, const void *input, size_t input_len) {
+void baokeshed64_hasher_update(hasher *self, const void *input,
+                               size_t input_len) {
   const uint8_t *input_bytes = (const uint8_t *)input;
 
   // If we already have a partial chunk, or if this is the very first chunk
@@ -201,16 +185,17 @@ void hasher_update(hasher *self, const void *input, size_t input_len) {
     if (take > input_len) {
       take = input_len;
     }
-    chunk_state_update(&self->chunk, input_bytes, take);
+    baokeshed64_chunk_state_update(&self->chunk, input_bytes, take);
     input_bytes += take;
     input_len -= take;
     // If we've filled the current chunk and there's more coming, finalize this
     // chunk and proceed. In this case we know it's not the root.
     if (input_len > 0) {
       uint8_t out[OUT_LEN];
-      chunk_state_finalize(&self->chunk, false, out);
+      baokeshed64_chunk_state_finalize(&self->chunk, false, out);
       hasher_push_chunk_hash(self, out, self->chunk.offset);
-      chunk_state_reset(&self->chunk, self->chunk.offset + CHUNK_LEN);
+      baokeshed64_chunk_state_reset(&self->chunk,
+                                    self->chunk.offset + CHUNK_LEN);
     } else {
       return;
     }
@@ -251,14 +236,14 @@ void hasher_update(hasher *self, const void *input, size_t input_len) {
     while (hasher_needs_merge(self, self->chunk.offset)) {
       hasher_merge_parent(self);
     }
-    chunk_state_update(&self->chunk, input_bytes, input_len);
+    baokeshed64_chunk_state_update(&self->chunk, input_bytes, input_len);
   }
 }
 
-void hasher_finalize(const hasher *self, uint8_t out[OUT_LEN]) {
+void baokeshed64_hasher_finalize(const hasher *self, uint8_t out[OUT_LEN]) {
   // If the subtree stack is empty, then the current chunk is the root.
   if (self->subtree_hashes_len == 0) {
-    chunk_state_finalize(&self->chunk, true, out);
+    baokeshed64_chunk_state_finalize(&self->chunk, true, out);
     return;
   }
   // If there are any bytes in the chunk state, finalize that chunk and do a
@@ -270,7 +255,7 @@ void hasher_finalize(const hasher *self, uint8_t out[OUT_LEN]) {
   uint8_t working_hash[OUT_LEN];
   size_t next_subtree_start;
   if (chunk_state_len(&self->chunk) > 0) {
-    chunk_state_finalize(&self->chunk, false, working_hash);
+    baokeshed64_chunk_state_finalize(&self->chunk, false, working_hash);
     next_subtree_start = (self->subtree_hashes_len - 1) * OUT_LEN;
   } else {
     size_t last_hash_start = (self->subtree_hashes_len - 1) * OUT_LEN;

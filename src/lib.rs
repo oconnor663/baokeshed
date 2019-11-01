@@ -36,6 +36,8 @@ mod avx2;
 pub mod benchmarks;
 #[cfg(feature = "c_portable")]
 pub mod c;
+#[cfg(feature = "c_portable")]
+pub mod c64;
 pub mod copy;
 mod platform;
 mod portable;

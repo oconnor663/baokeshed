@@ -1,19 +1,19 @@
-#include "baokeshed_impl.h"
+#include "baokeshed64_impl.h"
 #include <string.h>
 
-INLINE void g(uint32_t *state, size_t a, size_t b, size_t c, size_t d,
-              uint32_t x, uint32_t y) {
+INLINE void g(uint64_t *state, size_t a, size_t b, size_t c, size_t d,
+              uint64_t x, uint64_t y) {
   state[a] = state[a] + state[b] + x;
-  state[d] = rotr32(state[d] ^ state[a], 16);
+  state[d] = rotr64(state[d] ^ state[a], 32);
   state[c] = state[c] + state[d];
-  state[b] = rotr32(state[b] ^ state[c], 12);
+  state[b] = rotr64(state[b] ^ state[c], 24);
   state[a] = state[a] + state[b] + y;
-  state[d] = rotr32(state[d] ^ state[a], 8);
+  state[d] = rotr64(state[d] ^ state[a], 16);
   state[c] = state[c] + state[d];
-  state[b] = rotr32(state[b] ^ state[c], 7);
+  state[b] = rotr64(state[b] ^ state[c], 63);
 }
 
-INLINE void round_fn(uint32_t *state, const uint32_t *msg, size_t round) {
+INLINE void round_fn(uint64_t *state, const uint64_t *msg, size_t round) {
   // Select the message schedule based on the round.
   const uint8_t *schedule = MSG_SCHEDULE[round];
 
@@ -30,12 +30,14 @@ INLINE void round_fn(uint32_t *state, const uint32_t *msg, size_t round) {
   g(state, 3, 4, 9, 14, msg[schedule[14]], msg[schedule[15]]);
 }
 
-void compress_portable(uint32_t state[8], const uint8_t block[BLOCK_LEN],
-                       uint8_t block_len, uint64_t offset, uint8_t flags) {
-  uint32_t block_words[16];
+void baokeshed64_compress_portable(uint64_t state[8],
+                                   const uint8_t block[BLOCK_LEN],
+                                   uint8_t block_len, uint64_t offset,
+                                   uint8_t flags) {
+  uint64_t block_words[16];
   load_msg_words(block, block_words); // This handles big-endianness.
 
-  uint32_t full_state[16] = {
+  uint64_t full_state[16] = {
       state[0],
       state[1],
       state[2],
@@ -48,10 +50,10 @@ void compress_portable(uint32_t state[8], const uint8_t block[BLOCK_LEN],
       IV[1],
       IV[2],
       IV[3],
-      IV[4] ^ offset_low(offset),
-      IV[5] ^ offset_high(offset),
-      IV[6] ^ (uint32_t)block_len,
-      IV[7] ^ (uint32_t)flags,
+      IV[4] ^ offset,
+      IV[5],
+      IV[6] ^ (uint64_t)block_len,
+      IV[7] ^ (uint64_t)flags,
   };
 
   round_fn(&full_state[0], &block_words[0], 0);
@@ -73,17 +75,17 @@ void compress_portable(uint32_t state[8], const uint8_t block[BLOCK_LEN],
 }
 
 INLINE void hash_one_portable(const uint8_t *input, size_t blocks,
-                              const uint32_t key_words[8], uint64_t offset,
+                              const uint64_t key_words[4], uint64_t offset,
                               uint8_t flags, uint8_t flags_start,
                               uint8_t flags_end, uint8_t out[OUT_LEN]) {
-  uint32_t state[8];
-  memcpy(state, key_words, KEY_LEN);
+  uint64_t state[8];
+  init_cv(key_words, state);
   uint8_t block_flags = flags | flags_start;
   while (blocks > 0) {
     if (blocks == 1) {
       block_flags |= flags_end;
     }
-    compress_portable(state, input, BLOCK_LEN, offset, block_flags);
+    baokeshed64_compress_portable(state, input, BLOCK_LEN, offset, block_flags);
     input = &input[BLOCK_LEN];
     blocks -= 1;
     block_flags = flags;
@@ -91,11 +93,12 @@ INLINE void hash_one_portable(const uint8_t *input, size_t blocks,
   write_state_bytes(state, out); // This handles big-endianness.
 }
 
-void hash_many_portable(const uint8_t *const *inputs, size_t num_inputs,
-                        size_t blocks, const uint32_t key_words[8],
-                        uint64_t offset, const uint64_t offset_deltas[2],
-                        uint8_t flags, uint8_t flags_start, uint8_t flags_end,
-                        uint8_t *out) {
+void baoeshed64_hash_many_portable(const uint8_t *const *inputs,
+                                   size_t num_inputs, size_t blocks,
+                                   const uint64_t key_words[4], uint64_t offset,
+                                   const uint64_t offset_deltas[2],
+                                   uint8_t flags, uint8_t flags_start,
+                                   uint8_t flags_end, uint8_t *out) {
   while (num_inputs > 0) {
     hash_one_portable(inputs[0], blocks, key_words, offset, flags, flags_start,
                       flags_end, out);
