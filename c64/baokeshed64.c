@@ -5,11 +5,11 @@
 #include <stdbool.h>
 #include <string.h>
 
-#include "baokeshed_impl.h"
+#include "baokeshed64_impl.h"
 
 typedef struct {
-  uint32_t state[8];
-  uint32_t key[8];
+  uint64_t state[8];
+  uint64_t key[4];
   uint64_t offset;
   uint16_t count;
   uint8_t buf[BLOCK_LEN];
@@ -18,7 +18,7 @@ typedef struct {
 } chunk_state;
 
 // Non-inline for unit testing.
-void chunk_state_init(chunk_state *self, const uint32_t key[8], uint8_t flags) {
+void chunk_state_init(chunk_state *self, const uint64_t key[4], uint8_t flags) {
   memcpy(self->state, key, KEY_LEN);
   memcpy(self->key, key, KEY_LEN);
   self->offset = 0;
@@ -60,7 +60,7 @@ INLINE uint8_t chunk_state_maybe_start_flag(const chunk_state *self) {
   }
 }
 
-INLINE void compress(uint32_t state[8], const uint8_t block[BLOCK_LEN],
+INLINE void compress(uint64_t state[8], const uint8_t block[BLOCK_LEN],
                      uint8_t block_len, uint64_t offset, uint8_t flags) {
 #if defined(__AVX512F__) && defined(__AVX512VL__)
   compress_avx512(state, block, block_len, offset, flags);
@@ -103,7 +103,7 @@ void chunk_state_update(chunk_state *self, const uint8_t *input,
 // Non-inline for unit testing.
 void chunk_state_finalize(const chunk_state *self, bool is_root,
                           uint8_t out[OUT_LEN]) {
-  uint32_t state_copy[8];
+  uint64_t state_copy[8];
   memcpy(state_copy, self->state, sizeof(state_copy));
   uint8_t block_flags =
       self->flags | chunk_state_maybe_start_flag(self) | CHUNK_END;
@@ -115,13 +115,13 @@ void chunk_state_finalize(const chunk_state *self, bool is_root,
 }
 
 INLINE void hash_one_parent(const uint8_t block[BLOCK_LEN],
-                            const uint32_t key[8], bool is_root, uint8_t flags,
+                            const uint64_t key[4], bool is_root, uint8_t flags,
                             uint8_t out[OUT_LEN]) {
   uint8_t block_flags = flags | PARENT;
   if (is_root) {
     block_flags |= ROOT;
   }
-  uint32_t state[8];
+  uint64_t state[8];
   memcpy(state, key, KEY_LEN);
   compress(state, block, BLOCK_LEN, 0, block_flags);
   write_state_bytes(state, out);
@@ -134,7 +134,7 @@ typedef struct {
 } hasher;
 
 void hasher_init(hasher *self, const uint8_t key[KEY_LEN], uint8_t flags) {
-  uint32_t key_words[8];
+  uint64_t key_words[4];
   load_key_words(key, key_words); // This handles big-endianness.
   chunk_state_init(&self->chunk, key_words, flags);
   self->subtree_hashes_len = 0;
@@ -167,7 +167,7 @@ INLINE void hasher_push_chunk_hash(hasher *self, uint8_t hash[OUT_LEN],
 }
 
 INLINE void hash_many(const uint8_t *const *inputs, size_t num_inputs,
-                      size_t blocks, const uint32_t key_words[8],
+                      size_t blocks, const uint64_t key_words[4],
                       uint64_t offset, const uint64_t offset_deltas[17],
                       uint8_t flags, uint8_t flags_start, uint8_t flags_end,
                       uint8_t *out) {
