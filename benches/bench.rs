@@ -8,7 +8,7 @@ use test::Bencher;
 
 const MEDIUM: usize = MAX_SIMD_DEGREE * CHUNK_LEN;
 
-const LONG: usize = 1 << 24; // 16 MiB
+const LONG: usize = 1 << 20; // 1 MiB
 
 // This struct randomizes two things:
 // 1. The actual bytes of input.
