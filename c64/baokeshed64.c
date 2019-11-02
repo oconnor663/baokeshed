@@ -8,7 +8,7 @@
 #include "baokeshed64_impl.h"
 
 typedef struct {
-  uint64_t state[8];
+  uint64_t state[4];
   uint64_t key[4];
   uint64_t offset;
   uint16_t count;
@@ -20,7 +20,7 @@ typedef struct {
 // Non-inline for unit testing.
 void baokeshed64_chunk_state_init(chunk_state *self, const uint64_t key[4],
                                   uint8_t flags) {
-  init_cv(key, self->state);
+  memcpy(self->state, key, KEY_LEN);
   memcpy(self->key, key, KEY_LEN);
   self->offset = 0;
   self->count = 0;
@@ -30,7 +30,7 @@ void baokeshed64_chunk_state_init(chunk_state *self, const uint64_t key[4],
 }
 
 void baokeshed64_chunk_state_reset(chunk_state *self, uint64_t new_offset) {
-  init_cv(self->key, self->state);
+  memcpy(self->state, self->key, KEY_LEN);
   self->offset = new_offset;
   self->count = 0;
   memset(self->buf, 0, BLOCK_LEN);
@@ -61,7 +61,7 @@ INLINE uint8_t chunk_state_maybe_start_flag(const chunk_state *self) {
   }
 }
 
-INLINE void compress(uint64_t state[8], const uint8_t block[BLOCK_LEN],
+INLINE void compress(uint64_t state[4], const uint8_t block[BLOCK_LEN],
                      uint8_t block_len, uint64_t offset, uint8_t flags) {
   baokeshed64_compress_portable(state, block, block_len, offset, flags);
 }
@@ -98,7 +98,7 @@ void baokeshed64_chunk_state_update(chunk_state *self, const uint8_t *input,
 // Non-inline for unit testing.
 void baokeshed64_chunk_state_finalize(const chunk_state *self, bool is_root,
                                       uint8_t out[OUT_LEN]) {
-  uint64_t state_copy[8];
+  uint64_t state_copy[4];
   memcpy(state_copy, self->state, sizeof(state_copy));
   uint8_t block_flags =
       self->flags | chunk_state_maybe_start_flag(self) | CHUNK_END;
@@ -116,8 +116,8 @@ INLINE void hash_one_parent(const uint8_t block[BLOCK_LEN],
   if (is_root) {
     block_flags |= ROOT;
   }
-  uint64_t state[8];
-  init_cv(key, state);
+  uint64_t state[4];
+  memcpy(state, key, KEY_LEN);
   compress(state, block, BLOCK_LEN, 0, block_flags);
   write_state_bytes(state, out);
 }

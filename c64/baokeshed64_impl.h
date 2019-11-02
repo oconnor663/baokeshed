@@ -62,8 +62,8 @@ INLINE uint64_t load64(const void *src) {
   const uint8_t *p = (const uint8_t *)src;
   return ((uint64_t)(p[0]) << 0) | ((uint64_t)(p[1]) << 8) |
          ((uint64_t)(p[2]) << 16) | ((uint64_t)(p[3]) << 24) |
-         ((uint64_t)(p[3]) << 32) | ((uint64_t)(p[3]) << 40) |
-         ((uint64_t)(p[3]) << 48) | ((uint64_t)(p[3]) << 56);
+         ((uint64_t)(p[4]) << 32) | ((uint64_t)(p[5]) << 40) |
+         ((uint64_t)(p[6]) << 48) | ((uint64_t)(p[7]) << 56);
 }
 
 INLINE void store64(void *dst, uint64_t w) {
@@ -122,30 +122,15 @@ INLINE void load_key_words(const uint8_t key[KEY_LEN], uint64_t words[4]) {
   words[3] = load64(key + 8 * 3);
 }
 
-INLINE void write_state_bytes(const uint64_t state[8], uint8_t out[OUT_LEN]) {
+INLINE void write_state_bytes(const uint64_t state[4], uint8_t out[OUT_LEN]) {
   store64(&out[8 * 0], state[0]);
   store64(&out[8 * 1], state[1]);
   store64(&out[8 * 2], state[2]);
   store64(&out[8 * 3], state[3]);
-  store64(&out[8 * 4], state[4]);
-  store64(&out[8 * 5], state[5]);
-  store64(&out[8 * 6], state[6]);
-  store64(&out[8 * 7], state[7]);
-}
-
-INLINE void init_cv(const uint64_t key[4], uint64_t out[8]) {
-    out[0] = key[0];
-    out[1] = key[1];
-    out[2] = key[2];
-    out[3] = key[3];
-    out[4] = IV[4];
-    out[5] = IV[5];
-    out[6] = IV[6];
-    out[7] = IV[7];
 }
 
 // Declarations for implementation-specific functions.
-void baokeshed64_compress_portable(uint64_t state[8],
+void baokeshed64_compress_portable(uint64_t state[4],
                                    const uint8_t block[BLOCK_LEN],
                                    uint8_t block_len, uint64_t offset,
                                    uint8_t flags);

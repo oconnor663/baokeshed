@@ -30,7 +30,7 @@ INLINE void round_fn(uint64_t *state, const uint64_t *msg, size_t round) {
   g(state, 3, 4, 9, 14, msg[schedule[14]], msg[schedule[15]]);
 }
 
-void baokeshed64_compress_portable(uint64_t state[8],
+void baokeshed64_compress_portable(uint64_t state[4],
                                    const uint8_t block[BLOCK_LEN],
                                    uint8_t block_len, uint64_t offset,
                                    uint8_t flags) {
@@ -42,10 +42,10 @@ void baokeshed64_compress_portable(uint64_t state[8],
       state[1],
       state[2],
       state[3],
-      state[4],
-      state[5],
-      state[6],
-      state[7],
+      IV[4],
+      IV[5],
+      IV[6],
+      IV[7],
       IV[0],
       IV[1],
       IV[2],
@@ -56,31 +56,28 @@ void baokeshed64_compress_portable(uint64_t state[8],
       IV[7] ^ (uint64_t)flags,
   };
 
-  round_fn(&full_state[0], &block_words[0], 0);
-  round_fn(&full_state[0], &block_words[0], 1);
-  round_fn(&full_state[0], &block_words[0], 2);
-  round_fn(&full_state[0], &block_words[0], 3);
-  round_fn(&full_state[0], &block_words[0], 4);
-  round_fn(&full_state[0], &block_words[0], 5);
-  round_fn(&full_state[0], &block_words[0], 6);
-  round_fn(&full_state[0], &block_words[0], 7);
+  round_fn(full_state, block_words, 0);
+  round_fn(full_state, block_words, 1);
+  round_fn(full_state, block_words, 2);
+  round_fn(full_state, block_words, 3);
+  round_fn(full_state, block_words, 4);
+  round_fn(full_state, block_words, 5);
+  round_fn(full_state, block_words, 6);
+  round_fn(full_state, block_words, 7);
 
-  state[0] = full_state[0] ^ full_state[8];
-  state[1] = full_state[1] ^ full_state[9];
-  state[2] = full_state[2] ^ full_state[10];
-  state[3] = full_state[3] ^ full_state[11];
-  state[4] = full_state[4] ^ full_state[12];
-  state[5] = full_state[5] ^ full_state[13];
-  state[6] = full_state[6] ^ full_state[14];
-  state[7] = full_state[7] ^ full_state[15];
+
+  state[0] = full_state[0] ^ full_state[4];
+  state[1] = full_state[1] ^ full_state[5];
+  state[2] = full_state[2] ^ full_state[6];
+  state[3] = full_state[3] ^ full_state[7];
 }
 
 INLINE void hash_one_portable(const uint8_t *input, size_t blocks,
                               const uint64_t key_words[4], uint64_t offset,
                               uint8_t flags, uint8_t flags_start,
                               uint8_t flags_end, uint8_t out[OUT_LEN]) {
-  uint64_t state[8];
-  init_cv(key_words, state);
+  uint64_t state[4];
+  memcpy(state, key_words, KEY_LEN);
   uint8_t block_flags = flags | flags_start;
   while (blocks > 0) {
     if (blocks == 1) {
@@ -94,12 +91,13 @@ INLINE void hash_one_portable(const uint8_t *input, size_t blocks,
   write_state_bytes(state, out); // This handles big-endianness.
 }
 
-void baoeshed64_hash_many_portable(const uint8_t *const *inputs,
-                                   size_t num_inputs, size_t blocks,
-                                   const uint64_t key_words[4], uint64_t offset,
-                                   const uint64_t offset_deltas[2],
-                                   uint8_t flags, uint8_t flags_start,
-                                   uint8_t flags_end, uint8_t *out) {
+void baokeshed64_hash_many_portable(const uint8_t *const *inputs,
+                                    size_t num_inputs, size_t blocks,
+                                    const uint64_t key_words[4],
+                                    uint64_t offset,
+                                    const uint64_t offset_deltas[2],
+                                    uint8_t flags, uint8_t flags_start,
+                                    uint8_t flags_end, uint8_t *out) {
   while (num_inputs > 0) {
     hash_one_portable(inputs[0], blocks, key_words, offset, flags, flags_start,
                       flags_end, out);
