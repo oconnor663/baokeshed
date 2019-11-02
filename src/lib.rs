@@ -41,6 +41,7 @@ pub mod c64;
 pub mod copy;
 mod platform;
 mod portable;
+pub mod portable64;
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod sse41;
 
