@@ -32,6 +32,8 @@ use platform::{Platform, MAX_SIMD_DEGREE_OR_2};
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod avx2;
+#[doc(hidden)]
+pub mod benchmarks;
 #[cfg(feature = "c_portable")]
 pub mod c;
 pub mod copy;
@@ -246,19 +248,6 @@ impl fmt::Debug for Output {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Output {{ ... }}")
     }
-}
-
-// Benchmarks only.
-#[doc(hidden)]
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-pub unsafe fn compress_sse41(
-    state: &mut [Word; 8],
-    block: &[u8; BLOCK_LEN],
-    block_len: u8,
-    offset: u64,
-    flags: u8,
-) {
-    sse41::compress(state, block, block_len, offset, flags)
 }
 
 // =======================================================================

@@ -2,6 +2,7 @@
 
 extern crate test;
 
+use arrayref::array_ref;
 use baokeshed::*;
 use rand::prelude::*;
 use test::Bencher;
@@ -168,15 +169,35 @@ fn bench_xof(b: &mut Bencher) {
 
 #[bench]
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-fn bench_compress(b: &mut Bencher) {
+fn bench_compress_portable(b: &mut Bencher) {
+    let mut state = [0; 8];
+    let mut input = RandomInput::new(b, BLOCK_LEN);
+    b.iter(|| {
+        benchmarks::compress_portable(
+            &mut state,
+            array_ref!(input.get(), 0, BLOCK_LEN),
+            BLOCK_LEN as u8,
+            0,
+            0,
+        );
+    });
+}
+
+#[bench]
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+fn bench_compress_sse41(b: &mut Bencher) {
     if !is_x86_feature_detected!("sse4.1") {
         return;
     }
     let mut state = [0; 8];
     let mut input = RandomInput::new(b, BLOCK_LEN);
     b.iter(|| unsafe {
-        let block_ptr = input.get().as_ptr() as *const [u8; BLOCK_LEN];
-        compress_sse41(&mut state, &*block_ptr, BLOCK_LEN as u8, 0, 0);
-        state
+        benchmarks::compress_sse41(
+            &mut state,
+            array_ref!(input.get(), 0, BLOCK_LEN),
+            BLOCK_LEN as u8,
+            0,
+            0,
+        );
     });
 }
