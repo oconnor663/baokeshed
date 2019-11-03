@@ -167,9 +167,14 @@ INLINE void hash_many(const uint8_t *const *inputs, size_t num_inputs,
                       uint64_t offset, const uint64_t offset_deltas[17],
                       uint8_t flags, uint8_t flags_start, uint8_t flags_end,
                       uint8_t *out) {
+#if __ARM_NEON
+  baokeshed64_hash_many_neon(inputs, num_inputs, blocks, key_words, offset,
+                             offset_deltas, flags, flags_start, flags_end, out);
+#else
   baokeshed64_hash_many_portable(inputs, num_inputs, blocks, key_words, offset,
                                  offset_deltas, flags, flags_start, flags_end,
                                  out);
+#endif
 }
 
 void baokeshed64_hasher_update(hasher *self, const void *input,

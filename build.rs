@@ -22,6 +22,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut build = cc::Build::new();
     build.file("c64/baokeshed64.c");
     build.file("c64/baokeshed64_portable.c");
+    build.file("c64/baokeshed64_neon.c");
     build.file("c/baokeshed.c");
     build.file("c/baokeshed_portable.c");
     build.file("c/baokeshed_sse41.c");

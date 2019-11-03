@@ -83,6 +83,20 @@ pub mod ffi {
             flags_end: u8,
             out: *mut u8,
         );
+        #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
+        #[cfg(feature = "c_armv7neon")]
+        pub fn baokeshed64_hash_many_neon(
+            inputs: *const *const u8,
+            num_inputs: usize,
+            blocks: usize,
+            key_words: *const u64,
+            offset: u64,
+            offset_deltas: *const u64,
+            flags: u8,
+            flags_start: u8,
+            flags_end: u8,
+            out: *mut u8,
+        );
         pub fn baokeshed64_chunk_state_init(
             self_: *mut super::ChunkState,
             key: *const u64,
@@ -303,5 +317,12 @@ mod test {
     #[test]
     fn test_hash_many_portable() {
         compare_hash_many_fn(ffi::baokeshed64_hash_many_portable);
+    }
+
+    #[test]
+    #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
+    #[cfg(feature = "c_armv7neon")]
+    fn test_hash_many_neon() {
+        compare_hash_many_fn(ffi::baokeshed64_hash_many_neon);
     }
 }

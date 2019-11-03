@@ -65,7 +65,6 @@ void baokeshed64_compress_portable(uint64_t state[4],
   round_fn(full_state, block_words, 6);
   round_fn(full_state, block_words, 7);
 
-
   state[0] = full_state[0] ^ full_state[4];
   state[1] = full_state[1] ^ full_state[5];
   state[2] = full_state[2] ^ full_state[6];
