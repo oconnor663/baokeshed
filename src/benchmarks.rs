@@ -2,7 +2,6 @@
 //! not stable. If you find yourself needing these in production, please file a
 //! GitHub issue.
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 pub fn compress_portable(
     state: &mut [crate::Word; 8],
     block: &[u8; crate::BLOCK_LEN],
