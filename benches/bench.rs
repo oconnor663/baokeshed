@@ -168,7 +168,6 @@ fn bench_xof(b: &mut Bencher) {
 }
 
 #[bench]
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 fn bench_compress_portable(b: &mut Bencher) {
     let mut state = [0; 8];
     let mut input = RandomInput::new(b, BLOCK_LEN);
@@ -203,7 +202,7 @@ fn bench_compress_sse41(b: &mut Bencher) {
 }
 
 #[bench]
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[cfg(feature = "c_portable")]
 fn bench_fficompress_portable(b: &mut Bencher) {
     let mut state = [0; 8];
     let mut input = RandomInput::new(b, BLOCK_LEN);
@@ -240,7 +239,7 @@ fn bench_fficompress_sse41(b: &mut Bencher) {
 
 #[bench]
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-#[cfg(any(feature = "c_sse41", feature = "c_native"))]
+#[cfg(any(feature = "c_avx512", feature = "c_native"))]
 fn bench_fficompress_avx512(b: &mut Bencher) {
     if !baokeshed::c::is_avx512_detected() {
         return;
