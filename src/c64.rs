@@ -55,7 +55,7 @@ impl Hasher {
     }
 }
 
-mod ffi {
+pub mod ffi {
     extern "C" {
         pub fn baokeshed64_hasher_init(self_: *mut super::Hasher, key: *const u8, flags: u8);
         pub fn baokeshed64_hasher_update(
@@ -64,6 +64,40 @@ mod ffi {
             input_len: usize,
         );
         pub fn baokeshed64_hasher_finalize(self_: *const super::Hasher, out: *mut u8);
+        pub fn baokeshed64_compress_portable(
+            state: *mut u64,
+            block: *const u8,
+            block_len: u8,
+            offset: u64,
+            flags: u8,
+        );
+        pub fn baokeshed64_hash_many_portable(
+            inputs: *const *const u8,
+            num_inputs: usize,
+            blocks: usize,
+            key_words: *const u64,
+            offset: u64,
+            offset_deltas: *const u64,
+            flags: u8,
+            flags_start: u8,
+            flags_end: u8,
+            out: *mut u8,
+        );
+        pub fn baokeshed64_chunk_state_init(
+            self_: *mut super::ChunkState,
+            key: *const u64,
+            flags: u8,
+        );
+        pub fn baokeshed64_chunk_state_update(
+            self_: *mut super::ChunkState,
+            input: *const u8,
+            input_len: usize,
+        );
+        pub fn baokeshed64_chunk_state_finalize(
+            self_: *const super::ChunkState,
+            is_root: bool,
+            out: *mut u8,
+        );
     }
 }
 
@@ -94,46 +128,6 @@ mod test {
     ];
 
     const PARENT_OFFSET_DELTAS: &[u64; 17] = &[0; 17];
-
-    // FFI functions that we only call in tests.
-    mod ffi {
-        extern "C" {
-            pub fn baokeshed64_compress_portable(
-                state: *mut u64,
-                block: *const u8,
-                block_len: u8,
-                offset: u64,
-                flags: u8,
-            );
-            pub fn baokeshed64_hash_many_portable(
-                inputs: *const *const u8,
-                num_inputs: usize,
-                blocks: usize,
-                key_words: *const u64,
-                offset: u64,
-                offset_deltas: *const u64,
-                flags: u8,
-                flags_start: u8,
-                flags_end: u8,
-                out: *mut u8,
-            );
-            pub fn baokeshed64_chunk_state_init(
-                self_: *mut super::ChunkState,
-                key: *const u64,
-                flags: u8,
-            );
-            pub fn baokeshed64_chunk_state_update(
-                self_: *mut super::ChunkState,
-                input: *const u8,
-                input_len: usize,
-            );
-            pub fn baokeshed64_chunk_state_finalize(
-                self_: *const super::ChunkState,
-                is_root: bool,
-                out: *mut u8,
-            );
-        }
-    }
 
     impl ChunkState {
         pub fn new(key_words: &[u64; 4], flags: u8) -> ChunkState {

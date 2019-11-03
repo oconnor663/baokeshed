@@ -1,7 +1,7 @@
 use crate::OUT_LEN;
 use arrayref::{array_mut_ref, array_ref, array_refs, mut_array_refs};
 
-const BLOCK_LEN: usize = 128;
+pub const BLOCK_LEN: usize = 128;
 
 type Word = u64;
 

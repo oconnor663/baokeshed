@@ -256,3 +256,34 @@ fn bench_fficompress_avx512(b: &mut Bencher) {
         );
     });
 }
+
+#[bench]
+fn bench_compress64_portable(b: &mut Bencher) {
+    let mut state = [0; 4];
+    let mut input = RandomInput::new(b, baokeshed::portable64::BLOCK_LEN);
+    b.iter(|| {
+        baokeshed::portable64::compress(
+            &mut state,
+            array_ref!(input.get(), 0, baokeshed::portable64::BLOCK_LEN),
+            BLOCK_LEN as u8,
+            0,
+            0,
+        );
+    });
+}
+
+#[bench]
+#[cfg(feature = "c_portable")]
+fn bench_fficompress64_portable(b: &mut Bencher) {
+    let mut state = [0; 4];
+    let mut input = RandomInput::new(b, baokeshed::portable64::BLOCK_LEN);
+    b.iter(|| unsafe {
+        baokeshed::c64::ffi::baokeshed64_compress_portable(
+            state.as_mut_ptr(),
+            input.get().as_ptr(),
+            BLOCK_LEN as u8,
+            0,
+            0,
+        );
+    });
+}
