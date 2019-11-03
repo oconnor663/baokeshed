@@ -52,7 +52,7 @@ impl Hasher {
     }
 }
 
-mod ffi {
+pub mod ffi {
     extern "C" {
         pub fn hasher_init(self_: *mut super::Hasher, key: *const u8, flags: u8);
         pub fn hasher_update(
@@ -61,7 +61,112 @@ mod ffi {
             input_len: usize,
         );
         pub fn hasher_finalize(self_: *const super::Hasher, out: *mut u8);
+        pub fn compress_portable(
+            state: *mut u32,
+            block: *const u8,
+            block_len: u8,
+            offset: u64,
+            flags: u8,
+        );
+        #[cfg(any(feature = "c_sse41", feature = "c_native"))]
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        pub fn compress_sse41(
+            state: *mut u32,
+            block: *const u8,
+            block_len: u8,
+            offset: u64,
+            flags: u8,
+        );
+        #[cfg(any(feature = "c_avx512", feature = "c_native"))]
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        pub fn compress_avx512(
+            state: *mut u32,
+            block: *const u8,
+            block_len: u8,
+            offset: u64,
+            flags: u8,
+        );
+        pub fn hash_many_portable(
+            inputs: *const *const u8,
+            num_inputs: usize,
+            blocks: usize,
+            key_words: *const u32,
+            offset: u64,
+            offset_deltas: *const u64,
+            flags: u8,
+            flags_start: u8,
+            flags_end: u8,
+            out: *mut u8,
+        );
+        #[cfg(any(feature = "c_sse41", feature = "c_native"))]
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        pub fn hash_many_sse41(
+            inputs: *const *const u8,
+            num_inputs: usize,
+            blocks: usize,
+            key_words: *const u32,
+            offset: u64,
+            offset_deltas: *const u64,
+            flags: u8,
+            flags_start: u8,
+            flags_end: u8,
+            out: *mut u8,
+        );
+        #[cfg(any(feature = "c_avx2", feature = "c_native"))]
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        pub fn hash_many_avx2(
+            inputs: *const *const u8,
+            num_inputs: usize,
+            blocks: usize,
+            key_words: *const u32,
+            offset: u64,
+            offset_deltas: *const u64,
+            flags: u8,
+            flags_start: u8,
+            flags_end: u8,
+            out: *mut u8,
+        );
+        #[cfg(any(feature = "c_avx512", feature = "c_native"))]
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        pub fn hash_many_avx512(
+            inputs: *const *const u8,
+            num_inputs: usize,
+            blocks: usize,
+            key_words: *const u32,
+            offset: u64,
+            offset_deltas: *const u64,
+            flags: u8,
+            flags_start: u8,
+            flags_end: u8,
+            out: *mut u8,
+        );
+        #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
+        #[cfg(feature = "c_armv7neon")]
+        pub fn hash_many_neon(
+            inputs: *const *const u8,
+            num_inputs: usize,
+            blocks: usize,
+            key_words: *const u32,
+            offset: u64,
+            offset_deltas: *const u64,
+            flags: u8,
+            flags_start: u8,
+            flags_end: u8,
+            out: *mut u8,
+        );
+        pub fn chunk_state_init(self_: *mut super::ChunkState, key: *const u32, flags: u8);
+        pub fn chunk_state_update(
+            self_: *mut super::ChunkState,
+            input: *const u8,
+            input_len: usize,
+        );
+        pub fn chunk_state_finalize(self_: *const super::ChunkState, is_root: bool, out: *mut u8);
     }
+}
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+pub fn is_avx512_detected() -> bool {
+    is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512vl")
 }
 
 #[cfg(test)]
@@ -91,122 +196,6 @@ mod test {
     ];
 
     const PARENT_OFFSET_DELTAS: &[u64; 17] = &[0; 17];
-
-    #[cfg(any(feature = "c_avx512", feature = "c_native"))]
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    fn is_avx512_detected() -> bool {
-        is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512vl")
-    }
-
-    // FFI functions that we only call in tests.
-    mod ffi {
-        extern "C" {
-            pub fn compress_portable(
-                state: *mut u32,
-                block: *const u8,
-                block_len: u8,
-                offset: u64,
-                flags: u8,
-            );
-            #[cfg(any(feature = "c_sse41", feature = "c_native"))]
-            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-            pub fn compress_sse41(
-                state: *mut u32,
-                block: *const u8,
-                block_len: u8,
-                offset: u64,
-                flags: u8,
-            );
-            #[cfg(any(feature = "c_avx512", feature = "c_native"))]
-            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-            pub fn compress_avx512(
-                state: *mut u32,
-                block: *const u8,
-                block_len: u8,
-                offset: u64,
-                flags: u8,
-            );
-            pub fn hash_many_portable(
-                inputs: *const *const u8,
-                num_inputs: usize,
-                blocks: usize,
-                key_words: *const u32,
-                offset: u64,
-                offset_deltas: *const u64,
-                flags: u8,
-                flags_start: u8,
-                flags_end: u8,
-                out: *mut u8,
-            );
-            #[cfg(any(feature = "c_sse41", feature = "c_native"))]
-            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-            pub fn hash_many_sse41(
-                inputs: *const *const u8,
-                num_inputs: usize,
-                blocks: usize,
-                key_words: *const u32,
-                offset: u64,
-                offset_deltas: *const u64,
-                flags: u8,
-                flags_start: u8,
-                flags_end: u8,
-                out: *mut u8,
-            );
-            #[cfg(any(feature = "c_avx2", feature = "c_native"))]
-            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-            pub fn hash_many_avx2(
-                inputs: *const *const u8,
-                num_inputs: usize,
-                blocks: usize,
-                key_words: *const u32,
-                offset: u64,
-                offset_deltas: *const u64,
-                flags: u8,
-                flags_start: u8,
-                flags_end: u8,
-                out: *mut u8,
-            );
-            #[cfg(any(feature = "c_avx512", feature = "c_native"))]
-            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-            pub fn hash_many_avx512(
-                inputs: *const *const u8,
-                num_inputs: usize,
-                blocks: usize,
-                key_words: *const u32,
-                offset: u64,
-                offset_deltas: *const u64,
-                flags: u8,
-                flags_start: u8,
-                flags_end: u8,
-                out: *mut u8,
-            );
-            #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
-            #[cfg(feature = "c_armv7neon")]
-            pub fn hash_many_neon(
-                inputs: *const *const u8,
-                num_inputs: usize,
-                blocks: usize,
-                key_words: *const u32,
-                offset: u64,
-                offset_deltas: *const u64,
-                flags: u8,
-                flags_start: u8,
-                flags_end: u8,
-                out: *mut u8,
-            );
-            pub fn chunk_state_init(self_: *mut super::ChunkState, key: *const u32, flags: u8);
-            pub fn chunk_state_update(
-                self_: *mut super::ChunkState,
-                input: *const u8,
-                input_len: usize,
-            );
-            pub fn chunk_state_finalize(
-                self_: *const super::ChunkState,
-                is_root: bool,
-                out: *mut u8,
-            );
-        }
-    }
 
     impl ChunkState {
         pub fn new(key_words: &[Word; 8], flags: u8) -> ChunkState {

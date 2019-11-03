@@ -201,3 +201,59 @@ fn bench_compress_sse41(b: &mut Bencher) {
         );
     });
 }
+
+#[bench]
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+fn bench_fficompress_portable(b: &mut Bencher) {
+    let mut state = [0; 8];
+    let mut input = RandomInput::new(b, BLOCK_LEN);
+    b.iter(|| unsafe {
+        baokeshed::c::ffi::compress_portable(
+            state.as_mut_ptr(),
+            input.get().as_ptr(),
+            BLOCK_LEN as u8,
+            0,
+            0,
+        );
+    });
+}
+
+#[bench]
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[cfg(any(feature = "c_sse41", feature = "c_native"))]
+fn bench_fficompress_sse41(b: &mut Bencher) {
+    if !is_x86_feature_detected!("sse4.1") {
+        return;
+    }
+    let mut state = [0; 8];
+    let mut input = RandomInput::new(b, BLOCK_LEN);
+    b.iter(|| unsafe {
+        baokeshed::c::ffi::compress_sse41(
+            state.as_mut_ptr(),
+            input.get().as_ptr(),
+            BLOCK_LEN as u8,
+            0,
+            0,
+        );
+    });
+}
+
+#[bench]
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[cfg(any(feature = "c_sse41", feature = "c_native"))]
+fn bench_fficompress_avx512(b: &mut Bencher) {
+    if !baokeshed::c::is_avx512_detected() {
+        return;
+    }
+    let mut state = [0; 8];
+    let mut input = RandomInput::new(b, BLOCK_LEN);
+    b.iter(|| unsafe {
+        baokeshed::c::ffi::compress_avx512(
+            state.as_mut_ptr(),
+            input.get().as_ptr(),
+            BLOCK_LEN as u8,
+            0,
+            0,
+        );
+    });
+}
