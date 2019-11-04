@@ -54,17 +54,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let is_armv7 = target_arch == "armv7";
     let target_os = target_components[2];
     let is_windows = target_os == "windows";
+    let new_build = || {
+        let mut build = cc::Build::new();
+        if !is_windows {
+            build.flag("-std=c11");
+        }
+        build
+    };
 
-    // Note that under -march=native, Clang seems to perform better than GCC.
-    // To keep this build portable, we use the system default compiler. This
-    // builder respects the $CC env var to override
-    let mut build = cc::Build::new();
-    build.file("c/baokeshed.c");
-    build.file("c/baokeshed_portable.c");
-    if !is_windows {
-        build.flag("-std=c11");
-    }
+    let mut portable_build = new_build();
+    portable_build.file("c/baokeshed.c");
+    portable_build.file("c/baokeshed_portable.c");
+    portable_build.compile("cbaokeshed_portable");
+
     if defined(C_SSE41_VAR) {
+        let mut build = new_build();
         build.file("c/baokeshed_sse41.c");
         build.define("BAOKESHED_USE_SSE41", "1");
         if is_windows {
@@ -72,14 +76,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // https://docs.microsoft.com/en-us/cpp/build/reference/arch-x86
             // It also includes SSE4.1 intrisincs:
             // https://stackoverflow.com/a/32183222/823869
-            // But we do need to explicitly define the __SSE4_1__ constant:
-            // https://stackoverflow.com/a/18566249/823869
-            build.flag("/D__SSE4_1__");
         } else {
             build.flag("-msse4.1");
         }
+        build.compile("cbaokeshed_sse41");
     }
+
     if defined(C_AVX2_VAR) {
+        let mut build = new_build();
         build.file("c/baokeshed_avx2.c");
         build.define("BAOKESHED_USE_AVX2", "1");
         if is_windows {
@@ -87,8 +91,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         } else {
             build.flag("-mavx2");
         }
+        build.compile("cbaokeshed_avx2");
     }
+
     if defined(C_AVX512_VAR) {
+        let mut build = new_build();
         build.file("c/baokeshed_avx512.c");
         build.define("BAOKESHED_USE_AVX512", "1");
         if is_windows {
@@ -99,8 +106,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             build.flag("-mavx512f");
             build.flag("-mavx512vl");
         }
+        build.compile("cbaokeshed_avx512");
     }
+
     if defined(C_ARMV7NEON_VAR) {
+        let mut build = new_build();
         build.file("c/baokeshed_neon.c");
         build.define("BAOKESHED_USE_NEON", "1");
         // Note that AArch64 supports NEON by default and does not support -mpfu.
@@ -109,8 +119,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             build.flag("-mfpu=neon-vfpv4");
             build.flag("-mfloat-abi=hard");
         }
+        build.compile("cbaokeshed_neon");
     }
-    build.compile("cbaokeshed");
 
     // The `cc` crate does not automatically emit rerun-if directives for the
     // environment variables it supports, in particular for $CC. We expect to
