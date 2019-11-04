@@ -7,9 +7,7 @@ use baokeshed::*;
 use rand::prelude::*;
 use test::Bencher;
 
-const MEDIUM: usize = 1 << 16; // 64 KiB
-
-const LONG: usize = 1 << 20; // 1 MiB
+const LONG: usize = 1 << 16; // 64 KiB
 
 #[allow(dead_code)]
 const CHUNK_OFFSET_DELTAS: [u64; 17] = [
@@ -546,31 +544,26 @@ fn bench_parents_x16_avx512_c(b: &mut Bencher) {
 }
 
 #[bench]
-fn bench_hash_01_long(b: &mut Bencher) {
+fn bench_hash_01_long_rust(b: &mut Bencher) {
     let mut input = RandomInput::new(b, LONG);
     b.iter(|| baokeshed::hash(input.get()));
 }
 
 #[bench]
-fn bench_hash_02_medium(b: &mut Bencher) {
-    let mut input = RandomInput::new(b, MEDIUM);
-    b.iter(|| baokeshed::hash(input.get()));
-}
-
-#[bench]
-fn bench_hash_03_chunk(b: &mut Bencher) {
+fn bench_hash_02_chunk_rust(b: &mut Bencher) {
     let mut input = RandomInput::new(b, CHUNK_LEN);
     b.iter(|| baokeshed::hash(input.get()));
 }
 
 #[bench]
-fn bench_hash_04_block(b: &mut Bencher) {
-    let mut input = RandomInput::new(b, BLOCK_LEN);
-    b.iter(|| baokeshed::hash(input.get()));
+fn bench_hash_03_block_rust(b: &mut Bencher) {
+    let mut r = RandomInput::new(b, BLOCK_LEN);
+    let input = r.get();
+    b.iter(|| baokeshed::hash(input));
 }
 
 #[bench]
-fn bench_hasher_01_long(b: &mut Bencher) {
+fn bench_hasher_01_long_rust(b: &mut Bencher) {
     let mut input = RandomInput::new(b, LONG);
     b.iter(|| {
         let mut hasher = Hasher::new();
@@ -580,17 +573,7 @@ fn bench_hasher_01_long(b: &mut Bencher) {
 }
 
 #[bench]
-fn bench_hasher_02_medium(b: &mut Bencher) {
-    let mut input = RandomInput::new(b, MEDIUM);
-    b.iter(|| {
-        let mut hasher = Hasher::new();
-        hasher.update(input.get());
-        hasher.finalize()
-    });
-}
-
-#[bench]
-fn bench_hasher_03_chunk(b: &mut Bencher) {
+fn bench_hasher_02_chunk_rust(b: &mut Bencher) {
     let mut input = RandomInput::new(b, CHUNK_LEN);
     b.iter(|| {
         let mut hasher = Hasher::new();
@@ -600,18 +583,19 @@ fn bench_hasher_03_chunk(b: &mut Bencher) {
 }
 
 #[bench]
-fn bench_hasher_04_block(b: &mut Bencher) {
-    let mut input = RandomInput::new(b, BLOCK_LEN);
+fn bench_hasher_03_block_rust(b: &mut Bencher) {
+    let mut r = RandomInput::new(b, BLOCK_LEN);
+    let input = r.get();
     b.iter(|| {
         let mut hasher = Hasher::new();
-        hasher.update(input.get());
+        hasher.update(input);
         hasher.finalize()
     });
 }
 
 #[bench]
 #[cfg(feature = "c_portable")]
-fn bench_ffihasher_01_long(b: &mut Bencher) {
+fn bench_hasher_01_long_c(b: &mut Bencher) {
     let mut input = RandomInput::new(b, LONG);
     b.iter(|| {
         let mut hasher = c::Hasher::new(&[0; KEY_LEN], 0);
@@ -622,21 +606,7 @@ fn bench_ffihasher_01_long(b: &mut Bencher) {
 
 #[bench]
 #[cfg(feature = "c_portable")]
-fn bench_ffihasher_02_medium(b: &mut Bencher) {
-    // The C code supports AVX512 and ARM NEON. It also doesn't do any
-    // multithreading. Always use 16 chunks as the "medium" length for
-    // benchmarking C.
-    let mut input = RandomInput::new(b, 16 * CHUNK_LEN);
-    b.iter(|| {
-        let mut hasher = c::Hasher::new(&[0; KEY_LEN], 0);
-        hasher.update(input.get());
-        hasher.finalize()
-    });
-}
-
-#[bench]
-#[cfg(feature = "c_portable")]
-fn bench_ffihasher_03_chunk(b: &mut Bencher) {
+fn bench_hasher_02_chunk_c(b: &mut Bencher) {
     let mut input = RandomInput::new(b, CHUNK_LEN);
     b.iter(|| {
         let mut hasher = c::Hasher::new(&[0; KEY_LEN], 0);
@@ -647,11 +617,12 @@ fn bench_ffihasher_03_chunk(b: &mut Bencher) {
 
 #[bench]
 #[cfg(feature = "c_portable")]
-fn bench_ffihasher_04_block(b: &mut Bencher) {
-    let mut input = RandomInput::new(b, BLOCK_LEN);
+fn bench_hasher_03_block_c(b: &mut Bencher) {
+    let mut r = RandomInput::new(b, BLOCK_LEN);
+    let input = r.get();
     b.iter(|| {
         let mut hasher = c::Hasher::new(&[0; KEY_LEN], 0);
-        hasher.update(input.get());
+        hasher.update(input);
         hasher.finalize()
     });
 }
