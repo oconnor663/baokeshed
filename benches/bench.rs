@@ -127,7 +127,7 @@ fn bench_compress_avx512_c(b: &mut Bencher) {
 
 #[bench]
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-fn bench_hash_chunks_04_sse41_rust(b: &mut Bencher) {
+fn bench_chunks_x04_sse41_rust(b: &mut Bencher) {
     if !is_x86_feature_detected!("sse4.1") {
         return;
     }
@@ -157,7 +157,7 @@ fn bench_hash_chunks_04_sse41_rust(b: &mut Bencher) {
 
 #[bench]
 #[cfg(feature = "c_sse41")]
-fn bench_hash_chunks_04_sse41_c(b: &mut Bencher) {
+fn bench_chunks_x04_sse41_c(b: &mut Bencher) {
     const N: usize = 4;
     let key = [1; 8];
     let mut out = [0; OUT_LEN * N];
@@ -184,7 +184,7 @@ fn bench_hash_chunks_04_sse41_c(b: &mut Bencher) {
 
 #[bench]
 #[cfg(feature = "c_avx512")]
-fn bench_hash_chunks_04_avx512_c(b: &mut Bencher) {
+fn bench_chunks_x04_avx512_c(b: &mut Bencher) {
     const N: usize = 4;
     let key = [1; 8];
     let mut out = [0; OUT_LEN * N];
@@ -211,7 +211,7 @@ fn bench_hash_chunks_04_avx512_c(b: &mut Bencher) {
 
 #[bench]
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-fn bench_hash_chunks_08_avx2_rust(b: &mut Bencher) {
+fn bench_chunks_x08_avx2_rust(b: &mut Bencher) {
     if !is_x86_feature_detected!("avx2") {
         return;
     }
@@ -241,7 +241,7 @@ fn bench_hash_chunks_08_avx2_rust(b: &mut Bencher) {
 
 #[bench]
 #[cfg(feature = "c_avx2")]
-fn bench_hash_chunks_08_avx2_c(b: &mut Bencher) {
+fn bench_chunks_x08_avx2_c(b: &mut Bencher) {
     const N: usize = 8;
     let key = [1; 8];
     let mut out = [0; OUT_LEN * N];
@@ -268,7 +268,7 @@ fn bench_hash_chunks_08_avx2_c(b: &mut Bencher) {
 
 #[bench]
 #[cfg(feature = "c_avx512")]
-fn bench_hash_chunks_08_avx512_c(b: &mut Bencher) {
+fn bench_chunks_x08_avx512_c(b: &mut Bencher) {
     const N: usize = 8;
     let key = [1; 8];
     let mut out = [0; OUT_LEN * N];
@@ -295,7 +295,7 @@ fn bench_hash_chunks_08_avx512_c(b: &mut Bencher) {
 
 #[bench]
 #[cfg(feature = "c_avx512")]
-fn bench_hash_chunks_16_avx512_c(b: &mut Bencher) {
+fn bench_chunks_x16_avx512_c(b: &mut Bencher) {
     const N: usize = 16;
     let key = [1; 8];
     let mut out = [0; OUT_LEN * N];
@@ -322,7 +322,7 @@ fn bench_hash_chunks_16_avx512_c(b: &mut Bencher) {
 
 #[bench]
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-fn bench_hash_parents_04_sse41_rust(b: &mut Bencher) {
+fn bench_parents_x04_sse41_rust(b: &mut Bencher) {
     if !is_x86_feature_detected!("sse4.1") {
         return;
     }
@@ -340,7 +340,7 @@ fn bench_hash_parents_04_sse41_rust(b: &mut Bencher) {
 
 #[bench]
 #[cfg(feature = "c_sse41")]
-fn bench_hash_parents_04_sse41_c(b: &mut Bencher) {
+fn bench_parents_x04_sse41_c(b: &mut Bencher) {
     const N: usize = 4;
     let key = [1; 8];
     let mut out = [0; OUT_LEN * N];
@@ -367,7 +367,7 @@ fn bench_hash_parents_04_sse41_c(b: &mut Bencher) {
 
 #[bench]
 #[cfg(feature = "c_avx512")]
-fn bench_hash_parents_04_avx512_c(b: &mut Bencher) {
+fn bench_parents_x04_avx512_c(b: &mut Bencher) {
     const N: usize = 4;
     let key = [1; 8];
     let mut out = [0; OUT_LEN * N];
@@ -394,7 +394,7 @@ fn bench_hash_parents_04_avx512_c(b: &mut Bencher) {
 
 #[bench]
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-fn bench_hash_parents_08_avx2_rust(b: &mut Bencher) {
+fn bench_parents_x08_avx2_rust(b: &mut Bencher) {
     if !is_x86_feature_detected!("avx2") {
         return;
     }
@@ -412,7 +412,7 @@ fn bench_hash_parents_08_avx2_rust(b: &mut Bencher) {
 
 #[bench]
 #[cfg(feature = "c_avx2")]
-fn bench_hash_parents_08_avx2_c(b: &mut Bencher) {
+fn bench_parents_x08_avx2_c(b: &mut Bencher) {
     const N: usize = 8;
     let key = [1; 8];
     let mut out = [0; OUT_LEN * N];
@@ -439,7 +439,7 @@ fn bench_hash_parents_08_avx2_c(b: &mut Bencher) {
 
 #[bench]
 #[cfg(feature = "c_avx512")]
-fn bench_hash_parents_08_avx512_c(b: &mut Bencher) {
+fn bench_parents_x08_avx512_c(b: &mut Bencher) {
     const N: usize = 8;
     let key = [1; 8];
     let mut out = [0; OUT_LEN * N];
@@ -466,7 +466,7 @@ fn bench_hash_parents_08_avx512_c(b: &mut Bencher) {
 
 #[bench]
 #[cfg(feature = "c_avx512")]
-fn bench_hash_parents_16_avx512_c(b: &mut Bencher) {
+fn bench_parents_x16_avx512_c(b: &mut Bencher) {
     const N: usize = 16;
     let key = [1; 8];
     let mut out = [0; OUT_LEN * N];
