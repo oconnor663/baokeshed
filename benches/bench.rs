@@ -51,7 +51,7 @@ impl RandomInput {
 // ===================================================
 
 #[bench]
-fn bench_compress_rust_portable(b: &mut Bencher) {
+fn bench_compress_portable_rust(b: &mut Bencher) {
     let mut state = [1; 8];
     let mut r = RandomInput::new(b, BLOCK_LEN);
     let input = array_ref!(r.get(), 0, BLOCK_LEN);
@@ -59,8 +59,19 @@ fn bench_compress_rust_portable(b: &mut Bencher) {
 }
 
 #[bench]
+#[cfg(feature = "c_portable")]
+fn bench_compress_portable_c(b: &mut Bencher) {
+    let mut state = [1; 8];
+    let mut r = RandomInput::new(b, BLOCK_LEN);
+    let input = array_ref!(r.get(), 0, BLOCK_LEN);
+    b.iter(|| unsafe {
+        c::ffi::compress_portable(state.as_mut_ptr(), input.as_ptr(), BLOCK_LEN as u8, 0, 0)
+    });
+}
+
+#[bench]
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-fn bench_compress_rust_sse41(b: &mut Bencher) {
+fn bench_compress_sse41_rust(b: &mut Bencher) {
     if !is_x86_feature_detected!("sse4.1") {
         return;
     }
@@ -71,19 +82,8 @@ fn bench_compress_rust_sse41(b: &mut Bencher) {
 }
 
 #[bench]
-#[cfg(feature = "c_portable")]
-fn bench_compress_c_portable(b: &mut Bencher) {
-    let mut state = [1; 8];
-    let mut r = RandomInput::new(b, BLOCK_LEN);
-    let input = array_ref!(r.get(), 0, BLOCK_LEN);
-    b.iter(|| unsafe {
-        c::ffi::compress_portable(state.as_mut_ptr(), input.as_ptr(), BLOCK_LEN as u8, 0, 0)
-    });
-}
-
-#[bench]
 #[cfg(feature = "c_sse41")]
-fn bench_compress_c_sse41(b: &mut Bencher) {
+fn bench_compress_sse41_c(b: &mut Bencher) {
     let mut state = [1; 8];
     let mut r = RandomInput::new(b, BLOCK_LEN);
     let input = array_ref!(r.get(), 0, BLOCK_LEN);
@@ -94,12 +94,72 @@ fn bench_compress_c_sse41(b: &mut Bencher) {
 
 #[bench]
 #[cfg(feature = "c_avx512")]
-fn bench_compress_c_avx512(b: &mut Bencher) {
+fn bench_compress_avx512_c(b: &mut Bencher) {
     let mut state = [1; 8];
     let mut r = RandomInput::new(b, BLOCK_LEN);
     let input = array_ref!(r.get(), 0, BLOCK_LEN);
     b.iter(|| unsafe {
         c::ffi::compress_avx512(state.as_mut_ptr(), input.as_ptr(), BLOCK_LEN as u8, 0, 0)
+    });
+}
+
+#[bench]
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+fn bench_hash_4chunks_sse41_rust(b: &mut Bencher) {
+    if !is_x86_feature_detected!("sse4.1") {
+        return;
+    }
+    const N: usize = 4;
+    let key = [1; 8];
+    let mut out = [0; OUT_LEN * N];
+    let mut r = RandomInput::new(b, CHUNK_LEN * N);
+    let input_bytes = r.get();
+    let mut inputs = [std::ptr::null(); N];
+    for (input, chunk) in inputs.iter_mut().zip(input_bytes.chunks_exact(CHUNK_LEN)) {
+        *input = chunk.as_ptr();
+    }
+    b.iter(|| unsafe {
+        sse41::hash4(
+            &inputs,
+            CHUNK_LEN / BLOCK_LEN,
+            &key,
+            0,
+            0,
+            0,
+            0,
+            0,
+            &mut out,
+        )
+    });
+}
+
+#[bench]
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+fn bench_hash_8chunks_avx2_rust(b: &mut Bencher) {
+    if !is_x86_feature_detected!("avx2") {
+        return;
+    }
+    const N: usize = 8;
+    let key = [1; 8];
+    let mut out = [0; OUT_LEN * N];
+    let mut r = RandomInput::new(b, CHUNK_LEN * N);
+    let input_bytes = r.get();
+    let mut inputs = [std::ptr::null(); N];
+    for (input, chunk) in inputs.iter_mut().zip(input_bytes.chunks_exact(CHUNK_LEN)) {
+        *input = chunk.as_ptr();
+    }
+    b.iter(|| unsafe {
+        avx2::hash8(
+            &inputs,
+            CHUNK_LEN / BLOCK_LEN,
+            &key,
+            0,
+            0,
+            0,
+            0,
+            0,
+            &mut out,
+        )
     });
 }
 
