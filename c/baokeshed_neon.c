@@ -1,7 +1,5 @@
 #include "baokeshed_impl.h"
 
-#if defined(__ARM_NEON)
-
 #include <arm_neon.h>
 
 // TODO: This is probably incorrect for big-endian ARM. How should that work?
@@ -345,11 +343,3 @@ void hash_many_neon(const uint8_t *const *inputs, size_t num_inputs,
     out = &out[OUT_LEN];
   }
 }
-
-#else // __ARM_NEON
-
-// NEON is only enabled statically in the build, with --features=c_armv7neon.
-// (Rust's dynamic feature detection for ARM is not yet stable.) So we don't
-// need to provide any stubs here.
-
-#endif

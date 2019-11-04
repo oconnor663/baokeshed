@@ -1,7 +1,5 @@
 #include "baokeshed_impl.h"
 
-#ifdef __AVX2__
-
 #include <immintrin.h>
 
 #define DEGREE 8
@@ -329,31 +327,3 @@ void hash_many_avx2(const uint8_t *const *inputs, size_t num_inputs,
   hash_many_sse41(inputs, num_inputs, blocks, key_words, offset, offset_deltas,
                   flags, flags_start, flags_end, out);
 }
-
-#else // __AVX2__ not defined
-
-// When AVX2 isn't enabled in the build (e.g. with -march=native, depending
-// on the platform), other C code doesn't call into this file at all. But the
-// Rust test framework links against these functions unconditionally, and then
-// does runtime feature detection to decide whether to run tests. So we need to
-// provide empty stubs in the not-supported case, to avoid breaking the build.
-
-void hash_many_avx2(const uint8_t *const *inputs, size_t num_inputs,
-                    size_t blocks, const uint32_t key_words[8], uint64_t offset,
-                    const uint64_t offset_deltas[9], uint8_t flags,
-                    uint8_t flags_start, uint8_t flags_end, uint8_t *out) {
-  // Suppress unused parameter warnings.
-  (void)inputs;
-  (void)num_inputs;
-  (void)blocks;
-  (void)key_words;
-  (void)offset;
-  (void)offset_deltas;
-  (void)flags;
-  (void)flags_start;
-  (void)flags_end;
-  (void)out;
-  assert(false);
-}
-
-#endif

@@ -1,7 +1,5 @@
 #include "baokeshed_impl.h"
 
-#if defined(__AVX512F__) && defined(__AVX512VL__)
-
 #include <immintrin.h>
 
 INLINE __m128i loadu_128(const uint8_t src[16]) {
@@ -1205,43 +1203,3 @@ void hash_many_avx512(const uint8_t *const *inputs, size_t num_inputs,
     out = &out[OUT_LEN];
   }
 }
-
-#else // __AVX512F__ or __AVX512VL__ not defined
-
-// When AVX512 isn't enabled in the build (e.g. with -march=native, depending
-// on the platform), other C code doesn't call into this file at all. But the
-// Rust test framework links against these functions unconditionally, and then
-// does runtime feature detection to decide whether to run tests. So we need to
-// provide empty stubs in the not-supported case, to avoid breaking the build.
-
-void compress_avx512(uint32_t state[8], const uint8_t block[BLOCK_LEN],
-                     uint8_t block_len, uint64_t offset, uint8_t flags) {
-  // Suppress unused parameter warnings.
-  (void)state;
-  (void)block;
-  (void)block_len;
-  (void)offset;
-  (void)flags;
-  assert(false);
-}
-
-void hash_many_avx512(const uint8_t *const *inputs, size_t num_inputs,
-                      size_t blocks, const uint32_t key_words[8],
-                      uint64_t offset, const uint64_t offset_deltas[16],
-                      uint8_t flags, uint8_t flags_start, uint8_t flags_end,
-                      uint8_t *out) {
-  // Suppress unused parameter warnings.
-  (void)inputs;
-  (void)num_inputs;
-  (void)blocks;
-  (void)key_words;
-  (void)offset;
-  (void)offset_deltas;
-  (void)flags;
-  (void)flags_start;
-  (void)flags_end;
-  (void)out;
-  assert(false);
-}
-
-#endif

@@ -62,9 +62,9 @@ INLINE uint8_t chunk_state_maybe_start_flag(const chunk_state *self) {
 
 INLINE void compress(uint32_t state[8], const uint8_t block[BLOCK_LEN],
                      uint8_t block_len, uint64_t offset, uint8_t flags) {
-#if defined(__AVX512F__) && defined(__AVX512VL__)
+#if BAOKESHED_USE_AVX512
   compress_avx512(state, block, block_len, offset, flags);
-#elif __SSE4_1__
+#elif BAOKESHED_USE_SSE41
   compress_sse41(state, block, block_len, offset, flags);
 #else
   compress_portable(state, block, block_len, offset, flags);
@@ -171,16 +171,16 @@ INLINE void hash_many(const uint8_t *const *inputs, size_t num_inputs,
                       uint64_t offset, const uint64_t offset_deltas[17],
                       uint8_t flags, uint8_t flags_start, uint8_t flags_end,
                       uint8_t *out) {
-#if defined(__AVX512F__) && defined(__AVX512VL__)
+#if BAOKESHED_USE_AVX512
   hash_many_avx512(inputs, num_inputs, blocks, key_words, offset, offset_deltas,
                    flags, flags_start, flags_end, out);
-#elif __AVX2__
+#elif BAOKESHED_USE_AVX2
   hash_many_avx2(inputs, num_inputs, blocks, key_words, offset, offset_deltas,
                  flags, flags_start, flags_end, out);
-#elif __SSE4_1__
+#elif BAOKESHED_USE_SSE41
   hash_many_sse41(inputs, num_inputs, blocks, key_words, offset, offset_deltas,
                   flags, flags_start, flags_end, out);
-#elif __ARM_NEON
+#elif BAOKESHED_USE_NEON
   hash_many_neon(inputs, num_inputs, blocks, key_words, offset, offset_deltas,
                  flags, flags_start, flags_end, out);
 #else
