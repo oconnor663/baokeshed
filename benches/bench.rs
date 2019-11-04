@@ -11,6 +11,28 @@ const MEDIUM: usize = MAX_SIMD_DEGREE * CHUNK_LEN;
 
 const LONG: usize = 1 << 20; // 1 MiB
 
+const CHUNK_OFFSET_DELTAS: [u64; 17] = [
+    CHUNK_LEN as u64 * 0,
+    CHUNK_LEN as u64 * 1,
+    CHUNK_LEN as u64 * 2,
+    CHUNK_LEN as u64 * 3,
+    CHUNK_LEN as u64 * 4,
+    CHUNK_LEN as u64 * 5,
+    CHUNK_LEN as u64 * 6,
+    CHUNK_LEN as u64 * 7,
+    CHUNK_LEN as u64 * 8,
+    CHUNK_LEN as u64 * 9,
+    CHUNK_LEN as u64 * 10,
+    CHUNK_LEN as u64 * 11,
+    CHUNK_LEN as u64 * 12,
+    CHUNK_LEN as u64 * 13,
+    CHUNK_LEN as u64 * 14,
+    CHUNK_LEN as u64 * 15,
+    CHUNK_LEN as u64 * 16,
+];
+
+const PARENT_OFFSET_DELTAS: [u64; 17] = [0; 17];
+
 // This struct randomizes two things:
 // 1. The actual bytes of input.
 // 2. The page offset the input starts at.
@@ -105,7 +127,7 @@ fn bench_compress_avx512_c(b: &mut Bencher) {
 
 #[bench]
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-fn bench_hash_4chunks_sse41_rust(b: &mut Bencher) {
+fn bench_hash_04chunks_sse41_rust(b: &mut Bencher) {
     if !is_x86_feature_detected!("sse4.1") {
         return;
     }
@@ -134,8 +156,61 @@ fn bench_hash_4chunks_sse41_rust(b: &mut Bencher) {
 }
 
 #[bench]
+#[cfg(feature = "c_sse41")]
+fn bench_hash_04chunks_sse41_c(b: &mut Bencher) {
+    const N: usize = 4;
+    let key = [1; 8];
+    let mut out = [0; OUT_LEN * N];
+    let mut r = RandomInput::new(b, CHUNK_LEN * N);
+    let input_bytes = r.get();
+    let mut inputs = [std::ptr::null(); N];
+    for (input, chunk) in inputs.iter_mut().zip(input_bytes.chunks_exact(CHUNK_LEN)) {
+        *input = chunk.as_ptr();
+    }
+    b.iter(|| unsafe {
+        c::ffi::hash4_sse41(
+            inputs.as_ptr(),
+            CHUNK_LEN / BLOCK_LEN,
+            key.as_ptr(),
+            0,
+            CHUNK_OFFSET_DELTAS.as_ptr(),
+            0,
+            0,
+            0,
+            out.as_mut_ptr(),
+        )
+    });
+}
+#[bench]
+#[cfg(feature = "c_avx512")]
+fn bench_hash_04chunks_avx512_c(b: &mut Bencher) {
+    const N: usize = 4;
+    let key = [1; 8];
+    let mut out = [0; OUT_LEN * N];
+    let mut r = RandomInput::new(b, CHUNK_LEN * N);
+    let input_bytes = r.get();
+    let mut inputs = [std::ptr::null(); N];
+    for (input, chunk) in inputs.iter_mut().zip(input_bytes.chunks_exact(CHUNK_LEN)) {
+        *input = chunk.as_ptr();
+    }
+    b.iter(|| unsafe {
+        c::ffi::hash4_avx512(
+            inputs.as_ptr(),
+            CHUNK_LEN / BLOCK_LEN,
+            key.as_ptr(),
+            0,
+            CHUNK_OFFSET_DELTAS.as_ptr(),
+            0,
+            0,
+            0,
+            out.as_mut_ptr(),
+        )
+    });
+}
+
+#[bench]
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-fn bench_hash_8chunks_avx2_rust(b: &mut Bencher) {
+fn bench_hash_08chunks_avx2_rust(b: &mut Bencher) {
     if !is_x86_feature_detected!("avx2") {
         return;
     }
@@ -159,6 +234,87 @@ fn bench_hash_8chunks_avx2_rust(b: &mut Bencher) {
             0,
             0,
             &mut out,
+        )
+    });
+}
+
+#[bench]
+#[cfg(feature = "c_avx2")]
+fn bench_hash_08chunks_avx2_c(b: &mut Bencher) {
+    const N: usize = 8;
+    let key = [1; 8];
+    let mut out = [0; OUT_LEN * N];
+    let mut r = RandomInput::new(b, CHUNK_LEN * N);
+    let input_bytes = r.get();
+    let mut inputs = [std::ptr::null(); N];
+    for (input, chunk) in inputs.iter_mut().zip(input_bytes.chunks_exact(CHUNK_LEN)) {
+        *input = chunk.as_ptr();
+    }
+    b.iter(|| unsafe {
+        c::ffi::hash8_avx2(
+            inputs.as_ptr(),
+            CHUNK_LEN / BLOCK_LEN,
+            key.as_ptr(),
+            0,
+            CHUNK_OFFSET_DELTAS.as_ptr(),
+            0,
+            0,
+            0,
+            out.as_mut_ptr(),
+        )
+    });
+}
+
+#[bench]
+#[cfg(feature = "c_avx512")]
+fn bench_hash_08chunks_avx512_c(b: &mut Bencher) {
+    const N: usize = 8;
+    let key = [1; 8];
+    let mut out = [0; OUT_LEN * N];
+    let mut r = RandomInput::new(b, CHUNK_LEN * N);
+    let input_bytes = r.get();
+    let mut inputs = [std::ptr::null(); N];
+    for (input, chunk) in inputs.iter_mut().zip(input_bytes.chunks_exact(CHUNK_LEN)) {
+        *input = chunk.as_ptr();
+    }
+    b.iter(|| unsafe {
+        c::ffi::hash8_avx512(
+            inputs.as_ptr(),
+            CHUNK_LEN / BLOCK_LEN,
+            key.as_ptr(),
+            0,
+            CHUNK_OFFSET_DELTAS.as_ptr(),
+            0,
+            0,
+            0,
+            out.as_mut_ptr(),
+        )
+    });
+}
+
+#[bench]
+#[cfg(feature = "c_avx512")]
+fn bench_hash_16chunks_avx512_c(b: &mut Bencher) {
+    const N: usize = 16;
+    let key = [1; 8];
+    let mut out = [0; OUT_LEN * N];
+    let mut r = RandomInput::new(b, CHUNK_LEN * N);
+    let input_bytes = r.get();
+    let mut inputs = [std::ptr::null(); N];
+    for (input, chunk) in inputs.iter_mut().zip(input_bytes.chunks_exact(CHUNK_LEN)) {
+        *input = chunk.as_ptr();
+    }
+    b.iter(|| unsafe {
+        c::ffi::hash16_avx512(
+            inputs.as_ptr(),
+            CHUNK_LEN / BLOCK_LEN,
+            key.as_ptr(),
+            0,
+            CHUNK_OFFSET_DELTAS.as_ptr(),
+            0,
+            0,
+            0,
+            out.as_mut_ptr(),
         )
     });
 }

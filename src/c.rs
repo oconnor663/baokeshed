@@ -68,8 +68,7 @@ pub mod ffi {
             offset: u64,
             flags: u8,
         );
-        #[cfg(any(feature = "c_sse41", feature = "c_native"))]
-        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        #[cfg(feature = "c_sse41")]
         pub fn compress_sse41(
             state: *mut u32,
             block: *const u8,
@@ -77,14 +76,73 @@ pub mod ffi {
             offset: u64,
             flags: u8,
         );
-        #[cfg(any(feature = "c_avx512", feature = "c_native"))]
-        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        #[cfg(feature = "c_avx512")]
         pub fn compress_avx512(
             state: *mut u32,
             block: *const u8,
             block_len: u8,
             offset: u64,
             flags: u8,
+        );
+        #[cfg(feature = "c_sse41")]
+        pub fn hash4_sse41(
+            inputs: *const *const u8,
+            blocks: usize,
+            key_words: *const u32,
+            offset: u64,
+            offset_deltas: *const u64,
+            flags: u8,
+            flags_start: u8,
+            flags_end: u8,
+            out: *mut u8,
+        );
+        #[cfg(feature = "c_avx512")]
+        pub fn hash4_avx512(
+            inputs: *const *const u8,
+            blocks: usize,
+            key_words: *const u32,
+            offset: u64,
+            offset_deltas: *const u64,
+            flags: u8,
+            flags_start: u8,
+            flags_end: u8,
+            out: *mut u8,
+        );
+        #[cfg(feature = "c_avx2")]
+        pub fn hash8_avx2(
+            inputs: *const *const u8,
+            blocks: usize,
+            key_words: *const u32,
+            offset: u64,
+            offset_deltas: *const u64,
+            flags: u8,
+            flags_start: u8,
+            flags_end: u8,
+            out: *mut u8,
+        );
+        #[cfg(feature = "c_avx512")]
+        pub fn hash8_avx512(
+            inputs: *const *const u8,
+            blocks: usize,
+            key_words: *const u32,
+            offset: u64,
+            offset_deltas: *const u64,
+            flags: u8,
+            flags_start: u8,
+            flags_end: u8,
+            out: *mut u8,
+        );
+        #[cfg(feature = "c_avx512")]
+        pub fn hash16_avx512(
+            inputs: *const *const u8,
+            blocks: usize,
+            key_words: *const u32,
+            offset: u64,
+            offset_deltas: *const u64,
+            flags: u8,
+            flags_start: u8,
+            flags_end: u8,
+            out: *mut u8,
         );
         pub fn hash_many_portable(
             inputs: *const *const u8,
@@ -98,8 +156,7 @@ pub mod ffi {
             flags_end: u8,
             out: *mut u8,
         );
-        #[cfg(any(feature = "c_sse41", feature = "c_native"))]
-        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        #[cfg(feature = "c_sse41")]
         pub fn hash_many_sse41(
             inputs: *const *const u8,
             num_inputs: usize,
@@ -112,8 +169,7 @@ pub mod ffi {
             flags_end: u8,
             out: *mut u8,
         );
-        #[cfg(any(feature = "c_avx2", feature = "c_native"))]
-        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        #[cfg(feature = "c_avx2")]
         pub fn hash_many_avx2(
             inputs: *const *const u8,
             num_inputs: usize,
@@ -126,8 +182,7 @@ pub mod ffi {
             flags_end: u8,
             out: *mut u8,
         );
-        #[cfg(any(feature = "c_avx512", feature = "c_native"))]
-        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        #[cfg(feature = "c_avx512")]
         pub fn hash_many_avx512(
             inputs: *const *const u8,
             num_inputs: usize,
@@ -140,8 +195,7 @@ pub mod ffi {
             flags_end: u8,
             out: *mut u8,
         );
-        #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
-        #[cfg(feature = "c_armv7neon")]
+        #[cfg(feature = "c_neon")]
         pub fn hash_many_neon(
             inputs: *const *const u8,
             num_inputs: usize,
@@ -162,11 +216,6 @@ pub mod ffi {
         );
         pub fn chunk_state_finalize(self_: *const super::ChunkState, is_root: bool, out: *mut u8);
     }
-}
-
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-pub fn is_avx512_detected() -> bool {
-    is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512vl")
 }
 
 #[cfg(test)]
@@ -267,22 +316,14 @@ mod test {
     }
 
     #[test]
-    #[cfg(any(feature = "c_sse41", feature = "c_native"))]
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(feature = "c_sse41")]
     fn test_compress_sse41() {
-        if !is_x86_feature_detected!("sse4.1") {
-            return;
-        }
         compare_compress_fn(ffi::compress_sse41);
     }
 
     #[test]
-    #[cfg(any(feature = "c_avx512", feature = "c_native"))]
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(feature = "c_avx512")]
     fn test_compress_avx512() {
-        if !is_avx512_detected() {
-            return;
-        }
         compare_compress_fn(ffi::compress_avx512);
     }
 
@@ -396,38 +437,25 @@ mod test {
     }
 
     #[test]
-    #[cfg(any(feature = "c_sse41", feature = "c_native"))]
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(feature = "c_sse41")]
     fn test_hash_many_sse41() {
-        if !is_x86_feature_detected!("sse4.1") {
-            return;
-        }
         compare_hash_many_fn(ffi::hash_many_sse41);
     }
 
     #[test]
-    #[cfg(any(feature = "c_avx2", feature = "c_native"))]
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(feature = "c_avx2")]
     fn test_hash_many_avx2() {
-        if !is_x86_feature_detected!("avx2") {
-            return;
-        }
         compare_hash_many_fn(ffi::hash_many_avx2);
     }
 
     #[test]
-    #[cfg(any(feature = "c_avx512", feature = "c_native"))]
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(feature = "c_avx512")]
     fn test_hash_many_avx512() {
-        if !is_avx512_detected() {
-            return;
-        }
         compare_hash_many_fn(ffi::hash_many_avx512);
     }
 
     #[test]
-    #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
-    #[cfg(feature = "c_armv7neon")]
+    #[cfg(feature = "c_neon")]
     fn test_hash_many_neon() {
         compare_hash_many_fn(ffi::hash_many_neon);
     }
