@@ -50,9 +50,9 @@ jobs:
       run: cross test --target armv7-unknown-linux-gnueabihf --features=c_portable
     - name: cross test armv7 neon
       run: cross test --target armv7-unknown-linux-gnueabihf --features=c_neon
-    - name: cross test aarch64
+    - name: cross test aarch64 portable
       run: cross test --target aarch64-unknown-linux-gnu --features=c_portable
-    - name: cross test aarch64
+    - name: cross test aarch64 neon
       run: cross test --target aarch64-unknown-linux-gnu --features=c_neon
 
   test_c_detect:
@@ -73,11 +73,11 @@ jobs:
 
     # The rerun-if-env-changed directives in build.rs mean that each of these
     # different CC settings will do a recompilation.
-    - name: test native GCC
+    - name: test c_detect GCC
       env:
         CC: gcc
       run: cargo test -vv --features=c_detect --release
-    - name: test native Clang
+    - name: test c_detect Clang
       env:
         CC: clang
       run: cargo test -vv --features=c_detect --release
