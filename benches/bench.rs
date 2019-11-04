@@ -7,7 +7,7 @@ use baokeshed::*;
 use rand::prelude::*;
 use test::Bencher;
 
-const MEDIUM: usize = MAX_SIMD_DEGREE * CHUNK_LEN;
+const MEDIUM: usize = 1 << 16; // 64 KiB
 
 const LONG: usize = 1 << 20; // 1 MiB
 
