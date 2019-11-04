@@ -68,15 +68,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         detect_x86_features();
     }
 
+    let mut main_build = new_build();
+    main_build.file("c/baokeshed.c");
+
     let mut portable_build = new_build();
-    portable_build.file("c/baokeshed.c");
     portable_build.file("c/baokeshed_portable.c");
     portable_build.compile("cbaokeshed_portable");
 
     if defined(C_SSE41_VAR) {
         let mut build = new_build();
         build.file("c/baokeshed_sse41.c");
-        build.define("BAOKESHED_USE_SSE41", "1");
+        main_build.define("BAOKESHED_USE_SSE41", "1");
         if is_windows {
             // /arch:SSE2 is the default on x86 and undefined on x86_64:
             // https://docs.microsoft.com/en-us/cpp/build/reference/arch-x86
@@ -91,7 +93,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if defined(C_AVX2_VAR) {
         let mut build = new_build();
         build.file("c/baokeshed_avx2.c");
-        build.define("BAOKESHED_USE_AVX2", "1");
+        main_build.define("BAOKESHED_USE_AVX2", "1");
         if is_windows {
             build.flag("/arch:AVX2");
         } else {
@@ -103,7 +105,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if defined(C_AVX512_VAR) {
         let mut build = new_build();
         build.file("c/baokeshed_avx512.c");
-        build.define("BAOKESHED_USE_AVX512", "1");
+        main_build.define("BAOKESHED_USE_AVX512", "1");
         if is_windows {
             // Note that a lot of versions of MSVC don't support /arch:AVX512,
             // and they'll discard it with a warning, giving you an AVX2 build.
@@ -118,7 +120,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if defined(C_NEON_VAR) {
         let mut build = new_build();
         build.file("c/baokeshed_neon.c");
-        build.define("BAOKESHED_USE_NEON", "1");
+        main_build.define("BAOKESHED_USE_NEON", "1");
         // Note that AArch64 supports NEON by default and does not support -mpfu.
         if is_armv7 {
             // Match https://github.com/BLAKE2/BLAKE2/blob/master/neon/makefile#L2.
@@ -127,6 +129,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         build.compile("cbaokeshed_neon");
     }
+
+    main_build.compile("cbaokeshed_main");
 
     // The `cc` crate does not automatically emit rerun-if directives for the
     // environment variables it supports, in particular for $CC. We expect to
