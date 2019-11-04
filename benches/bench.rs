@@ -11,6 +11,7 @@ const MEDIUM: usize = MAX_SIMD_DEGREE * CHUNK_LEN;
 
 const LONG: usize = 1 << 20; // 1 MiB
 
+#[allow(dead_code)]
 const CHUNK_OFFSET_DELTAS: [u64; 17] = [
     CHUNK_LEN as u64 * 0,
     CHUNK_LEN as u64 * 1,
@@ -31,6 +32,7 @@ const CHUNK_OFFSET_DELTAS: [u64; 17] = [
     CHUNK_LEN as u64 * 16,
 ];
 
+#[allow(dead_code)]
 const PARENT_OFFSET_DELTAS: [u64; 17] = [0; 17];
 
 // This struct randomizes two things:
@@ -69,8 +71,6 @@ impl RandomInput {
         &self.buf[offset..][..self.len]
     }
 }
-
-// ===================================================
 
 #[bench]
 fn bench_compress_portable_rust(b: &mut Bencher) {
@@ -196,6 +196,33 @@ fn bench_chunks_x04_avx512_c(b: &mut Bencher) {
     }
     b.iter(|| unsafe {
         c::ffi::hash4_avx512(
+            inputs.as_ptr(),
+            CHUNK_LEN / BLOCK_LEN,
+            key.as_ptr(),
+            0,
+            CHUNK_OFFSET_DELTAS.as_ptr(),
+            0,
+            0,
+            0,
+            out.as_mut_ptr(),
+        )
+    });
+}
+
+#[bench]
+#[cfg(feature = "c_neon")]
+fn bench_chunks_x04_neon_c(b: &mut Bencher) {
+    const N: usize = 4;
+    let key = [1; 8];
+    let mut out = [0; OUT_LEN * N];
+    let mut r = RandomInput::new(b, CHUNK_LEN * N);
+    let input_bytes = r.get();
+    let mut inputs = [std::ptr::null(); N];
+    for (input, chunk) in inputs.iter_mut().zip(input_bytes.chunks_exact(CHUNK_LEN)) {
+        *input = chunk.as_ptr();
+    }
+    b.iter(|| unsafe {
+        c::ffi::hash4_neon(
             inputs.as_ptr(),
             CHUNK_LEN / BLOCK_LEN,
             key.as_ptr(),
@@ -393,6 +420,33 @@ fn bench_parents_x04_avx512_c(b: &mut Bencher) {
 }
 
 #[bench]
+#[cfg(feature = "c_neon")]
+fn bench_parents_x04_neon_c(b: &mut Bencher) {
+    const N: usize = 4;
+    let key = [1; 8];
+    let mut out = [0; OUT_LEN * N];
+    let mut r = RandomInput::new(b, 2 * OUT_LEN * N);
+    let input_bytes = r.get();
+    let mut inputs = [std::ptr::null(); N];
+    for (input, chunk) in inputs.iter_mut().zip(input_bytes.chunks_exact(2 * OUT_LEN)) {
+        *input = chunk.as_ptr();
+    }
+    b.iter(|| unsafe {
+        c::ffi::hash4_neon(
+            inputs.as_ptr(),
+            1,
+            key.as_ptr(),
+            0,
+            PARENT_OFFSET_DELTAS.as_ptr(),
+            0,
+            0,
+            0,
+            out.as_mut_ptr(),
+        )
+    });
+}
+
+#[bench]
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 fn bench_parents_x08_avx2_rust(b: &mut Bencher) {
     if !is_x86_feature_detected!("avx2") {
@@ -490,8 +544,6 @@ fn bench_parents_x16_avx512_c(b: &mut Bencher) {
         )
     });
 }
-
-// ==================================================
 
 #[bench]
 fn bench_hash_01_long(b: &mut Bencher) {

@@ -11,7 +11,7 @@ c_portable = []
 c_sse41 = ["c_portable"]
 c_avx2 = ["c_portable", "c_sse41"]
 c_avx512 = ["c_portable", "c_sse41", "c_avx2"] # requires AVX512 F+VL
-c_armv7neon = ["c_portable"]
+c_neon = ["c_portable"]
 c_detect = ["c_portable"] # enables other features in build.rs
 
 [dependencies]

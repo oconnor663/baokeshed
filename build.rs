@@ -3,7 +3,7 @@ use std::env;
 const C_SSE41_VAR: &str = "CARGO_FEATURE_C_SSE41";
 const C_AVX2_VAR: &str = "CARGO_FEATURE_C_AVX2";
 const C_AVX512_VAR: &str = "CARGO_FEATURE_C_AVX512";
-const C_ARMV7NEON_VAR: &str = "CARGO_FEATURE_C_ARMV7NEON";
+const C_NEON_VAR: &str = "CARGO_FEATURE_C_NEON";
 
 fn defined(var: &str) -> bool {
     env::var_os(var).is_some()
@@ -14,12 +14,14 @@ pub fn is_avx512_detected() -> bool {
     is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512vl")
 }
 
-// Set env vars to signal the rest of this build script, and emit cargo
+// Set env vars to signal the rest of this build script (the same ones might
+// also be set explicitly by features like "c_sse41"), and emit cargo
 // directives to turn on feature during crate compilation. Note that this can't
 // activate feature dependencies, so we rely on the fact that e.g. SSE4.1 is
 // always detected when AVX2 is detected.
 #[allow(unreachable_code)]
-fn detect_c_features() {
+fn detect_x86_features() {
+    // Note that target_arch here refers to the *host*, not the actual target.
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     {
         if is_x86_feature_detected!("sse4.1") {
@@ -36,16 +38,12 @@ fn detect_c_features() {
         }
         return;
     }
-    panic!("c_detect not supported on non-x86");
+    panic!("c_detect not supported for non-x86 hosts");
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     if !defined("CARGO_FEATURE_C_PORTABLE") {
         return Ok(());
-    }
-
-    if defined("CARGO_FEATURE_C_DETECT") {
-        detect_c_features();
     }
 
     let target = env::var("TARGET")?;
@@ -61,6 +59,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         build
     };
+
+    if defined("CARGO_FEATURE_C_DETECT") {
+        assert!(
+            target_arch == "x86" || target_arch == "x86_64",
+            "c_detect not supported for non-x86 targets"
+        );
+        detect_x86_features();
+    }
 
     let mut portable_build = new_build();
     portable_build.file("c/baokeshed.c");
@@ -109,7 +115,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         build.compile("cbaokeshed_avx512");
     }
 
-    if defined(C_ARMV7NEON_VAR) {
+    if defined(C_NEON_VAR) {
         let mut build = new_build();
         build.file("c/baokeshed_neon.c");
         build.define("BAOKESHED_USE_NEON", "1");

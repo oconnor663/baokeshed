@@ -108,6 +108,18 @@ pub mod ffi {
             flags_end: u8,
             out: *mut u8,
         );
+        #[cfg(feature = "c_neon")]
+        pub fn hash4_neon(
+            inputs: *const *const u8,
+            blocks: usize,
+            key_words: *const u32,
+            offset: u64,
+            offset_deltas: *const u64,
+            flags: u8,
+            flags_start: u8,
+            flags_end: u8,
+            out: *mut u8,
+        );
         #[cfg(feature = "c_avx2")]
         pub fn hash8_avx2(
             inputs: *const *const u8,
