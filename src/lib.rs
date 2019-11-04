@@ -30,17 +30,22 @@ use core::cmp;
 use core::fmt;
 use platform::{Platform, MAX_SIMD_DEGREE_OR_2};
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-mod avx2;
-#[doc(hidden)]
-pub mod benchmarks;
-#[cfg(feature = "c_portable")]
-pub mod c;
 pub mod copy;
 mod platform;
-mod portable;
+
+// Platform implementations are public only for benchmarks. These are not
+// stable. Please do not use them in productions.
+#[doc(hidden)]
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-mod sse41;
+pub mod avx2;
+#[doc(hidden)]
+#[cfg(feature = "c_portable")]
+pub mod c;
+#[doc(hidden)]
+pub mod portable;
+#[doc(hidden)]
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+pub mod sse41;
 
 #[cfg(test)]
 mod test;

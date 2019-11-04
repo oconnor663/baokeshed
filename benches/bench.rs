@@ -48,6 +48,63 @@ impl RandomInput {
     }
 }
 
+// ===================================================
+
+#[bench]
+fn bench_compress_rust_portable(b: &mut Bencher) {
+    let mut state = [1; 8];
+    let mut r = RandomInput::new(b, BLOCK_LEN);
+    let input = array_ref!(r.get(), 0, BLOCK_LEN);
+    b.iter(|| portable::compress(&mut state, input, BLOCK_LEN as u8, 0, 0));
+}
+
+#[bench]
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+fn bench_compress_rust_sse41(b: &mut Bencher) {
+    if !is_x86_feature_detected!("sse4.1") {
+        return;
+    }
+    let mut state = [1; 8];
+    let mut r = RandomInput::new(b, BLOCK_LEN);
+    let input = array_ref!(r.get(), 0, BLOCK_LEN);
+    b.iter(|| unsafe { sse41::compress(&mut state, input, BLOCK_LEN as u8, 0, 0) });
+}
+
+#[bench]
+#[cfg(feature = "c_portable")]
+fn bench_compress_c_portable(b: &mut Bencher) {
+    let mut state = [1; 8];
+    let mut r = RandomInput::new(b, BLOCK_LEN);
+    let input = array_ref!(r.get(), 0, BLOCK_LEN);
+    b.iter(|| unsafe {
+        c::ffi::compress_portable(state.as_mut_ptr(), input.as_ptr(), BLOCK_LEN as u8, 0, 0)
+    });
+}
+
+#[bench]
+#[cfg(feature = "c_sse41")]
+fn bench_compress_c_sse41(b: &mut Bencher) {
+    let mut state = [1; 8];
+    let mut r = RandomInput::new(b, BLOCK_LEN);
+    let input = array_ref!(r.get(), 0, BLOCK_LEN);
+    b.iter(|| unsafe {
+        c::ffi::compress_sse41(state.as_mut_ptr(), input.as_ptr(), BLOCK_LEN as u8, 0, 0)
+    });
+}
+
+#[bench]
+#[cfg(feature = "c_avx512")]
+fn bench_compress_c_avx512(b: &mut Bencher) {
+    let mut state = [1; 8];
+    let mut r = RandomInput::new(b, BLOCK_LEN);
+    let input = array_ref!(r.get(), 0, BLOCK_LEN);
+    b.iter(|| unsafe {
+        c::ffi::compress_avx512(state.as_mut_ptr(), input.as_ptr(), BLOCK_LEN as u8, 0, 0)
+    });
+}
+
+// ==================================================
+
 #[bench]
 fn bench_hash_01_long(b: &mut Bencher) {
     let mut input = RandomInput::new(b, LONG);
@@ -165,94 +222,4 @@ fn bench_xof(b: &mut Bencher) {
     let mut xof = hasher.finalize_xof();
     b.bytes = xof.read().len() as u64;
     b.iter(|| xof.read());
-}
-
-#[bench]
-fn bench_compress_portable(b: &mut Bencher) {
-    let mut state = [0; 8];
-    let mut input = RandomInput::new(b, BLOCK_LEN);
-    b.iter(|| {
-        benchmarks::compress_portable(
-            &mut state,
-            array_ref!(input.get(), 0, BLOCK_LEN),
-            BLOCK_LEN as u8,
-            0,
-            0,
-        );
-    });
-}
-
-#[bench]
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-fn bench_compress_sse41(b: &mut Bencher) {
-    if !is_x86_feature_detected!("sse4.1") {
-        return;
-    }
-    let mut state = [0; 8];
-    let mut input = RandomInput::new(b, BLOCK_LEN);
-    b.iter(|| unsafe {
-        benchmarks::compress_sse41(
-            &mut state,
-            array_ref!(input.get(), 0, BLOCK_LEN),
-            BLOCK_LEN as u8,
-            0,
-            0,
-        );
-    });
-}
-
-#[bench]
-#[cfg(feature = "c_portable")]
-fn bench_fficompress_portable(b: &mut Bencher) {
-    let mut state = [0; 8];
-    let mut input = RandomInput::new(b, BLOCK_LEN);
-    b.iter(|| unsafe {
-        baokeshed::c::ffi::compress_portable(
-            state.as_mut_ptr(),
-            input.get().as_ptr(),
-            BLOCK_LEN as u8,
-            0,
-            0,
-        );
-    });
-}
-
-#[bench]
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-#[cfg(any(feature = "c_sse41", feature = "c_native"))]
-fn bench_fficompress_sse41(b: &mut Bencher) {
-    if !is_x86_feature_detected!("sse4.1") {
-        return;
-    }
-    let mut state = [0; 8];
-    let mut input = RandomInput::new(b, BLOCK_LEN);
-    b.iter(|| unsafe {
-        baokeshed::c::ffi::compress_sse41(
-            state.as_mut_ptr(),
-            input.get().as_ptr(),
-            BLOCK_LEN as u8,
-            0,
-            0,
-        );
-    });
-}
-
-#[bench]
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-#[cfg(any(feature = "c_avx512", feature = "c_native"))]
-fn bench_fficompress_avx512(b: &mut Bencher) {
-    if !baokeshed::c::is_avx512_detected() {
-        return;
-    }
-    let mut state = [0; 8];
-    let mut input = RandomInput::new(b, BLOCK_LEN);
-    b.iter(|| unsafe {
-        baokeshed::c::ffi::compress_avx512(
-            state.as_mut_ptr(),
-            input.get().as_ptr(),
-            BLOCK_LEN as u8,
-            0,
-            0,
-        );
-    });
 }
