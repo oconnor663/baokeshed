@@ -66,7 +66,7 @@ pub const KEY_LEN: usize = 8 * WORD_BYTES;
 #[doc(hidden)]
 pub const BLOCK_LEN: usize = 16 * WORD_BYTES;
 #[doc(hidden)]
-pub const CHUNK_LEN: usize = 4096;
+pub const CHUNK_LEN: usize = 2048;
 #[doc(hidden)]
 pub use platform::MAX_SIMD_DEGREE;
 

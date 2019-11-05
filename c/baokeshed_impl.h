@@ -12,7 +12,7 @@
 
 // size constants
 #define BLOCK_LEN 64
-#define CHUNK_LEN 4096
+#define CHUNK_LEN 2048
 #define KEY_LEN 32
 #define OUT_LEN 32
 #define MAX_DEPTH 52
