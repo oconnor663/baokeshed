@@ -79,6 +79,14 @@ fn bench_compress_portable_rust(b: &mut Bencher) {
 }
 
 #[bench]
+fn bench_compress_portable_rust64(b: &mut Bencher) {
+    let mut state = [1; 4];
+    let mut r = RandomInput::new(b, portable64::BLOCK_LEN);
+    let input = array_ref!(r.get(), 0, portable64::BLOCK_LEN);
+    b.iter(|| portable64::compress(&mut state, input, portable64::BLOCK_LEN as u8, 0, 0));
+}
+
+#[bench]
 #[cfg(feature = "c_portable")]
 fn bench_compress_portable_c(b: &mut Bencher) {
     let mut state = [1; 8];
