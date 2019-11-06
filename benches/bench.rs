@@ -138,6 +138,23 @@ fn bench_compress_sse41_c(b: &mut Bencher) {
 }
 
 #[bench]
+#[cfg(feature = "c_avx2")]
+fn bench_compress_avx2_c64(b: &mut Bencher) {
+    let mut state = [1; 4];
+    let mut r = RandomInput::new(b, portable64::BLOCK_LEN);
+    let input = array_ref!(r.get(), 0, portable64::BLOCK_LEN);
+    b.iter(|| unsafe {
+        c64::ffi::baokeshed64_compress_avx2(
+            state.as_mut_ptr(),
+            input.as_ptr(),
+            portable64::BLOCK_LEN as u8,
+            0,
+            0,
+        )
+    });
+}
+
+#[bench]
 #[cfg(feature = "c_avx512")]
 fn bench_compress_avx512_c(b: &mut Bencher) {
     let mut state = [1; 8];
