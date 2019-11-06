@@ -471,7 +471,7 @@ INLINE void transpose_msg_vecs2(const uint8_t *const *inputs,
 
 INLINE void load_offsets2(uint64_t offset, const uint64_t offset_deltas[2],
                           __m128i *out) {
-  *out = add_128(set1_128(offset), loadu_128((uint8_t*)offset_deltas));
+  *out = add_128(set1_128(offset), loadu_128((uint8_t *)offset_deltas));
 }
 
 void baokeshed64_hash2_avx512(const uint8_t *const *inputs, size_t blocks,
@@ -704,8 +704,8 @@ INLINE void transpose_msg_vecs4(const uint8_t *const *inputs,
 }
 
 INLINE void load_offsets4(uint64_t offset, const uint64_t offset_deltas[4],
-                         __m256i *out) {
-  *out = add_256(set1_256(offset), loadu_256((uint8_t*)offset_deltas));
+                          __m256i *out) {
+  *out = add_256(set1_256(offset), loadu_256((uint8_t *)offset_deltas));
 }
 
 void baokeshed64_hash4_avx512(const uint8_t *const *inputs, size_t blocks,
@@ -944,37 +944,42 @@ INLINE void transpose_vecs_512(__m512i vecs[16]) {
   vecs[7] = unpack_hi_128(abcd_3, efgh_3);
 }
 
-INLINE void transpose_msg_vecs16(const uint8_t *const *inputs,
-                                 size_t block_offset, __m512i out[16]) {
-  out[0] = loadu_512(&inputs[0][block_offset]);
-  out[1] = loadu_512(&inputs[1][block_offset]);
-  out[2] = loadu_512(&inputs[2][block_offset]);
-  out[3] = loadu_512(&inputs[3][block_offset]);
-  out[4] = loadu_512(&inputs[4][block_offset]);
-  out[5] = loadu_512(&inputs[5][block_offset]);
-  out[6] = loadu_512(&inputs[6][block_offset]);
-  out[7] = loadu_512(&inputs[7][block_offset]);
-  out[8] = loadu_512(&inputs[8][block_offset]);
-  out[9] = loadu_512(&inputs[9][block_offset]);
-  out[10] = loadu_512(&inputs[10][block_offset]);
-  out[11] = loadu_512(&inputs[11][block_offset]);
-  out[12] = loadu_512(&inputs[12][block_offset]);
-  out[13] = loadu_512(&inputs[13][block_offset]);
-  out[14] = loadu_512(&inputs[14][block_offset]);
-  out[15] = loadu_512(&inputs[15][block_offset]);
-  transpose_vecs_512(out);
+INLINE void transpose_msg_vecs8(const uint8_t *const *inputs,
+                                size_t block_offset, __m512i out[16]) {
+  out[0] = loadu_512(&inputs[0][block_offset + 0 * sizeof(__m512i)]);
+  out[1] = loadu_512(&inputs[1][block_offset + 0 * sizeof(__m512i)]);
+  out[2] = loadu_512(&inputs[2][block_offset + 0 * sizeof(__m512i)]);
+  out[3] = loadu_512(&inputs[3][block_offset + 0 * sizeof(__m512i)]);
+  out[4] = loadu_512(&inputs[4][block_offset + 0 * sizeof(__m512i)]);
+  out[5] = loadu_512(&inputs[5][block_offset + 0 * sizeof(__m512i)]);
+  out[6] = loadu_512(&inputs[6][block_offset + 0 * sizeof(__m512i)]);
+  out[7] = loadu_512(&inputs[7][block_offset + 0 * sizeof(__m512i)]);
+  out[8] = loadu_512(&inputs[0][block_offset + 1 * sizeof(__m512i)]);
+  out[9] = loadu_512(&inputs[1][block_offset + 1 * sizeof(__m512i)]);
+  out[10] = loadu_512(&inputs[2][block_offset + 1 * sizeof(__m512i)]);
+  out[11] = loadu_512(&inputs[3][block_offset + 1 * sizeof(__m512i)]);
+  out[12] = loadu_512(&inputs[4][block_offset + 1 * sizeof(__m512i)]);
+  out[13] = loadu_512(&inputs[5][block_offset + 1 * sizeof(__m512i)]);
+  out[14] = loadu_512(&inputs[6][block_offset + 1 * sizeof(__m512i)]);
+  out[15] = loadu_512(&inputs[7][block_offset + 1 * sizeof(__m512i)]);
+  transpose_vecs_512(&out[0]);
+  transpose_vecs_512(&out[8]);
 }
 
-INLINE void load_offsets8(uint64_t offset, const uint64_t deltas[16], __m512i *out) {
-  *out = add_512(set1_512(offset), loadu_512((uint8_t*)offset_deltas));
+INLINE void load_offsets8(uint64_t offset, const uint64_t offset_deltas[8],
+                          __m512i *out) {
+  *out = add_512(set1_512(offset), loadu_512((uint8_t *)offset_deltas));
 }
 
-void baokeshed64_hash16_avx512(const uint8_t *const *inputs, size_t blocks,
-                   const uint64_t key_words[4], uint64_t offset,
-                   const uint64_t offset_deltas[16], uint8_t flags,
-                   uint8_t flags_start, uint8_t flags_end, uint8_t *out) {
+void baokeshed64_hash8_avx512(const uint8_t *const *inputs, size_t blocks,
+                              const uint64_t key_words[4], uint64_t offset,
+                              const uint64_t offset_deltas[8], uint8_t flags,
+                              uint8_t flags_start, uint8_t flags_end,
+                              uint8_t *out) {
   __m512i h_vecs[4] = {
-      set1_512(key_words[0]), set1_512(key_words[1]), set1_512(key_words[2]),
+      set1_512(key_words[0]),
+      set1_512(key_words[1]),
+      set1_512(key_words[2]),
       set1_512(key_words[3]),
   };
   __m512i offset_vec;
@@ -988,7 +993,7 @@ void baokeshed64_hash16_avx512(const uint8_t *const *inputs, size_t blocks,
     __m512i block_len_vec = set1_512(BLOCK_LEN);
     __m512i block_flags_vec = set1_512(block_flags);
     __m512i msg_vecs[16];
-    transpose_msg_vecs16(inputs, block * BLOCK_LEN, msg_vecs);
+    transpose_msg_vecs8(inputs, block * BLOCK_LEN, msg_vecs);
 
     __m512i v[16] = {
         h_vecs[0],
@@ -1048,11 +1053,12 @@ void baokeshed64_hash16_avx512(const uint8_t *const *inputs, size_t blocks,
  * ----------------------------------------------------------------------------
  */
 
-INLINE void hash_one_avx512(const uint8_t *input, size_t blocks,
-                            const uint32_t key_words[8], uint64_t offset,
-                            uint8_t flags, uint8_t flags_start,
-                            uint8_t flags_end, uint8_t out[OUT_LEN]) {
-  uint32_t state[8];
+INLINE void baokeshed64_hash_one_avx512(const uint8_t *input, size_t blocks,
+                                        const uint64_t key_words[4],
+                                        uint64_t offset, uint8_t flags,
+                                        uint8_t flags_start, uint8_t flags_end,
+                                        uint8_t out[OUT_LEN]) {
+  uint64_t state[4];
   memcpy(state, key_words, KEY_LEN);
   uint8_t block_flags = flags | flags_start;
   while (blocks > 0) {
@@ -1067,38 +1073,39 @@ INLINE void hash_one_avx512(const uint8_t *input, size_t blocks,
   memcpy(out, state, OUT_LEN);
 }
 
-void hash_many_avx512(const uint8_t *const *inputs, size_t num_inputs,
-                      size_t blocks, const uint32_t key_words[8],
-                      uint64_t offset, const uint64_t offset_deltas[9],
-                      uint8_t flags, uint8_t flags_start, uint8_t flags_end,
-                      uint8_t *out) {
+void baokeshed64_hash_many_avx512(const uint8_t *const *inputs,
+                                  size_t num_inputs, size_t blocks,
+                                  const uint64_t key_words[4], uint64_t offset,
+                                  const uint64_t offset_deltas[9],
+                                  uint8_t flags, uint8_t flags_start,
+                                  uint8_t flags_end, uint8_t *out) {
   while (num_inputs >= 8) {
-    hash8_avx512(inputs, blocks, key_words, offset, offset_deltas, flags,
-                  flags_start, flags_end, out);
+    baokeshed64_hash8_avx512(inputs, blocks, key_words, offset, offset_deltas,
+                             flags, flags_start, flags_end, out);
     inputs += 8;
     num_inputs -= 8;
     offset += offset_deltas[8];
     out = &out[8 * OUT_LEN];
   }
   while (num_inputs >= 4) {
-    hash8_avx512(inputs, blocks, key_words, offset, offset_deltas, flags,
-                 flags_start, flags_end, out);
+    baokeshed64_hash4_avx512(inputs, blocks, key_words, offset, offset_deltas,
+                             flags, flags_start, flags_end, out);
     inputs += 4;
     num_inputs -= 4;
     offset += offset_deltas[4];
     out = &out[4 * OUT_LEN];
   }
   while (num_inputs >= 2) {
-    hash4_avx512(inputs, blocks, key_words, offset, offset_deltas, flags,
-                 flags_start, flags_end, out);
+    baokeshed64_hash2_avx512(inputs, blocks, key_words, offset, offset_deltas,
+                             flags, flags_start, flags_end, out);
     inputs += 2;
     num_inputs -= 2;
     offset += offset_deltas[2];
     out = &out[2 * OUT_LEN];
   }
   while (num_inputs > 0) {
-    hash_one_avx512(inputs[0], blocks, key_words, offset, flags, flags_start,
-                    flags_end, out);
+    baokeshed64_hash_one_avx512(inputs[0], blocks, key_words, offset, flags,
+                                flags_start, flags_end, out);
     inputs += 1;
     num_inputs -= 1;
     offset += offset_deltas[1];

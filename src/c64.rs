@@ -3,9 +3,6 @@
 //! This module is intended mainly for benchmarking, and we also test that it
 //! produces the same output.
 
-pub const BLOCK_LEN: usize = 128;
-pub const WORD_BITS: usize = 64;
-
 pub mod ffi {
     extern "C" {
         pub fn baokeshed64_compress_portable(
@@ -173,10 +170,11 @@ pub mod ffi {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{Flags, CHUNK_LEN, OUT_LEN};
+    use crate::portable64::{BLOCK_LEN, CHUNK_LEN};
+    use crate::{Flags, OUT_LEN};
     use arrayref::array_ref;
 
-    const CHUNK_OFFSET_DELTAS: &[u64; 17] = &[
+    const CHUNK_OFFSET_DELTAS: &[u64; 9] = &[
         CHUNK_LEN as u64 * 0,
         CHUNK_LEN as u64 * 1,
         CHUNK_LEN as u64 * 2,
@@ -186,17 +184,9 @@ mod test {
         CHUNK_LEN as u64 * 6,
         CHUNK_LEN as u64 * 7,
         CHUNK_LEN as u64 * 8,
-        CHUNK_LEN as u64 * 9,
-        CHUNK_LEN as u64 * 10,
-        CHUNK_LEN as u64 * 11,
-        CHUNK_LEN as u64 * 12,
-        CHUNK_LEN as u64 * 13,
-        CHUNK_LEN as u64 * 14,
-        CHUNK_LEN as u64 * 15,
-        CHUNK_LEN as u64 * 16,
     ];
 
-    const PARENT_OFFSET_DELTAS: &[u64; 17] = &[0; 17];
+    const PARENT_OFFSET_DELTAS: &[u64; 9] = &[0; 9];
 
     type CompressFn = unsafe extern "C" fn(
         state: *mut u64,
@@ -376,7 +366,7 @@ mod test {
 
     #[test]
     #[cfg(feature = "c_avx512")]
-    fn test_hash_many_avx2() {
+    fn test_hash_many_avx512() {
         compare_hash_many_fn(ffi::baokeshed64_hash_many_avx512);
     }
 

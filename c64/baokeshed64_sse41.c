@@ -197,7 +197,7 @@ INLINE void transpose_msg_vecs(const uint8_t *const *inputs,
 
 INLINE void load_offsets(uint64_t offset, const uint64_t offset_deltas[2],
                          __m128i *out) {
-  *out = addv(set1(offset), loadu((uint8_t*)offset_deltas));
+  *out = addv(set1(offset), loadu((uint8_t *)offset_deltas));
 }
 
 void baokeshed64_hash2_sse41(const uint8_t *const *inputs, size_t blocks,
