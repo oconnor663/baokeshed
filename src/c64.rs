@@ -51,6 +51,18 @@ pub mod ffi {
             flags_end: u8,
             out: *mut u8,
         );
+        #[cfg(feature = "c_avx2")]
+        pub fn baokeshed64_hash4_avx2(
+            inputs: *const *const u8,
+            blocks: usize,
+            key_words: *const u64,
+            offset: u64,
+            offset_deltas: *const u64,
+            flags: u8,
+            flags_start: u8,
+            flags_end: u8,
+            out: *mut u8,
+        );
         #[cfg(feature = "c_sse41")]
         pub fn baokeshed64_hash_many_sse41(
             inputs: *const *const u8,
@@ -66,6 +78,19 @@ pub mod ffi {
         );
         #[cfg(feature = "c_neon")]
         pub fn baokeshed64_hash_many_neon(
+            inputs: *const *const u8,
+            num_inputs: usize,
+            blocks: usize,
+            key_words: *const u64,
+            offset: u64,
+            offset_deltas: *const u64,
+            flags: u8,
+            flags_start: u8,
+            flags_end: u8,
+            out: *mut u8,
+        );
+        #[cfg(feature = "c_avx2")]
+        pub fn baokeshed64_hash_many_avx2(
             inputs: *const *const u8,
             num_inputs: usize,
             blocks: usize,
@@ -262,8 +287,14 @@ mod test {
 
     #[test]
     #[cfg(feature = "c_sse41")]
-    fn test_hash_many_neon() {
+    fn test_hash_many_sse41() {
         compare_hash_many_fn(ffi::baokeshed64_hash_many_sse41);
+    }
+
+    #[test]
+    #[cfg(feature = "c_avx2")]
+    fn test_hash_many_avx2() {
+        compare_hash_many_fn(ffi::baokeshed64_hash_many_avx2);
     }
 
     #[test]

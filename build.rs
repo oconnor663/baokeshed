@@ -95,6 +95,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if defined(C_AVX2_VAR) {
         let mut build = new_build();
         build.file("c/baokeshed_avx2.c");
+        build.file("c64/baokeshed64_avx2.c");
         main_build.define("BAOKESHED_USE_AVX2", "1");
         if is_windows {
             build.flag("/arch:AVX2");

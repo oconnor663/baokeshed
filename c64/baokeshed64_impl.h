@@ -141,6 +141,18 @@ void baokeshed64_hash_many_portable(const uint8_t *const *inputs,
                                     const uint64_t offset_deltas[2],
                                     uint8_t flags, uint8_t flags_start,
                                     uint8_t flags_end, uint8_t *out);
+void baokeshed64_hash_many_sse41(const uint8_t *const *inputs,
+                                 size_t num_inputs, size_t blocks,
+                                 const uint64_t key_words[4], uint64_t offset,
+                                 const uint64_t offset_deltas[3], uint8_t flags,
+                                 uint8_t flags_start, uint8_t flags_end,
+                                 uint8_t *out);
+void baokeshed64_hash_many_avx2(const uint8_t *const *inputs, size_t num_inputs,
+                                size_t blocks, const uint64_t key_words[4],
+                                uint64_t offset,
+                                const uint64_t offset_deltas[5], uint8_t flags,
+                                uint8_t flags_start, uint8_t flags_end,
+                                uint8_t *out);
 void baokeshed64_hash_many_neon(const uint8_t *const *inputs, size_t num_inputs,
                                 size_t blocks, const uint64_t key_words[4],
                                 uint64_t offset,
