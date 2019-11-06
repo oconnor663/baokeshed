@@ -108,6 +108,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if defined(C_AVX512_VAR) {
         let mut build = new_build();
         build.file("c/baokeshed_avx512.c");
+        build.file("c64/baokeshed64_avx512.c");
         main_build.define("BAOKESHED_USE_AVX512", "1");
         if is_windows {
             // Note that a lot of versions of MSVC don't support /arch:AVX512,

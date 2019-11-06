@@ -23,6 +23,14 @@ pub mod ffi {
             offset: u64,
             flags: u8,
         );
+        #[cfg(feature = "c_avx512")]
+        pub fn baokeshed64_compress_avx512(
+            state: *mut u64,
+            block: *const u8,
+            block_len: u8,
+            offset: u64,
+            flags: u8,
+        );
         pub fn baokeshed64_hash_many_portable(
             inputs: *const *const u8,
             num_inputs: usize,
@@ -47,6 +55,18 @@ pub mod ffi {
             flags_end: u8,
             out: *mut u8,
         );
+        #[cfg(feature = "c_avx512")]
+        pub fn baokeshed64_hash2_avx512(
+            inputs: *const *const u8,
+            blocks: usize,
+            key_words: *const u64,
+            offset: u64,
+            offset_deltas: *const u64,
+            flags: u8,
+            flags_start: u8,
+            flags_end: u8,
+            out: *mut u8,
+        );
         #[cfg(feature = "c_neon")]
         pub fn baokeshed64_hash2_neon(
             inputs: *const *const u8,
@@ -61,6 +81,30 @@ pub mod ffi {
         );
         #[cfg(feature = "c_avx2")]
         pub fn baokeshed64_hash4_avx2(
+            inputs: *const *const u8,
+            blocks: usize,
+            key_words: *const u64,
+            offset: u64,
+            offset_deltas: *const u64,
+            flags: u8,
+            flags_start: u8,
+            flags_end: u8,
+            out: *mut u8,
+        );
+        #[cfg(feature = "c_avx512")]
+        pub fn baokeshed64_hash4_avx512(
+            inputs: *const *const u8,
+            blocks: usize,
+            key_words: *const u64,
+            offset: u64,
+            offset_deltas: *const u64,
+            flags: u8,
+            flags_start: u8,
+            flags_end: u8,
+            out: *mut u8,
+        );
+        #[cfg(feature = "c_avx512")]
+        pub fn baokeshed64_hash8_avx512(
             inputs: *const *const u8,
             blocks: usize,
             key_words: *const u64,
@@ -99,6 +143,19 @@ pub mod ffi {
         );
         #[cfg(feature = "c_avx2")]
         pub fn baokeshed64_hash_many_avx2(
+            inputs: *const *const u8,
+            num_inputs: usize,
+            blocks: usize,
+            key_words: *const u64,
+            offset: u64,
+            offset_deltas: *const u64,
+            flags: u8,
+            flags_start: u8,
+            flags_end: u8,
+            out: *mut u8,
+        );
+        #[cfg(feature = "c_avx512")]
+        pub fn baokeshed64_hash_many_avx512(
             inputs: *const *const u8,
             num_inputs: usize,
             blocks: usize,
@@ -190,6 +247,12 @@ mod test {
     #[cfg(feature = "c_avx2")]
     fn test_compress_avx2() {
         compare_compress_fn(ffi::baokeshed64_compress_avx2);
+    }
+
+    #[test]
+    #[cfg(feature = "c_avx512")]
+    fn test_compress_avx512() {
+        compare_compress_fn(ffi::baokeshed64_compress_avx512);
     }
 
     type HashManyFn = unsafe extern "C" fn(
@@ -309,6 +372,12 @@ mod test {
     #[cfg(feature = "c_avx2")]
     fn test_hash_many_avx2() {
         compare_hash_many_fn(ffi::baokeshed64_hash_many_avx2);
+    }
+
+    #[test]
+    #[cfg(feature = "c_avx512")]
+    fn test_hash_many_avx2() {
+        compare_hash_many_fn(ffi::baokeshed64_hash_many_avx512);
     }
 
     #[test]
