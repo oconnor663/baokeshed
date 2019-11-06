@@ -41,6 +41,8 @@ pub mod avx2;
 #[doc(hidden)]
 #[cfg(feature = "c_portable")]
 pub mod c;
+#[cfg(feature = "c_portable")]
+pub mod c64;
 #[doc(hidden)]
 pub mod portable;
 #[doc(hidden)]

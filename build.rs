@@ -73,6 +73,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut portable_build = new_build();
     portable_build.file("c/baokeshed_portable.c");
+    portable_build.file("c64/baokeshed64_portable.c");
     portable_build.compile("cbaokeshed_portable");
 
     if defined(C_SSE41_VAR) {
@@ -120,6 +121,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if defined(C_NEON_VAR) {
         let mut build = new_build();
         build.file("c/baokeshed_neon.c");
+        build.file("c64/baokeshed64_neon.c");
         main_build.define("BAOKESHED_USE_NEON", "1");
         // Note that AArch64 supports NEON by default and does not support -mpfu.
         if is_armv7 {
