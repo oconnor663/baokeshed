@@ -79,6 +79,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if defined(C_SSE41_VAR) {
         let mut build = new_build();
         build.file("c/baokeshed_sse41.c");
+        build.file("c64/baokeshed64_sse41.c");
         main_build.define("BAOKESHED_USE_SSE41", "1");
         if is_windows {
             // /arch:SSE2 is the default on x86 and undefined on x86_64:
@@ -142,11 +143,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-env-changed=CFLAGS");
 
     // Ditto for source files, though these shouldn't change as often.
-    for file in std::fs::read_dir("c")? {
-        println!(
-            "cargo:rerun-if-changed={}",
-            file?.path().to_str().expect("utf-8")
-        );
+    for dir in &["c", "c64"] {
+        for file in std::fs::read_dir(dir)? {
+            println!(
+                "cargo:rerun-if-changed={}",
+                file?.path().to_str().expect("utf-8")
+            );
+        }
     }
 
     Ok(())
