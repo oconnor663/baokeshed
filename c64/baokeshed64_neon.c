@@ -6,11 +6,15 @@
 
 // TODO: This is probably incorrect for big-endian ARM. How should that work?
 INLINE uint64x2_t loadu_128(const uint8_t src[16]) {
-  return vld1q_u64((const uint64_t *)src);
+  // vld1q_u64 has alignment requirements. Don't use it.
+  uint64x2_t x;
+  memcpy(&x, src, 16);
+  return x;
 }
 
 INLINE void storeu_128(uint64x2_t src, uint8_t dest[16]) {
-  vst1q_u64((uint64_t *)dest, src);
+  // vst1q_u64 has alignment requirements. Don't use it.
+  memcpy(dest, &src, 16);
 }
 
 INLINE uint64x2_t add_128(uint64x2_t a, uint64x2_t b) {
