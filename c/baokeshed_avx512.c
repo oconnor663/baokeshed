@@ -461,14 +461,9 @@ void hash4_avx512(const uint8_t *const *inputs, size_t blocks,
                   const uint64_t offset_deltas[4], uint8_t flags,
                   uint8_t flags_start, uint8_t flags_end, uint8_t *out) {
   __m128i h_vecs[8] = {
-      set1_128(key_words[0]),
-      set1_128(key_words[1]),
-      set1_128(key_words[2]),
-      set1_128(key_words[3]),
-      set1_128(key_words[4]),
-      set1_128(key_words[5]),
-      set1_128(key_words[6]),
-      set1_128(key_words[7]),
+      set1_128(key_words[0]), set1_128(key_words[1]), set1_128(key_words[2]),
+      set1_128(key_words[3]), set1_128(key_words[4]), set1_128(key_words[5]),
+      set1_128(key_words[6]), set1_128(key_words[7]),
   };
   __m128i offset_low_vec, offset_high_vec;
   load_offsets4(offset, offset_deltas, &offset_low_vec, &offset_high_vec);
@@ -725,14 +720,9 @@ void hash8_avx512(const uint8_t *const *inputs, size_t blocks,
                   const uint64_t offset_deltas[8], uint8_t flags,
                   uint8_t flags_start, uint8_t flags_end, uint8_t *out) {
   __m256i h_vecs[8] = {
-      set1_256(key_words[0]),
-      set1_256(key_words[1]),
-      set1_256(key_words[2]),
-      set1_256(key_words[3]),
-      set1_256(key_words[4]),
-      set1_256(key_words[5]),
-      set1_256(key_words[6]),
-      set1_256(key_words[7]),
+      set1_256(key_words[0]), set1_256(key_words[1]), set1_256(key_words[2]),
+      set1_256(key_words[3]), set1_256(key_words[4]), set1_256(key_words[5]),
+      set1_256(key_words[6]), set1_256(key_words[7]),
   };
   __m256i offset_low_vec, offset_high_vec;
   load_offsets8(offset, offset_deltas, &offset_low_vec, &offset_high_vec);
@@ -1053,14 +1043,9 @@ void hash16_avx512(const uint8_t *const *inputs, size_t blocks,
                    const uint64_t offset_deltas[16], uint8_t flags,
                    uint8_t flags_start, uint8_t flags_end, uint8_t *out) {
   __m512i h_vecs[8] = {
-      set1_512(key_words[0]),
-      set1_512(key_words[1]),
-      set1_512(key_words[2]),
-      set1_512(key_words[3]),
-      set1_512(key_words[4]),
-      set1_512(key_words[5]),
-      set1_512(key_words[6]),
-      set1_512(key_words[7]),
+      set1_512(key_words[0]), set1_512(key_words[1]), set1_512(key_words[2]),
+      set1_512(key_words[3]), set1_512(key_words[4]), set1_512(key_words[5]),
+      set1_512(key_words[6]), set1_512(key_words[7]),
   };
   __m512i offset_low_vec, offset_high_vec;
   load_offsets16(offset, offset_deltas, &offset_low_vec, &offset_high_vec);
