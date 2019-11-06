@@ -4,11 +4,15 @@
 
 // TODO: This is probably incorrect for big-endian ARM. How should that work?
 INLINE uint32x4_t loadu_128(const uint8_t src[16]) {
-  return vld1q_u32((const uint32_t *)src);
+  // vld1q_u32 has alignment requirements. Don't use it.
+  uint32x4_t x;
+  memcpy(&x, src, 16);
+  return x;
 }
 
 INLINE void storeu_128(uint32x4_t src, uint8_t dest[16]) {
-  vst1q_u32((uint32_t *)dest, src);
+  // vst1q_u32 has alignment requirements. Don't use it.
+  memcpy(dest, &src, 16);
 }
 
 INLINE uint32x4_t add_128(uint32x4_t a, uint32x4_t b) {
