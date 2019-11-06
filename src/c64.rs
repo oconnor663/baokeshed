@@ -15,6 +15,14 @@ pub mod ffi {
             offset: u64,
             flags: u8,
         );
+        #[cfg(feature = "c_avx2")]
+        pub fn baokeshed64_compress_avx2(
+            state: *mut u64,
+            block: *const u8,
+            block_len: u8,
+            offset: u64,
+            flags: u8,
+        );
         pub fn baokeshed64_hash_many_portable(
             inputs: *const *const u8,
             num_inputs: usize,
@@ -176,6 +184,12 @@ mod test {
     #[test]
     fn test_compress_portable() {
         compare_compress_fn(ffi::baokeshed64_compress_portable);
+    }
+
+    #[test]
+    #[cfg(feature = "c_avx2")]
+    fn test_compress_avx2() {
+        compare_compress_fn(ffi::baokeshed64_compress_avx2);
     }
 
     type HashManyFn = unsafe extern "C" fn(

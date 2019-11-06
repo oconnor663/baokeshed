@@ -134,6 +134,10 @@ void baokeshed64_compress_portable(uint64_t state[4],
                                    const uint8_t block[BLOCK_LEN],
                                    uint8_t block_len, uint64_t offset,
                                    uint8_t flags);
+void baokeshed64_compress_avx2(uint64_t state[4],
+                               const uint8_t block[BLOCK_LEN],
+                               uint8_t block_len, uint64_t offset,
+                               uint8_t flags);
 void baokeshed64_hash_many_portable(const uint8_t *const *inputs,
                                     size_t num_inputs, size_t blocks,
                                     const uint64_t key_words[4],
