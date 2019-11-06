@@ -2,6 +2,7 @@ use crate::OUT_LEN;
 use arrayref::{array_mut_ref, array_ref, array_refs, mut_array_refs};
 
 pub const BLOCK_LEN: usize = 128;
+pub const CHUNK_LEN: usize = 4096;
 
 type Word = u64;
 
@@ -229,7 +230,7 @@ pub mod test {
     fn test_hash1_1() {
         let block = [1; BLOCK_LEN];
         let key = [2; 4];
-        let offset = 3 * crate::CHUNK_LEN as u64;
+        let offset = 3 * CHUNK_LEN as u64;
         let flags = 4;
         let flags_start = 8;
         let flags_end = 16;
@@ -263,7 +264,7 @@ pub mod test {
         let mut blocks = [0; BLOCK_LEN * 3];
         crate::test::paint_test_input(&mut blocks);
         let key = [2; 4];
-        let offset = 3 * crate::CHUNK_LEN as u64;
+        let offset = 3 * CHUNK_LEN as u64;
         let flags = 4;
         let flags_start = 8;
         let flags_end = 16;
@@ -316,8 +317,8 @@ pub mod test {
             array_ref!(input_buf, 6 * BLOCK_LEN, 3 * BLOCK_LEN),
         ];
         let key = [2; 4];
-        let offset = 3 * crate::CHUNK_LEN as u64;
-        let delta = crate::CHUNK_LEN as u64;
+        let offset = 3 * CHUNK_LEN as u64;
+        let delta = CHUNK_LEN as u64;
         let flags = 4;
         let flags_start = 8;
         let flags_end = 16;
