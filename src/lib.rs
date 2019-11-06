@@ -58,7 +58,7 @@ type Word = u32;
 
 const WORD_BYTES: usize = core::mem::size_of::<Word>();
 const WORD_BITS: usize = 8 * WORD_BYTES;
-const MAX_DEPTH: usize = 52; // 2^52 * 4096 = 2^64
+const MAX_DEPTH: usize = 53; // 2^53 * 2048 = 2^64
 
 /// The default number of bytes in a hash, 32.
 pub const OUT_LEN: usize = 8 * WORD_BYTES;

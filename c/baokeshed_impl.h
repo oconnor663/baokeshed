@@ -15,7 +15,7 @@
 #define CHUNK_LEN 2048
 #define KEY_LEN 32
 #define OUT_LEN 32
-#define MAX_DEPTH 52
+#define MAX_DEPTH 53
 #define MAX_SIMD_DEGREE 16
 
 // internal flags
