@@ -164,7 +164,7 @@ fn bench_chunks_x02_neon_c64(b: &mut Bencher) {
         *input = chunk.as_ptr();
     }
     b.iter(|| unsafe {
-        c::ffi::hash4_neon(
+        c64::ffi::baokeshed64_hash2_neon(
             inputs.as_ptr(),
             portable64::CHUNK_LEN / portable64::BLOCK_LEN,
             key.as_ptr(),
@@ -413,7 +413,7 @@ fn bench_parents_x02_neon_c64(b: &mut Bencher) {
         *input = chunk.as_ptr();
     }
     b.iter(|| unsafe {
-        c::ffi::hash4_neon(
+        c64::ffi::baokeshed64_hash2_neon(
             inputs.as_ptr(),
             1,
             key.as_ptr(),

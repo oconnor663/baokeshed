@@ -28,6 +28,18 @@ pub mod ffi {
             out: *mut u8,
         );
         #[cfg(feature = "c_neon")]
+        pub fn baokeshed64_hash2_neon(
+            inputs: *const *const u8,
+            blocks: usize,
+            key_words: *const u64,
+            offset: u64,
+            offset_deltas: *const u64,
+            flags: u8,
+            flags_start: u8,
+            flags_end: u8,
+            out: *mut u8,
+        );
+        #[cfg(feature = "c_neon")]
         pub fn baokeshed64_hash_many_neon(
             inputs: *const *const u8,
             num_inputs: usize,
