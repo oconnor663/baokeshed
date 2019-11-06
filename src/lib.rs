@@ -44,6 +44,8 @@ pub mod c;
 #[doc(hidden)]
 pub mod portable;
 #[doc(hidden)]
+pub mod portable64;
+#[doc(hidden)]
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 pub mod sse41;
 
