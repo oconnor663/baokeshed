@@ -89,6 +89,28 @@ const MSG_SCHEDULE: [[usize; 16]; 7] = [
     [12, 5, 1, 15, 14, 13, 4, 10, 0, 7, 6, 3, 9, 2, 8, 11],
 ];
 
+const CHUNK_OFFSET_DELTAS: [u64; 17] = [
+    CHUNK_LEN as u64 * 0,
+    CHUNK_LEN as u64 * 1,
+    CHUNK_LEN as u64 * 2,
+    CHUNK_LEN as u64 * 3,
+    CHUNK_LEN as u64 * 4,
+    CHUNK_LEN as u64 * 5,
+    CHUNK_LEN as u64 * 6,
+    CHUNK_LEN as u64 * 7,
+    CHUNK_LEN as u64 * 8,
+    CHUNK_LEN as u64 * 9,
+    CHUNK_LEN as u64 * 10,
+    CHUNK_LEN as u64 * 11,
+    CHUNK_LEN as u64 * 12,
+    CHUNK_LEN as u64 * 13,
+    CHUNK_LEN as u64 * 14,
+    CHUNK_LEN as u64 * 15,
+    CHUNK_LEN as u64 * 16,
+];
+
+const PARENT_OFFSET_DELTAS: [u64; 17] = [0; 17];
+
 // These are the internal flags that we use to domain separate root/non-root,
 // chunk/parent, and chunk beginning/middle/end. These get set at the high end
 // of the block flags word in the compression function, so their values start
@@ -345,16 +367,20 @@ fn hash_chunks_parallel(
     for chunk in &mut chunks_exact {
         chunks_array.push(array_ref!(chunk, 0, CHUNK_LEN));
     }
-    platform.hash_many(
-        &chunks_array,
-        key,
-        offset,
-        CHUNK_LEN as u64,
-        flags.bits(),
-        Flags::CHUNK_START.bits(),
-        Flags::CHUNK_END.bits(),
-        out,
-    );
+    unsafe {
+        c::ffi::hash_many_avx2(
+            chunks_array.as_ptr() as *const *const u8,
+            chunks_array.len(),
+            CHUNK_LEN / BLOCK_LEN,
+            key.as_ptr(),
+            offset,
+            CHUNK_OFFSET_DELTAS.as_ptr(),
+            flags.bits(),
+            Flags::CHUNK_START.bits(),
+            Flags::CHUNK_END.bits(),
+            out.as_mut_ptr(),
+        );
+    }
 
     // Handle the remaining partial chunk, if there is one. Note that the empty
     // chunk (meaning the empty message) is a different codepath.
@@ -396,16 +422,20 @@ fn hash_parents_parallel(
     for parent in &mut parents_exact {
         parents_array.push(array_ref!(parent, 0, BLOCK_LEN));
     }
-    platform.hash_many(
-        &parents_array,
-        key,
-        0, // Parents have no offset.
-        0, // Parents have no offset delta.
-        (flags | Flags::PARENT).bits(),
-        0, // Parents have no start flags.
-        0, // Parents have no end flags.
-        out,
-    );
+    unsafe {
+        c::ffi::hash_many_avx2(
+            parents_array.as_ptr() as *const *const u8,
+            parents_array.len(),
+            1,
+            key.as_ptr(),
+            0,
+            PARENT_OFFSET_DELTAS.as_ptr(),
+            (flags | Flags::PARENT).bits(),
+            0,
+            0,
+            out.as_mut_ptr(),
+        );
+    }
 
     // If there's an odd child left over, it becomes an output.
     let parents_so_far = parents_array.len();
