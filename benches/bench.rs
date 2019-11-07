@@ -8,6 +8,7 @@ use rand::prelude::*;
 use test::Bencher;
 
 const LONG: usize = 1 << 16; // 64 KiB
+const VERYLONG: usize = 1 << 20; // 1 MiB
 
 const BLOCK_LEN_32: usize = BLOCK_LEN;
 const BLOCK_LEN_64: usize = portable64::BLOCK_LEN;
@@ -583,13 +584,15 @@ fn bench_chunks_512bit_avx512_c64(b: &mut Bencher) {
 }
 
 #[bench]
+#[cfg(feature = "rayon")]
+fn bench_hash_00_verylong_rust(b: &mut Bencher) {
+    let mut input = RandomInput::new(b, VERYLONG);
+    b.iter(|| baokeshed::hash(input.get()));
+}
+
+#[bench]
 fn bench_hash_01_long_rust(b: &mut Bencher) {
-    let length = if cfg!(feature = "rayon") {
-        1 << 20 // 1 MiB
-    } else {
-        LONG
-    };
-    let mut input = RandomInput::new(b, length);
+    let mut input = RandomInput::new(b, LONG);
     b.iter(|| baokeshed::hash(input.get()));
 }
 
