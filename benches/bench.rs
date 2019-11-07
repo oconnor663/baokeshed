@@ -8,6 +8,7 @@ use rand::prelude::*;
 use test::Bencher;
 
 const LONG: usize = 1 << 16; // 64 KiB
+#[allow(dead_code)]
 const VERYLONG: usize = 1 << 20; // 1 MiB
 
 const BLOCK_LEN_32: usize = BLOCK_LEN;
