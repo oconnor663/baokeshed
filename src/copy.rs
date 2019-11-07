@@ -13,14 +13,14 @@ use std::io;
 /// an optimal size.
 ///
 /// On x86 for example, the AVX2 instruction set supports hashing 8 chunks in
-/// parallel. Chunks are 4096 bytes each, so `WIDE_BUF_LEN` is currently
-/// 32768 bytes. When Rust adds support for AVX512, the value of `WIDE_BUF_LEN`
-/// on x86 will double to 65536 bytes. It's not expected to grow any larger
+/// parallel. Chunks are 2048 bytes each, so `WIDE_BUF_LEN` is currently
+/// 16384 bytes. When Rust adds support for AVX512, the value of `WIDE_BUF_LEN`
+/// on x86 will double to 32768 bytes. It's not expected to grow any larger
 /// than that for the foreseeable future, so on not-very-space-constrained
 /// platforms it's possible to use `WIDE_BUF_LEN` as the size of a stack array.
-/// If this constant grows above 65536 on any platform, it will be considered a
-/// backwards-incompatible change, and it will be accompanied by a major
-/// version bump.
+/// If this constant grows larger than 65536 on any platform, it will be
+/// considered a backwards-incompatible change, and it will be accompanied by a
+/// major version bump.
 pub const WIDE_BUF_LEN: usize = MAX_SIMD_DEGREE * CHUNK_LEN;
 
 // This is an implementation detail of libstd, and if it changes there we
