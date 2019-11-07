@@ -8,14 +8,15 @@
 //! performance characteristics. But they are domain separated from each other,
 //! and intended to be collectively collision resistant.
 //!
-//! The `derive_key` function should only be used with globally unique,
+//! The `derive_key` function should be used with globally unique,
 //! application-specific context strings. For example, `"example.com
 //! 2019-10-11-09:59:41 session token MACs"`.
 //!
 //! Baokeshed is an XOF, and it can generate any number of output bytes. In
 //! addition to the above API functions returning the default output length,
-//! `_xof` variants are provided that expose the underlying XOF. An iterative
-//! `Hasher` implementation is also provided, with three constructors.
+//! `_xof` variants are provided that return an extensible output object. An
+//! iterative `Hasher` implementation is also provided, with three
+//! constructors.
 //!
 //! The standalone functions in this module use both SIMD and
 //! [Rayon](https://github.com/rayon-rs/rayon)-based multithreading for
