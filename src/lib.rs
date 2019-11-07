@@ -748,9 +748,9 @@ fn hash_one_parent(
 ///
 /// **Performance note:** Using
 /// [`std::io::copy`](https://doc.rust-lang.org/std/io/fn.copy.html) together
-/// with `Hasher` will generally give poor performance, because it uses a copy
-/// buffer that's too small to drive more than a couple SIMD lanes. Use the
-/// [`copy_wide`](copy/fn.copy_wide.html) utility function instead.
+/// with `Hasher` can lead to poor performance, because it uses a copy buffer
+/// that's too small to occupy all the SIMD lanes on modern x86 processors. Use
+/// the [`copy_wide`](copy/fn.copy_wide.html) utility function instead.
 #[derive(Clone)]
 pub struct Hasher {
     subtree_hashes: ArrayVec<[[u8; OUT_LEN]; MAX_DEPTH]>,
