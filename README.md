@@ -13,5 +13,14 @@ Other useful commands:
 ```
 cargo doc --open
 cargo test
-CC=clang RUSTFLAGS="-C target-cpu=native" cargo +nightly bench --features=c_native
+cargo +nightly bench
+
+# Benchmark the Rayon-based multithreaded implementation in Rust
+cargo +nightly bench --features=rayon
+
+# Benchmark SSE4.1, AVX2, and AVX512 implementations in C.
+cargo +nightly bench --features=c_detect
+
+# Benchmark the NEON implementation in C.
+cargo +nightly bench --features=c_neon
 ```

@@ -12,6 +12,7 @@ const LONG: usize = 1 << 16; // 64 KiB
 const BLOCK_LEN_32: usize = BLOCK_LEN;
 const BLOCK_LEN_64: usize = portable64::BLOCK_LEN;
 const CHUNK_LEN_32: usize = CHUNK_LEN;
+#[allow(dead_code)]
 const CHUNK_LEN_64: usize = portable64::CHUNK_LEN;
 
 // Just use zero offset deltas (that is, what we do for parents) everywhere
@@ -583,7 +584,12 @@ fn bench_chunks_512bit_avx512_c64(b: &mut Bencher) {
 
 #[bench]
 fn bench_hash_01_long_rust(b: &mut Bencher) {
-    let mut input = RandomInput::new(b, LONG);
+    let length = if cfg!(feature = "rayon") {
+        1 << 20 // 1 MiB
+    } else {
+        LONG
+    };
+    let mut input = RandomInput::new(b, length);
     b.iter(|| baokeshed::hash(input.get()));
 }
 
