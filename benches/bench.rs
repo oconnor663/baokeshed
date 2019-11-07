@@ -9,6 +9,11 @@ use test::Bencher;
 
 const LONG: usize = 1 << 16; // 64 KiB
 
+const BLOCK_LEN_32: usize = BLOCK_LEN;
+const BLOCK_LEN_64: usize = portable64::BLOCK_LEN;
+const CHUNK_LEN_32: usize = CHUNK_LEN;
+const CHUNK_LEN_64: usize = portable64::CHUNK_LEN;
+
 #[allow(dead_code)]
 const CHUNK_OFFSET_DELTAS: [u64; 17] = [
     CHUNK_LEN as u64 * 0,
@@ -73,27 +78,27 @@ impl RandomInput {
 #[bench]
 fn bench_compress_portable_rust(b: &mut Bencher) {
     let mut state = [1; 8];
-    let mut r = RandomInput::new(b, BLOCK_LEN);
-    let input = array_ref!(r.get(), 0, BLOCK_LEN);
-    b.iter(|| portable::compress(&mut state, input, BLOCK_LEN as u8, 0, 0));
+    let mut r = RandomInput::new(b, BLOCK_LEN_32);
+    let input = array_ref!(r.get(), 0, BLOCK_LEN_32);
+    b.iter(|| portable::compress(&mut state, input, BLOCK_LEN_32 as u8, 0, 0));
 }
 
 #[bench]
 fn bench_compress_portable_rust64(b: &mut Bencher) {
     let mut state = [1; 4];
-    let mut r = RandomInput::new(b, portable64::BLOCK_LEN);
-    let input = array_ref!(r.get(), 0, portable64::BLOCK_LEN);
-    b.iter(|| portable64::compress(&mut state, input, portable64::BLOCK_LEN as u8, 0, 0));
+    let mut r = RandomInput::new(b, BLOCK_LEN_64);
+    let input = array_ref!(r.get(), 0, BLOCK_LEN_64);
+    b.iter(|| portable64::compress(&mut state, input, BLOCK_LEN_64 as u8, 0, 0));
 }
 
 #[bench]
 #[cfg(feature = "c_portable")]
 fn bench_compress_portable_c(b: &mut Bencher) {
     let mut state = [1; 8];
-    let mut r = RandomInput::new(b, BLOCK_LEN);
-    let input = array_ref!(r.get(), 0, BLOCK_LEN);
+    let mut r = RandomInput::new(b, BLOCK_LEN_32);
+    let input = array_ref!(r.get(), 0, BLOCK_LEN_32);
     b.iter(|| unsafe {
-        c::ffi::compress_portable(state.as_mut_ptr(), input.as_ptr(), BLOCK_LEN as u8, 0, 0)
+        c::ffi::compress_portable(state.as_mut_ptr(), input.as_ptr(), BLOCK_LEN_32 as u8, 0, 0)
     });
 }
 
@@ -101,13 +106,13 @@ fn bench_compress_portable_c(b: &mut Bencher) {
 #[cfg(feature = "c_portable")]
 fn bench_compress_portable_c64(b: &mut Bencher) {
     let mut state = [1; 8];
-    let mut r = RandomInput::new(b, portable64::BLOCK_LEN);
-    let input = array_ref!(r.get(), 0, portable64::BLOCK_LEN);
+    let mut r = RandomInput::new(b, BLOCK_LEN_64);
+    let input = array_ref!(r.get(), 0, BLOCK_LEN_64);
     b.iter(|| unsafe {
         c64::ffi::baokeshed64_compress_portable(
             state.as_mut_ptr(),
             input.as_ptr(),
-            portable64::BLOCK_LEN as u8,
+            BLOCK_LEN_64 as u8,
             0,
             0,
         )
@@ -121,19 +126,19 @@ fn bench_compress_sse41_rust(b: &mut Bencher) {
         return;
     }
     let mut state = [1; 8];
-    let mut r = RandomInput::new(b, BLOCK_LEN);
-    let input = array_ref!(r.get(), 0, BLOCK_LEN);
-    b.iter(|| unsafe { sse41::compress(&mut state, input, BLOCK_LEN as u8, 0, 0) });
+    let mut r = RandomInput::new(b, BLOCK_LEN_32);
+    let input = array_ref!(r.get(), 0, BLOCK_LEN_32);
+    b.iter(|| unsafe { sse41::compress(&mut state, input, BLOCK_LEN_32 as u8, 0, 0) });
 }
 
 #[bench]
 #[cfg(feature = "c_sse41")]
 fn bench_compress_sse41_c(b: &mut Bencher) {
     let mut state = [1; 8];
-    let mut r = RandomInput::new(b, BLOCK_LEN);
-    let input = array_ref!(r.get(), 0, BLOCK_LEN);
+    let mut r = RandomInput::new(b, BLOCK_LEN_32);
+    let input = array_ref!(r.get(), 0, BLOCK_LEN_32);
     b.iter(|| unsafe {
-        c::ffi::compress_sse41(state.as_mut_ptr(), input.as_ptr(), BLOCK_LEN as u8, 0, 0)
+        c::ffi::compress_sse41(state.as_mut_ptr(), input.as_ptr(), BLOCK_LEN_32 as u8, 0, 0)
     });
 }
 
@@ -141,13 +146,13 @@ fn bench_compress_sse41_c(b: &mut Bencher) {
 #[cfg(feature = "c_avx2")]
 fn bench_compress_avx2_c64(b: &mut Bencher) {
     let mut state = [1; 4];
-    let mut r = RandomInput::new(b, portable64::BLOCK_LEN);
-    let input = array_ref!(r.get(), 0, portable64::BLOCK_LEN);
+    let mut r = RandomInput::new(b, BLOCK_LEN_64);
+    let input = array_ref!(r.get(), 0, BLOCK_LEN_64);
     b.iter(|| unsafe {
         c64::ffi::baokeshed64_compress_avx2(
             state.as_mut_ptr(),
             input.as_ptr(),
-            portable64::BLOCK_LEN as u8,
+            BLOCK_LEN_64 as u8,
             0,
             0,
         )
@@ -158,10 +163,10 @@ fn bench_compress_avx2_c64(b: &mut Bencher) {
 #[cfg(feature = "c_avx512")]
 fn bench_compress_avx512_c(b: &mut Bencher) {
     let mut state = [1; 8];
-    let mut r = RandomInput::new(b, BLOCK_LEN);
-    let input = array_ref!(r.get(), 0, BLOCK_LEN);
+    let mut r = RandomInput::new(b, BLOCK_LEN_32);
+    let input = array_ref!(r.get(), 0, BLOCK_LEN_32);
     b.iter(|| unsafe {
-        c::ffi::compress_avx512(state.as_mut_ptr(), input.as_ptr(), BLOCK_LEN as u8, 0, 0)
+        c::ffi::compress_avx512(state.as_mut_ptr(), input.as_ptr(), BLOCK_LEN_32 as u8, 0, 0)
     });
 }
 
@@ -169,13 +174,13 @@ fn bench_compress_avx512_c(b: &mut Bencher) {
 #[cfg(feature = "c_avx512")]
 fn bench_compress_avx512_c64(b: &mut Bencher) {
     let mut state = [1; 4];
-    let mut r = RandomInput::new(b, portable64::BLOCK_LEN);
-    let input = array_ref!(r.get(), 0, portable64::BLOCK_LEN);
+    let mut r = RandomInput::new(b, BLOCK_LEN_64);
+    let input = array_ref!(r.get(), 0, BLOCK_LEN_64);
     b.iter(|| unsafe {
         c64::ffi::baokeshed64_compress_avx512(
             state.as_mut_ptr(),
             input.as_ptr(),
-            portable64::BLOCK_LEN as u8,
+            BLOCK_LEN_64 as u8,
             0,
             0,
         )
@@ -188,19 +193,19 @@ fn bench_chunks_x02_sse41_c64(b: &mut Bencher) {
     const N: usize = 2;
     let key = [1; 4];
     let mut out = [0; OUT_LEN * N];
-    let mut r = RandomInput::new(b, portable64::CHUNK_LEN * N);
+    let mut r = RandomInput::new(b, CHUNK_LEN_64 * N);
     let input_bytes = r.get();
     let mut inputs = [std::ptr::null(); N];
     for (input, chunk) in inputs
         .iter_mut()
-        .zip(input_bytes.chunks_exact(portable64::CHUNK_LEN))
+        .zip(input_bytes.chunks_exact(CHUNK_LEN_64))
     {
         *input = chunk.as_ptr();
     }
     b.iter(|| unsafe {
         c64::ffi::baokeshed64_hash2_sse41(
             inputs.as_ptr(),
-            portable64::CHUNK_LEN / portable64::BLOCK_LEN,
+            CHUNK_LEN_64 / BLOCK_LEN_64,
             key.as_ptr(),
             0,
             CHUNK_OFFSET_DELTAS.as_ptr(),
@@ -218,19 +223,19 @@ fn bench_chunks_x02_avx512_c64(b: &mut Bencher) {
     const N: usize = 2;
     let key = [1; 4];
     let mut out = [0; OUT_LEN * N];
-    let mut r = RandomInput::new(b, portable64::CHUNK_LEN * N);
+    let mut r = RandomInput::new(b, CHUNK_LEN_64 * N);
     let input_bytes = r.get();
     let mut inputs = [std::ptr::null(); N];
     for (input, chunk) in inputs
         .iter_mut()
-        .zip(input_bytes.chunks_exact(portable64::CHUNK_LEN))
+        .zip(input_bytes.chunks_exact(CHUNK_LEN_64))
     {
         *input = chunk.as_ptr();
     }
     b.iter(|| unsafe {
         c64::ffi::baokeshed64_hash2_avx512(
             inputs.as_ptr(),
-            portable64::CHUNK_LEN / portable64::BLOCK_LEN,
+            CHUNK_LEN_64 / BLOCK_LEN_64,
             key.as_ptr(),
             0,
             CHUNK_OFFSET_DELTAS.as_ptr(),
@@ -248,19 +253,19 @@ fn bench_chunks_x02_neon_c64(b: &mut Bencher) {
     const N: usize = 2;
     let key = [1; 4];
     let mut out = [0; OUT_LEN * N];
-    let mut r = RandomInput::new(b, portable64::CHUNK_LEN * N);
+    let mut r = RandomInput::new(b, CHUNK_LEN_64 * N);
     let input_bytes = r.get();
     let mut inputs = [std::ptr::null(); N];
     for (input, chunk) in inputs
         .iter_mut()
-        .zip(input_bytes.chunks_exact(portable64::CHUNK_LEN))
+        .zip(input_bytes.chunks_exact(CHUNK_LEN_64))
     {
         *input = chunk.as_ptr();
     }
     b.iter(|| unsafe {
         c64::ffi::baokeshed64_hash2_neon(
             inputs.as_ptr(),
-            portable64::CHUNK_LEN / portable64::BLOCK_LEN,
+            CHUNK_LEN_64 / BLOCK_LEN_64,
             key.as_ptr(),
             0,
             CHUNK_OFFSET_DELTAS.as_ptr(),
@@ -389,19 +394,19 @@ fn bench_chunks_x04_avx2_c64(b: &mut Bencher) {
     const N: usize = 4;
     let key = [1; 4];
     let mut out = [0; OUT_LEN * N];
-    let mut r = RandomInput::new(b, portable64::CHUNK_LEN * N);
+    let mut r = RandomInput::new(b, CHUNK_LEN_64 * N);
     let input_bytes = r.get();
     let mut inputs = [std::ptr::null(); N];
     for (input, chunk) in inputs
         .iter_mut()
-        .zip(input_bytes.chunks_exact(portable64::CHUNK_LEN))
+        .zip(input_bytes.chunks_exact(CHUNK_LEN_64))
     {
         *input = chunk.as_ptr();
     }
     b.iter(|| unsafe {
         c64::ffi::baokeshed64_hash4_avx2(
             inputs.as_ptr(),
-            portable64::CHUNK_LEN / portable64::BLOCK_LEN,
+            CHUNK_LEN_64 / BLOCK_LEN_64,
             key.as_ptr(),
             0,
             CHUNK_OFFSET_DELTAS.as_ptr(),
@@ -419,19 +424,19 @@ fn bench_chunks_x04_avx512_c64(b: &mut Bencher) {
     const N: usize = 4;
     let key = [1; 4];
     let mut out = [0; OUT_LEN * N];
-    let mut r = RandomInput::new(b, portable64::CHUNK_LEN * N);
+    let mut r = RandomInput::new(b, CHUNK_LEN_64 * N);
     let input_bytes = r.get();
     let mut inputs = [std::ptr::null(); N];
     for (input, chunk) in inputs
         .iter_mut()
-        .zip(input_bytes.chunks_exact(portable64::CHUNK_LEN))
+        .zip(input_bytes.chunks_exact(CHUNK_LEN_64))
     {
         *input = chunk.as_ptr();
     }
     b.iter(|| unsafe {
         c64::ffi::baokeshed64_hash4_avx512(
             inputs.as_ptr(),
-            portable64::CHUNK_LEN / portable64::BLOCK_LEN,
+            CHUNK_LEN_64 / BLOCK_LEN_64,
             key.as_ptr(),
             0,
             CHUNK_OFFSET_DELTAS.as_ptr(),
@@ -533,19 +538,19 @@ fn bench_chunks_x08_avx512_c64(b: &mut Bencher) {
     const N: usize = 8;
     let key = [1; 4];
     let mut out = [0; OUT_LEN * N];
-    let mut r = RandomInput::new(b, portable64::CHUNK_LEN * N);
+    let mut r = RandomInput::new(b, CHUNK_LEN_64 * N);
     let input_bytes = r.get();
     let mut inputs = [std::ptr::null(); N];
     for (input, chunk) in inputs
         .iter_mut()
-        .zip(input_bytes.chunks_exact(portable64::CHUNK_LEN))
+        .zip(input_bytes.chunks_exact(CHUNK_LEN_64))
     {
         *input = chunk.as_ptr();
     }
     b.iter(|| unsafe {
         c64::ffi::baokeshed64_hash8_avx512(
             inputs.as_ptr(),
-            portable64::CHUNK_LEN / portable64::BLOCK_LEN,
+            CHUNK_LEN_64 / BLOCK_LEN_64,
             key.as_ptr(),
             0,
             CHUNK_OFFSET_DELTAS.as_ptr(),
