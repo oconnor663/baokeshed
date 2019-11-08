@@ -1,5 +1,6 @@
 import baokeshed
 import binascii
+import hashlib
 from duct import cmd
 from pathlib import Path
 from threading import Lock
@@ -110,9 +111,10 @@ def test_xof_functions():
 
 
 def test_round_fn_compatible_with_blake2s():
+    input_bytes = b"hello world"
     hello_world_hash = \
         "9aec6806794561107e594b1f6a8a6b0c92a0cba9acf5e5e93cca06f781813b0b"
-    input_bytes = b"hello world"
+    assert hello_world_hash == hashlib.blake2s(input_bytes).hexdigest()
     block_len = len(input_bytes)
     input_buffer = bytearray(64)
     input_buffer[0:block_len] = input_bytes
