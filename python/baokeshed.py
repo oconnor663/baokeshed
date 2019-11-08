@@ -39,7 +39,7 @@ DERIVE_KEY = 1 << 5
 
 
 def rotate_right(x, n):
-    return (x >> n | x << (32 - n)) & WORD_MAX
+    return (x >> n | x << (WORD_BITS - n)) & WORD_MAX
 
 
 def g(state, a, b, c, d, x, y):
