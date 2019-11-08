@@ -53,8 +53,7 @@ def g(state, a, b, c, d, x, y):
     state[b] = rotate_right(state[b] ^ state[c], 7)
 
 
-def round(state, msg_words, r):
-    schedule = MSG_SCHEDULE[r]
+def round(state, msg_words, schedule):
     # Mix the columns.
     g(state, 0, 4, 8, 12, msg_words[schedule[0]], msg_words[schedule[1]])
     g(state, 1, 5, 9, 13, msg_words[schedule[2]], msg_words[schedule[3]])
@@ -78,8 +77,8 @@ def words_from_bytes(buf):
 def bytes_from_words(words):
     buf = bytearray(OUT_LEN)
     for word_i in range(len(words)):
-        buf[WORD_BYTES * word_i:WORD_BYTES *
-            (word_i + 1)] = words[word_i].to_bytes(WORD_BYTES, "little")
+        buf[WORD_BYTES * word_i:WORD_BYTES * (word_i + 1)] = \
+            words[word_i].to_bytes(WORD_BYTES, "little")
     return buf
 
 
@@ -111,8 +110,8 @@ def compress_inner(cv, block, block_len, offset, flags):
         IV[6] ^ block_len,
         IV[7] ^ flags,
     ]
-    for r in range(7):
-        round(state, block_words, r)
+    for round_number in range(7):
+        round(state, block_words, MSG_SCHEDULE[round_number])
     return state
 
 

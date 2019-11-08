@@ -107,3 +107,52 @@ def test_xof_functions():
             baokeshed.derive_key_xof(key_bytes,
                                      input_bytes).to_bytes(output_len))
         assert rust_output == python_output
+
+
+def test_round_fn_compatible_with_blake2s():
+    hello_world_hash = \
+        "9aec6806794561107e594b1f6a8a6b0c92a0cba9acf5e5e93cca06f781813b0b"
+    input_bytes = b"hello world"
+    block_len = len(input_bytes)
+    input_buffer = bytearray(64)
+    input_buffer[0:block_len] = input_bytes
+    input_words = baokeshed.words_from_bytes(input_buffer)
+    schedules = baokeshed.MSG_SCHEDULE + [
+        [13, 11, 7, 14, 12, 1, 3, 9, 5, 0, 15, 4, 8, 6, 2, 10],
+        [6, 15, 14, 9, 11, 3, 0, 8, 12, 2, 13, 7, 1, 4, 10, 5],
+        [10, 2, 8, 4, 7, 6, 1, 5, 15, 11, 9, 14, 3, 12, 13, 0],
+    ]
+
+    cv = [
+        # hash_length = 32, fanout = 1, max_depth = 1
+        baokeshed.IV[0] ^ 32 ^ (1 << 16) ^ (1 << 24),
+        baokeshed.IV[1],
+        baokeshed.IV[2],
+        baokeshed.IV[3],
+        baokeshed.IV[4],
+        baokeshed.IV[5],
+        baokeshed.IV[6],
+        baokeshed.IV[7],
+    ]
+
+    state = cv + [
+        baokeshed.IV[0],
+        baokeshed.IV[1],
+        baokeshed.IV[2],
+        baokeshed.IV[3],
+        # total bytes compressed = block_len (no set bits in the second word)
+        baokeshed.IV[4] ^ block_len,
+        baokeshed.IV[5],
+        # last block flag
+        baokeshed.IV[6] ^ (2**32 - 1),
+        baokeshed.IV[7],
+    ]
+
+    for round_number in range(10):
+        baokeshed.round(state, input_words, schedules[round_number])
+
+    output_words = [
+        state[i] ^ state[i + 8] ^ cv[i] for i in range(8)
+    ]
+    output_bytes = baokeshed.bytes_from_words(output_words)
+    assert hello_world_hash == to_hex(output_bytes)
