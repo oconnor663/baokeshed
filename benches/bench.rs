@@ -677,6 +677,37 @@ fn bench_hasher_03_block_c(b: &mut Bencher) {
 }
 
 #[bench]
+fn bench_reference_01_long_c(b: &mut Bencher) {
+    let mut input = RandomInput::new(b, LONG);
+    b.iter(|| {
+        let mut hasher = reference_impl::Hasher::new();
+        hasher.update(input.get());
+        hasher.finalize()
+    });
+}
+
+#[bench]
+fn bench_reference_02_chunk_c(b: &mut Bencher) {
+    let mut input = RandomInput::new(b, CHUNK_LEN_32);
+    b.iter(|| {
+        let mut hasher = reference_impl::Hasher::new();
+        hasher.update(input.get());
+        hasher.finalize()
+    });
+}
+
+#[bench]
+fn bench_reference_03_block_c(b: &mut Bencher) {
+    let mut r = RandomInput::new(b, BLOCK_LEN_32);
+    let input = r.get();
+    b.iter(|| {
+        let mut hasher = reference_impl::Hasher::new();
+        hasher.update(input);
+        hasher.finalize()
+    });
+}
+
+#[bench]
 fn bench_xof(b: &mut Bencher) {
     let hasher = Hasher::new();
     let mut xof = hasher.finalize_xof();
