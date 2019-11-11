@@ -14,7 +14,8 @@ const KEYED_HASH: u32 = 1 << 4;
 const DERIVE_KEY: u32 = 1 << 5;
 
 const IV: [u32; 8] = [
-    0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A, 0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19,
+    0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A, 0x510E527F, 0x9B05688C,
+    0x1F83D9AB, 0x5BE0CD19,
 ];
 
 const MSG_SCHEDULE: [[usize; 16]; ROUNDS] = [
@@ -42,7 +43,15 @@ fn bytes_from_words(words: &[u32], bytes: &mut [u8]) {
 }
 
 // The mixing function, also called G, mixes either a column or a diagonal.
-fn mix(state: &mut [u32; 16], a: usize, b: usize, c: usize, d: usize, m1: u32, m2: u32) {
+fn mix(
+    state: &mut [u32; 16],
+    a: usize,
+    b: usize,
+    c: usize,
+    d: usize,
+    m1: u32,
+    m2: u32,
+) {
     state[a] = state[a].wrapping_add(state[b]).wrapping_add(m1);
     state[d] = (state[d] ^ state[a]).rotate_right(16);
     state[c] = state[c].wrapping_add(state[d]);
@@ -108,7 +117,8 @@ fn compress(
     offset: u64,
     flags: u32,
 ) {
-    let state = compress_inner(chaining_value, block_words, block_len, offset, flags);
+    let state =
+        compress_inner(chaining_value, block_words, block_len, offset, flags);
     for i in 0..8 {
         chaining_value[i] = state[i] ^ state[i + 8];
     }
@@ -125,7 +135,8 @@ fn compress_extended(
     flags: u32,
     output: &mut [u8],
 ) {
-    let mut state = compress_inner(chaining_value, block_words, block_len, offset, flags);
+    let mut state =
+        compress_inner(chaining_value, block_words, block_len, offset, flags);
     for i in 0..8 {
         state[i] ^= state[i + 8];
         state[i + 8] ^= chaining_value[i];
@@ -207,7 +218,8 @@ impl ChunkState {
     // Add input bytes to this chunk.
     fn update(&mut self, mut input: &[u8]) {
         while !input.is_empty() {
-            // If the buffer is full, and there's more input coming, compress it and clear it.
+            // If the buffer is full, and there's more input coming, compress
+            // it and clear it.
             if self.block_len == BLOCK_LEN {
                 let mut block_words = [0; 16];
                 words_from_bytes(&self.block, &mut block_words);
@@ -226,7 +238,8 @@ impl ChunkState {
             // Buffer as many input bytes as possible.
             let want = BLOCK_LEN - self.block_len;
             let take = core::cmp::min(want, input.len());
-            self.block[self.block_len as usize..][..take].copy_from_slice(&input[..take]);
+            self.block[self.block_len as usize..][..take]
+                .copy_from_slice(&input[..take]);
             self.block_len += take;
             self.total_len += take;
             input = &input[take..];
@@ -239,7 +252,8 @@ impl ChunkState {
         let mut block_words = [0; 16];
         words_from_bytes(&self.block, &mut block_words);
         let root_flag = if is_root { ROOT } else { 0 };
-        let block_flags = self.flags | self.start_flag() | CHUNK_END | root_flag;
+        let block_flags =
+            self.flags | self.start_flag() | CHUNK_END | root_flag;
         Output {
             prev_chaining_value: self.chaining_value,
             block_words,
@@ -351,11 +365,16 @@ impl Hasher {
             // If the current chunk is full, and there's more input coming,
             // finalize it and push its hash into the subtree stack.
             if self.chunk_state.total_len == CHUNK_LEN {
-                let chunk_cv = self.chunk_state.finalize(false).chaining_value();
-                let new_chunk_offset = self.chunk_state.offset + CHUNK_LEN as u64;
+                let chunk_cv =
+                    self.chunk_state.finalize(false).chaining_value();
+                let new_chunk_offset =
+                    self.chunk_state.offset + CHUNK_LEN as u64;
                 self.push_chunk_chaining_value(&chunk_cv, new_chunk_offset);
-                self.chunk_state =
-                    ChunkState::new(&self.key, new_chunk_offset, self.chunk_state.flags);
+                self.chunk_state = ChunkState::new(
+                    &self.key,
+                    new_chunk_offset,
+                    self.chunk_state.flags,
+                );
             }
 
             // Add as many bytes as possible to the current chunk.
