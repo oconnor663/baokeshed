@@ -19,10 +19,10 @@
 #define MAX_SIMD_DEGREE 16
 
 // internal flags
-#define ROOT 1
-#define PARENT 2
-#define CHUNK_END 4
-#define CHUNK_START 8
+#define CHUNK_START 1
+#define CHUNK_END 2
+#define PARENT 4
+#define ROOT 8
 #define KEYED_HASH 16
 #define DERIVE_KEY 32
 

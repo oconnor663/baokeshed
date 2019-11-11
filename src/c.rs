@@ -294,7 +294,7 @@ mod test {
         let initial_state = [1, 2, 3, 4, 5, 6, 7, 8];
         let block_len: u8 = 27;
         let mut block = [0; BLOCK_LEN];
-        crate::test::paint_test_input(&mut block[..block_len as usize]);
+        crate::test_shared::paint_test_input(&mut block[..block_len as usize]);
         // Use an offset with set bits in both 32-bit words.
         let offset = ((5 * CHUNK_LEN as u64) << WORD_BITS) + 6 * CHUNK_LEN as u64;
         let flags = Flags::CHUNK_END | Flags::ROOT;
@@ -356,7 +356,7 @@ mod test {
         // 31 (16 + 8 + 4 + 2 + 1) inputs
         const NUM_INPUTS: usize = 31;
         let mut input_buf = [0; CHUNK_LEN * NUM_INPUTS];
-        crate::test::paint_test_input(&mut input_buf);
+        crate::test_shared::paint_test_input(&mut input_buf);
         let key_words = [21, 22, 23, 24, 25, 26, 27, 28];
         let offset = 99 * CHUNK_LEN as u64;
 
@@ -484,7 +484,7 @@ mod test {
             CHUNK_LEN,
         ];
         let mut input_buf = [0; CHUNK_LEN];
-        crate::test::paint_test_input(&mut input_buf);
+        crate::test_shared::paint_test_input(&mut input_buf);
         let key_words = [10, 11, 12, 13, 14, 15, 16, 17];
         let flags = Flags::KEYED_HASH;
         for &is_root in &[crate::IsRoot::NotRoot, crate::IsRoot::Root] {
@@ -518,12 +518,12 @@ mod test {
 
     #[test]
     fn test_compare_hash_tree() {
-        let mut input_buf = [0; crate::test::TEST_CASES_MAX];
-        crate::test::paint_test_input(&mut input_buf);
+        let mut input_buf = [0; crate::test_shared::TEST_CASES_MAX];
+        crate::test_shared::paint_test_input(&mut input_buf);
         let key_words = [5; 8];
         let key_bytes = bytes_from_state_words(&key_words);
 
-        for &case in crate::test::TEST_CASES {
+        for &case in crate::test_shared::TEST_CASES {
             dbg!(case);
             let input = &input_buf[..case];
 

@@ -55,6 +55,9 @@ pub mod sse41;
 #[cfg(test)]
 mod test;
 
+#[doc(hidden)]
+pub mod test_shared;
+
 type Word = u32;
 
 const WORD_BYTES: usize = core::mem::size_of::<Word>();
@@ -95,10 +98,10 @@ const MSG_SCHEDULE: [[usize; 16]; 7] = [
 // high and go down.
 bitflags::bitflags! {
     struct Flags: u8 {
-        const ROOT = 1 << 0;
-        const PARENT = 1 << 1;
-        const CHUNK_END = 1 << 2;
-        const CHUNK_START = 1 << 3;
+        const CHUNK_START = 1 << 0;
+        const CHUNK_END = 1 << 1;
+        const PARENT = 1 << 2;
+        const ROOT = 1 << 3;
         const KEYED_HASH = 1 << 4;
         const DERIVE_KEY = 1 << 5;
     }

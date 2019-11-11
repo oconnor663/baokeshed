@@ -30,10 +30,10 @@ WORD_BYTES = 4
 WORD_MAX = 2**WORD_BITS - 1
 
 # domain flags
-ROOT = 1 << 0
-PARENT = 1 << 1
-CHUNK_END = 1 << 2
-CHUNK_START = 1 << 3
+CHUNK_START = 1 << 0
+CHUNK_END = 1 << 1
+PARENT = 1 << 2
+ROOT = 1 << 3
 KEYED_HASH = 1 << 4
 DERIVE_KEY = 1 << 5
 

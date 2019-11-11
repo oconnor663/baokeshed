@@ -47,7 +47,7 @@ fn round(state: &mut [Word; 16], msg: &[Word; 16], round: usize) {
     g(state, 2, 6, 10, 14, msg[schedule[4]], msg[schedule[5]]);
     g(state, 3, 7, 11, 15, msg[schedule[6]], msg[schedule[7]]);
 
-    // Mix the rows.
+    // Mix the diagonals.
     g(state, 0, 5, 10, 15, msg[schedule[8]], msg[schedule[9]]);
     g(state, 1, 6, 11, 12, msg[schedule[10]], msg[schedule[11]]);
     g(state, 2, 7, 8, 13, msg[schedule[12]], msg[schedule[13]]);
@@ -219,7 +219,7 @@ pub mod test {
     #[test]
     fn test_hash1_3() {
         let mut blocks = [0; BLOCK_LEN * 3];
-        crate::test::paint_test_input(&mut blocks);
+        crate::test_shared::paint_test_input(&mut blocks);
         let key = [2; 8];
         let offset = 3 * crate::CHUNK_LEN as u64;
         let flags = 4;
@@ -267,7 +267,7 @@ pub mod test {
     #[test]
     fn test_hash_many() {
         let mut input_buf = [0; BLOCK_LEN * 9];
-        crate::test::paint_test_input(&mut input_buf);
+        crate::test_shared::paint_test_input(&mut input_buf);
         let inputs = [
             array_ref!(input_buf, 0 * BLOCK_LEN, 3 * BLOCK_LEN),
             array_ref!(input_buf, 3 * BLOCK_LEN, 3 * BLOCK_LEN),

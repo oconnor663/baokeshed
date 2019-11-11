@@ -71,7 +71,7 @@ mod test {
     #[test]
     fn test_copy_wide() {
         let mut src = vec![0; 1_000_000];
-        crate::test::paint_test_input(&mut src);
+        crate::test_shared::paint_test_input(&mut src);
         let mut dest = Vec::with_capacity(src.len());
         copy_wide(&mut &src[..], &mut dest).unwrap();
         assert_eq!(src, dest);
