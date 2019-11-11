@@ -399,13 +399,13 @@ fn test_lib_against_reference_impl() {
         paint_test_input(&mut input);
 
         // all at once
-        let mut hasher = crate::reference_impl::Hasher::new();
+        let mut hasher = reference_impl::Hasher::new();
         hasher.update(&input);
         let output = hasher.finalize();
         assert_eq!(hash(&input), output);
 
         // one byte at a time
-        let mut hasher = crate::reference_impl::Hasher::new();
+        let mut hasher = reference_impl::Hasher::new();
         for &byte in &input {
             hasher.update(&[byte]);
         }
@@ -413,19 +413,19 @@ fn test_lib_against_reference_impl() {
         assert_eq!(hash(&input), output);
 
         // keyed
-        let mut hasher = crate::reference_impl::Hasher::new_keyed(&key);
+        let mut hasher = reference_impl::Hasher::new_keyed(&key);
         hasher.update(&input);
         let output = hasher.finalize();
         assert_eq!(keyed_hash(&input, &key), output);
 
         // derive key
-        let mut hasher = crate::reference_impl::Hasher::new_derive_key(&key);
+        let mut hasher = reference_impl::Hasher::new_derive_key(&key);
         hasher.update(&input);
         let output = hasher.finalize();
         assert_eq!(derive_key(&key, &input), output);
 
         // extended output
-        let mut hasher = crate::reference_impl::Hasher::new_keyed(&key);
+        let mut hasher = reference_impl::Hasher::new_keyed(&key);
         hasher.update(&input);
         let mut output = [0; 300];
         hasher.finalize_extended(&mut output);

@@ -53,8 +53,6 @@ pub mod portable64;
 pub mod sse41;
 
 #[cfg(test)]
-mod reference_impl;
-#[cfg(test)]
 mod test;
 
 type Word = u32;
