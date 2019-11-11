@@ -1,7 +1,47 @@
-use crate::test_shared::{paint_test_input, TEST_CASES, TEST_CASES_MAX};
 use crate::*;
 
 use core::usize;
+
+// Interesting input lengths to run tests on.
+pub const TEST_CASES: &[usize] = &[
+    0,
+    1,
+    CHUNK_LEN - 1,
+    CHUNK_LEN,
+    CHUNK_LEN + 1,
+    2 * CHUNK_LEN,
+    2 * CHUNK_LEN + 1,
+    3 * CHUNK_LEN,
+    3 * CHUNK_LEN + 1,
+    4 * CHUNK_LEN,
+    4 * CHUNK_LEN + 1,
+    5 * CHUNK_LEN,
+    5 * CHUNK_LEN + 1,
+    6 * CHUNK_LEN,
+    6 * CHUNK_LEN + 1,
+    7 * CHUNK_LEN,
+    7 * CHUNK_LEN + 1,
+    8 * CHUNK_LEN,
+    8 * CHUNK_LEN + 1,
+    16 * CHUNK_LEN, // AVX512's bandwidth
+    31 * CHUNK_LEN, // 16 + 8 + 4 + 2 + 1
+];
+
+pub const TEST_CASES_MAX: usize = 31 * CHUNK_LEN;
+
+// Paint a byte pattern that won't repeat, so that we don't accidentally
+// miss buffer offset bugs.
+pub fn paint_test_input(buf: &mut [u8]) {
+    let mut offset = 0;
+    let mut counter: u32 = 1;
+    while offset < buf.len() {
+        let bytes = counter.to_le_bytes();
+        let take = cmp::min(bytes.len(), buf.len() - offset);
+        buf[offset..][..take].copy_from_slice(&bytes[..take]);
+        counter += 1;
+        offset += take;
+    }
+}
 
 #[test]
 fn test_offset_words() {
@@ -346,4 +386,54 @@ fn test_regular_xof_match() {
         &derive_key(&[5; KEY_LEN], b"foo")[..],
         &derive_key_xof(&[5; KEY_LEN], b"foo").read()[..OUT_LEN],
     );
+}
+
+#[test]
+fn test_lib_against_reference_impl() {
+    let mut key = [0; KEY_LEN];
+    paint_test_input(&mut key);
+
+    for &case in TEST_CASES {
+        dbg!(case);
+        let mut input = vec![0; case];
+        paint_test_input(&mut input);
+
+        // all at once
+        let mut hasher = crate::reference_impl::Hasher::new();
+        hasher.update(&input);
+        let output = hasher.finalize();
+        assert_eq!(hash(&input), output);
+
+        // one byte at a time
+        let mut hasher = crate::reference_impl::Hasher::new();
+        for &byte in &input {
+            hasher.update(&[byte]);
+        }
+        let output = hasher.finalize();
+        assert_eq!(hash(&input), output);
+
+        // keyed
+        let mut hasher = crate::reference_impl::Hasher::new_keyed(&key);
+        hasher.update(&input);
+        let output = hasher.finalize();
+        assert_eq!(keyed_hash(&input, &key), output);
+
+        // derive key
+        let mut hasher = crate::reference_impl::Hasher::new_derive_key(&key);
+        hasher.update(&input);
+        let output = hasher.finalize();
+        assert_eq!(derive_key(&key, &input), output);
+
+        // extended output
+        let mut hasher = crate::reference_impl::Hasher::new_keyed(&key);
+        hasher.update(&input);
+        let mut output = [0; 300];
+        hasher.finalize_extended(&mut output);
+        let mut expected_output = Vec::new();
+        let mut xof = keyed_hash_xof(&input, &key);
+        while expected_output.len() < output.len() {
+            expected_output.extend_from_slice(&xof.read());
+        }
+        assert_eq!(&expected_output[..output.len()], &output[..]);
+    }
 }

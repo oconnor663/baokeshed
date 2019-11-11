@@ -732,7 +732,7 @@ mod test {
         let initial_state = [1, 2, 3, 4, 5, 6, 7, 8];
         let block_len: u8 = 27;
         let mut block = [0; BLOCK_LEN];
-        crate::test_shared::paint_test_input(&mut block[..block_len as usize]);
+        crate::test::paint_test_input(&mut block[..block_len as usize]);
         // Use an offset with set bits in both 32-bit words.
         let offset = ((5 * CHUNK_LEN as u64) << WORD_BITS) + 6 * CHUNK_LEN as u64;
         let flags = crate::Flags::CHUNK_END | crate::Flags::ROOT;
@@ -767,7 +767,7 @@ mod test {
         }
 
         let mut input = [0; DEGREE * BLOCK_LEN];
-        crate::test_shared::paint_test_input(&mut input);
+        crate::test::paint_test_input(&mut input);
         let parents = [
             array_ref!(input, 0 * BLOCK_LEN, BLOCK_LEN),
             array_ref!(input, 1 * BLOCK_LEN, BLOCK_LEN),
@@ -814,7 +814,7 @@ mod test {
         }
 
         let mut input = [0; DEGREE * CHUNK_LEN];
-        crate::test_shared::paint_test_input(&mut input);
+        crate::test::paint_test_input(&mut input);
         let chunks = [
             array_ref!(input, 0 * CHUNK_LEN, CHUNK_LEN),
             array_ref!(input, 1 * CHUNK_LEN, CHUNK_LEN),
@@ -922,7 +922,7 @@ mod test {
         }
 
         let mut blocks = [0; BLOCK_LEN * 3];
-        crate::test_shared::paint_test_input(&mut blocks);
+        crate::test::paint_test_input(&mut blocks);
         let key = [2; 8];
         let offset = 3 * crate::CHUNK_LEN as u64;
         let flags = 4;
@@ -966,7 +966,7 @@ mod test {
         const INPUT_LEN: usize = 3 * BLOCK_LEN;
         const NUM_INPUTS: usize = 31;
         let mut input_buf = [0; NUM_INPUTS * INPUT_LEN];
-        crate::test_shared::paint_test_input(&mut input_buf);
+        crate::test::paint_test_input(&mut input_buf);
         let mut inputs = ArrayVec::<[&[u8; INPUT_LEN]; NUM_INPUTS]>::new();
         for i in 0..NUM_INPUTS {
             inputs.push(array_ref!(input_buf, i * INPUT_LEN, INPUT_LEN));

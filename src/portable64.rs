@@ -262,7 +262,7 @@ pub mod test {
     #[test]
     fn test_hash1_3() {
         let mut blocks = [0; BLOCK_LEN * 3];
-        crate::test_shared::paint_test_input(&mut blocks);
+        crate::test::paint_test_input(&mut blocks);
         let key = [2; 4];
         let offset = 3 * CHUNK_LEN as u64;
         let flags = 4;
@@ -310,7 +310,7 @@ pub mod test {
     #[test]
     fn test_hash_many() {
         let mut input_buf = [0; BLOCK_LEN * 9];
-        crate::test_shared::paint_test_input(&mut input_buf);
+        crate::test::paint_test_input(&mut input_buf);
         let inputs = [
             array_ref!(input_buf, 0 * BLOCK_LEN, 3 * BLOCK_LEN),
             array_ref!(input_buf, 3 * BLOCK_LEN, 3 * BLOCK_LEN),

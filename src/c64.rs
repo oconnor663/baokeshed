@@ -200,7 +200,7 @@ mod test {
         let initial_state = [1, 2, 3, 4];
         let block_len: u8 = 27;
         let mut block = [0; BLOCK_LEN];
-        crate::test_shared::paint_test_input(&mut block[..block_len as usize]);
+        crate::test::paint_test_input(&mut block[..block_len as usize]);
         // Use an offset with set bits in both 32-bit words.
         let offset = 5;
         let flags = Flags::CHUNK_END | Flags::ROOT;
@@ -262,7 +262,7 @@ mod test {
         // 31 (16 + 8 + 4 + 2 + 1) inputs
         const NUM_INPUTS: usize = 31;
         let mut input_buf = [0; CHUNK_LEN * NUM_INPUTS];
-        crate::test_shared::paint_test_input(&mut input_buf);
+        crate::test::paint_test_input(&mut input_buf);
         let key_words = [21, 22, 23, 24];
         let offset = 99 * CHUNK_LEN as u64;
 

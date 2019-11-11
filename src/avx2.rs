@@ -468,7 +468,7 @@ mod test {
         }
 
         let mut input = [0; DEGREE * BLOCK_LEN];
-        crate::test_shared::paint_test_input(&mut input);
+        crate::test::paint_test_input(&mut input);
         let parents = [
             array_ref!(input, 0 * BLOCK_LEN, BLOCK_LEN),
             array_ref!(input, 1 * BLOCK_LEN, BLOCK_LEN),
@@ -523,7 +523,7 @@ mod test {
         }
 
         let mut input = [0; DEGREE * CHUNK_LEN];
-        crate::test_shared::paint_test_input(&mut input);
+        crate::test::paint_test_input(&mut input);
         let chunks = [
             array_ref!(input, 0 * CHUNK_LEN, CHUNK_LEN),
             array_ref!(input, 1 * CHUNK_LEN, CHUNK_LEN),
@@ -602,7 +602,7 @@ mod test {
         const INPUT_LEN: usize = 3 * BLOCK_LEN;
         const NUM_INPUTS: usize = 31;
         let mut input_buf = [0; NUM_INPUTS * INPUT_LEN];
-        crate::test_shared::paint_test_input(&mut input_buf);
+        crate::test::paint_test_input(&mut input_buf);
         let mut inputs = ArrayVec::<[&[u8; INPUT_LEN]; NUM_INPUTS]>::new();
         for i in 0..NUM_INPUTS {
             inputs.push(array_ref!(input_buf, i * INPUT_LEN, INPUT_LEN));
