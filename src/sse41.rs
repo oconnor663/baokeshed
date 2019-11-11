@@ -761,6 +761,41 @@ mod test {
     }
 
     #[test]
+    fn test_compress_xof() {
+        if !is_x86_feature_detected!("sse4.1") {
+            return;
+        }
+
+        let initial_state = [1, 2, 3, 4, 5, 6, 7, 8];
+        let block_len: u8 = 27;
+        let mut block = [0; BLOCK_LEN];
+        crate::test::paint_test_input(&mut block[..block_len as usize]);
+        // Use an offset with set bits in both 32-bit words.
+        let offset = ((5 * CHUNK_LEN as u64) << WORD_BITS) + 6 * CHUNK_LEN as u64;
+        let flags = crate::Flags::CHUNK_END | crate::Flags::ROOT;
+
+        let portable_state = portable::compress_xof(
+            &initial_state,
+            &block,
+            block_len,
+            offset as u64,
+            flags.bits(),
+        );
+
+        let simd_state = unsafe {
+            super::compress_xof(
+                &initial_state,
+                &block,
+                block_len,
+                offset as u64,
+                flags.bits(),
+            )
+        };
+
+        assert_eq!(&portable_state[..], &simd_state[..]);
+    }
+
+    #[test]
     fn test_parents() {
         if !is_x86_feature_detected!("sse4.1") {
             return;

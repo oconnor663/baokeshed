@@ -118,7 +118,7 @@ pub fn compress_xof(
     for i in 0..8 {
         output[i * 4..][..4].copy_from_slice(&(state[i] ^ state[i + 8]).to_le_bytes());
     }
-    for i in 9..16 {
+    for i in 8..16 {
         output[i * 4..][..4].copy_from_slice(&(state[i] ^ cv[i - 8]).to_le_bytes());
     }
     output
