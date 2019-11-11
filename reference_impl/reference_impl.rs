@@ -1,3 +1,7 @@
+//! This reference implementation is written to be short and simple. It is not
+//! optimized for performance, and it does not use any parallelism. The
+//! throughput of this implementation is on par with OpenSSL SHA-256.
+
 const OUT_LEN: usize = 32;
 const KEY_LEN: usize = 32;
 const BLOCK_LEN: usize = 64;
