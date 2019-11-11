@@ -29,9 +29,8 @@ const MSG_SCHEDULE: [[usize; 16]; ROUNDS] = [
 
 // Note that this conversion is little-endian.
 fn words_from_bytes(bytes: &[u8], words: &mut [u32]) {
-    use core::convert::TryInto;
     for (b, w) in bytes.chunks_exact(4).zip(words.iter_mut()) {
-        *w = u32::from_le_bytes(b.try_into().unwrap());
+        *w = u32::from_le_bytes(core::convert::TryInto::try_into(b).unwrap());
     }
 }
 
