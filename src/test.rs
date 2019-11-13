@@ -104,7 +104,7 @@ fn test_recursive_incremental_same() {
         let input = &input_buf[..case];
         let key = array_ref!(input_buf, 0, KEY_LEN);
 
-        let recursive_hash = keyed_hash(input, key);
+        let recursive_hash = keyed_hash(key, input);
 
         let incremental_hash_all = Hasher::new_keyed(key).update(input).finalize();
         assert_eq!(recursive_hash, incremental_hash_all);
@@ -128,7 +128,7 @@ fn test_zero_bytes() {
     portable::compress(&mut cv, &block, 0, 0, flags.bits());
     let expected_hash: Hash = bytes_from_state_words(&cv).into();
 
-    assert_eq!(expected_hash, keyed_hash(&[], &key,));
+    assert_eq!(expected_hash, keyed_hash(&key, &[]));
 
     let hasher = Hasher::new_keyed(&key);
     assert_eq!(expected_hash, hasher.finalize());
@@ -146,7 +146,7 @@ fn test_one_byte() {
     portable::compress(&mut cv, &block, 1, 0, flags.bits());
     let expected_hash: Hash = bytes_from_state_words(&cv).into();
 
-    assert_eq!(expected_hash, keyed_hash(&[9], &key,));
+    assert_eq!(expected_hash, keyed_hash(&key, &[9]));
 
     let mut hasher = Hasher::new_keyed(&key);
     hasher.update(&[9]);
@@ -175,7 +175,7 @@ fn exercise_construction(construction: Construction, input_len: usize) {
     // Check the keyed hash.
     let key = array_ref!(input, 7, KEY_LEN);
     let expected_keyed_hash = construction(&input, key, Flags::KEYED_HASH);
-    assert_eq!(expected_keyed_hash, keyed_hash(&input, key));
+    assert_eq!(expected_keyed_hash, keyed_hash(key, &input));
     assert_eq!(
         expected_keyed_hash,
         Hasher::new_keyed(key).update(&input).finalize(),
@@ -350,7 +350,7 @@ fn test_three_chunks() {
 fn test_xof_output() {
     let input = b"abc";
     let key = &[42; KEY_LEN];
-    let expected_hash = keyed_hash(input, key);
+    let expected_hash = keyed_hash(key, input);
 
     let mut xof = Hasher::new_keyed(key).update(input).finalize_xof();
 
@@ -369,7 +369,7 @@ fn test_xof_output() {
 #[test]
 fn test_domain_separation() {
     let h1 = hash(b"foo");
-    let h2 = keyed_hash(b"foo", &bytes_from_state_words(&IV));
+    let h2 = keyed_hash(&bytes_from_state_words(&IV), b"foo");
     let h3 = derive_key_xof(&bytes_from_state_words(&IV), b"foo").to_hash();
     assert!(h1 != h2);
     assert!(h2 != h3);
@@ -379,8 +379,8 @@ fn test_domain_separation() {
 fn test_regular_xof_match() {
     assert_eq!(hash(b"foo"), hash_xof(b"foo").to_hash());
     assert_eq!(
-        keyed_hash(b"foo", &[5; KEY_LEN]),
-        keyed_hash_xof(b"foo", &[5; KEY_LEN]).to_hash()
+        keyed_hash(&[5; KEY_LEN], b"foo"),
+        keyed_hash_xof(&[5; KEY_LEN], b"foo").to_hash()
     );
     assert_eq!(
         &derive_key(&[5; KEY_LEN], b"foo")[..],
@@ -416,7 +416,7 @@ fn test_lib_against_reference_impl() {
         let mut hasher = reference_impl::Hasher::new_keyed(&key);
         hasher.update(&input);
         let output = hasher.finalize();
-        assert_eq!(keyed_hash(&input, &key), output);
+        assert_eq!(keyed_hash(&key, &input), output);
 
         // derive key
         let mut hasher = reference_impl::Hasher::new_derive_key(&key);
@@ -430,7 +430,7 @@ fn test_lib_against_reference_impl() {
         let mut output = [0; 300];
         hasher.finalize_extended(&mut output);
         let mut expected_output = Vec::new();
-        let mut xof = keyed_hash_xof(&input, &key);
+        let mut xof = keyed_hash_xof(&key, &input);
         while expected_output.len() < output.len() {
             expected_output.extend_from_slice(&xof.read());
         }

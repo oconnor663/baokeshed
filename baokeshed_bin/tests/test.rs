@@ -55,7 +55,7 @@ fn test_hash_length() {
 #[test]
 fn test_hash_key() {
     let key = [42; baokeshed::KEY_LEN];
-    let expected = baokeshed::keyed_hash(b"foo", &key).to_hex();
+    let expected = baokeshed::keyed_hash(&key, b"foo").to_hex();
     let output = cmd!(baokeshed_exe(), "--key", hex::encode(&key))
         .stdin_bytes("foo")
         .read()

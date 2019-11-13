@@ -267,12 +267,12 @@ def hash_xof(input_bytes):
 
 
 # The keyed hash function, returning a 32-byte hash.
-def keyed_hash(input_bytes, key_bytes):
-    return keyed_hash_xof(input_bytes, key_bytes).to_hash()
+def keyed_hash(key_bytes, input_bytes):
+    return keyed_hash_xof(key_bytes, input_bytes).to_hash()
 
 
 # The keyed hash function, returning an extensible Output object.
-def keyed_hash_xof(input_bytes, key_bytes):
+def keyed_hash_xof(key_bytes, input_bytes):
     key_words = words_from_bytes(key_bytes)
     return hash_internal(input_bytes, key_words, KEYED_HASH)
 

@@ -49,7 +49,7 @@ fn hash_one(
             if derive_key {
                 baokeshed::derive_key_xof(key, &map)
             } else {
-                baokeshed::keyed_hash_xof(&map, key)
+                baokeshed::keyed_hash_xof(key, &map)
             }
         } else {
             baokeshed::hash_xof(&map)

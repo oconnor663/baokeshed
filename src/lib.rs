@@ -1,7 +1,7 @@
 //! The Baokeshed API is split into three functions:
 //!
 //! - `hash(input)`, the default hash function
-//! - `keyed_hash(input, key)`, the keyed variant, taking a 32-byte key
+//! - `keyed_hash(key, input)`, the keyed variant, taking a 32-byte key
 //! - `derive_key(key, context)`, the KDF, taking an arbitrary-length context string
 //!
 //! These functions share a single implementation, and they all have the same
@@ -563,14 +563,14 @@ pub fn hash_xof(input: &[u8]) -> Output {
 /// The hash function with a key.
 ///
 /// This is domain separated from `hash`.
-pub fn keyed_hash(input: &[u8], key: &[u8; KEY_LEN]) -> Hash {
-    keyed_hash_xof(input, key).to_hash()
+pub fn keyed_hash(key: &[u8; KEY_LEN], input: &[u8]) -> Hash {
+    keyed_hash_xof(key, input).to_hash()
 }
 
 /// The hash function with a key, returning an extensible output.
 ///
 /// This is domain separated from `hash`.
-pub fn keyed_hash_xof(input: &[u8], key: &[u8; KEY_LEN]) -> Output {
+pub fn keyed_hash_xof(key: &[u8; KEY_LEN], input: &[u8]) -> Output {
     let key_words = words_from_key_bytes(key);
     hash_internal(input, &key_words, Flags::KEYED_HASH)
 }

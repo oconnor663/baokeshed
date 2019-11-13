@@ -67,7 +67,7 @@ def test_default_functions():
         # The keyed hash function.
         rust_output = cmd(baokeshed_path(), "--key",
                           key_hex).stdin_bytes(input_bytes).read()
-        python_output = to_hex(baokeshed.keyed_hash(input_bytes, key_bytes))
+        python_output = to_hex(baokeshed.keyed_hash(key_bytes, input_bytes))
         assert rust_output == python_output
 
         # The KDF.
@@ -96,8 +96,8 @@ def test_xof_functions():
         rust_output = cmd(baokeshed_path(), "--key", key_hex, "--length",
                           str(output_len)).stdin_bytes(input_bytes).read()
         python_output = to_hex(
-            baokeshed.keyed_hash_xof(input_bytes,
-                                     key_bytes).to_bytes(output_len))
+            baokeshed.keyed_hash_xof(key_bytes,
+                                     input_bytes).to_bytes(output_len))
         assert rust_output == python_output
 
         # The KDF.
@@ -153,8 +153,6 @@ def test_round_fn_compatible_with_blake2s():
     for round_number in range(10):
         baokeshed.round(state, input_words, schedules[round_number])
 
-    output_words = [
-        state[i] ^ state[i + 8] ^ cv[i] for i in range(8)
-    ]
+    output_words = [state[i] ^ state[i + 8] ^ cv[i] for i in range(8)]
     output_bytes = baokeshed.bytes_from_words(output_words)
     assert hello_world_hash == to_hex(output_bytes)
