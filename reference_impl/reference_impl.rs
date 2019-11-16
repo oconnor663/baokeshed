@@ -262,20 +262,20 @@ fn hash_parent(
 
 /// An incremental hasher that can accept any number of writes.
 pub struct Hasher {
+    chunk_state: ChunkState,
+    key: [u32; 8],
     // Space for 53 subtree chaining values: 2^53 * CHUNK_LEN = 2^64
     subtree_stack: [[u32; 8]; 53],
     num_subtrees: u8,
-    chunk_state: ChunkState,
-    key: [u32; 8],
 }
 
 impl Hasher {
     fn new_internal(key: &[u32; 8], flags: u8) -> Self {
         Self {
-            subtree_stack: [[0; 8]; 53],
-            num_subtrees: 0,
             chunk_state: ChunkState::new(key, 0, flags),
             key: *key,
+            subtree_stack: [[0; 8]; 53],
+            num_subtrees: 0,
         }
     }
 
