@@ -278,19 +278,19 @@ impl Hasher {
         }
     }
 
-    /// Construct a new Hasher for the default **hash** mode.
+    /// Construct a new `Hasher` for the default **hash** mode.
     pub fn new() -> Self {
         Self::new_internal(&IV, 0)
     }
 
-    /// Construct a new Hasher for the **keyed_hash** mode.
+    /// Construct a new `Hasher` for the **keyed_hash** mode.
     pub fn new_keyed(key: &[u8; KEY_LEN]) -> Self {
         let mut key_words = [0; 8];
         words_from_litte_endian_bytes(key, &mut key_words);
         Self::new_internal(&key_words, KEYED_HASH)
     }
 
-    /// Construct a new Hasher for the **derive_key** mode.
+    /// Construct a new `Hasher` for the **derive_key** mode.
     pub fn new_derive_key(key: &[u8; KEY_LEN]) -> Self {
         let mut key_words = [0; 8];
         words_from_litte_endian_bytes(key, &mut key_words);
@@ -348,6 +348,13 @@ impl Hasher {
         }
     }
 
+    /// Finalize the hash and return the default 32-byte output.
+    pub fn finalize(&self) -> [u8; OUT_LEN] {
+        let mut bytes = [0; OUT_LEN];
+        self.finalize_extended(&mut bytes);
+        bytes
+    }
+
     /// Finalize the hash and write any number of output bytes.
     pub fn finalize_extended(&self, out_slice: &mut [u8]) {
         // If the subtree stack is empty, then the current chunk is the root.
@@ -375,12 +382,5 @@ impl Hasher {
             right_child = output.chaining_value();
             subtrees_remaining -= 1;
         }
-    }
-
-    /// Finalize the hash and return a 32-byte output.
-    pub fn finalize(&self) -> [u8; OUT_LEN] {
-        let mut bytes = [0; OUT_LEN];
-        self.finalize_extended(&mut bytes);
-        bytes
     }
 }
