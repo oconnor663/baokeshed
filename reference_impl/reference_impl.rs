@@ -39,8 +39,15 @@ fn little_endian_bytes_from_words(words: &[u32], bytes: &mut [u8]) {
 }
 
 // The mixing function, G, which mixes either a column or a diagonal.
-fn g(state: &mut [u32; 16], indices: [usize; 4], mx: u32, my: u32) {
-    let [a, b, c, d] = indices;
+fn g(
+    state: &mut [u32; 16],
+    a: usize,
+    b: usize,
+    c: usize,
+    d: usize,
+    mx: u32,
+    my: u32,
+) {
     state[a] = state[a].wrapping_add(state[b]).wrapping_add(mx);
     state[d] = (state[d] ^ state[a]).rotate_right(16);
     state[c] = state[c].wrapping_add(state[d]);
@@ -53,15 +60,15 @@ fn g(state: &mut [u32; 16], indices: [usize; 4], mx: u32, my: u32) {
 
 fn round(state: &mut [u32; 16], m: &[u32; 16], schedule: &[usize; 16]) {
     // Mix the columns.
-    g(state, [0, 4, 8, 12], m[schedule[0]], m[schedule[1]]);
-    g(state, [1, 5, 9, 13], m[schedule[2]], m[schedule[3]]);
-    g(state, [2, 6, 10, 14], m[schedule[4]], m[schedule[5]]);
-    g(state, [3, 7, 11, 15], m[schedule[6]], m[schedule[7]]);
+    g(state, 0, 4, 8, 12, m[schedule[0]], m[schedule[1]]);
+    g(state, 1, 5, 9, 13, m[schedule[2]], m[schedule[3]]);
+    g(state, 2, 6, 10, 14, m[schedule[4]], m[schedule[5]]);
+    g(state, 3, 7, 11, 15, m[schedule[6]], m[schedule[7]]);
     // Mix the diagonals.
-    g(state, [0, 5, 10, 15], m[schedule[8]], m[schedule[9]]);
-    g(state, [1, 6, 11, 12], m[schedule[10]], m[schedule[11]]);
-    g(state, [2, 7, 8, 13], m[schedule[12]], m[schedule[13]]);
-    g(state, [3, 4, 9, 14], m[schedule[14]], m[schedule[15]]);
+    g(state, 0, 5, 10, 15, m[schedule[8]], m[schedule[9]]);
+    g(state, 1, 6, 11, 12, m[schedule[10]], m[schedule[11]]);
+    g(state, 2, 7, 8, 13, m[schedule[12]], m[schedule[13]]);
+    g(state, 3, 4, 9, 14, m[schedule[14]], m[schedule[15]]);
 }
 
 fn compress_inner(
