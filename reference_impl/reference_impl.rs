@@ -4,12 +4,12 @@ const BLOCK_LEN: usize = 64;
 const CHUNK_LEN: usize = 2048;
 const ROUNDS: usize = 7;
 
-const CHUNK_START: u8 = 1 << 0;
-const CHUNK_END: u8 = 1 << 1;
-const PARENT: u8 = 1 << 2;
-const ROOT: u8 = 1 << 3;
-const KEYED_HASH: u8 = 1 << 4;
-const DERIVE_KEY: u8 = 1 << 5;
+const CHUNK_START: u32 = 1 << 0;
+const CHUNK_END: u32 = 1 << 1;
+const PARENT: u32 = 1 << 2;
+const ROOT: u32 = 1 << 3;
+const KEYED_HASH: u32 = 1 << 4;
+const DERIVE_KEY: u32 = 1 << 5;
 
 const IV: [u32; 8] = [
     0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A, 0x510E527F, 0x9B05688C,
@@ -75,8 +75,8 @@ fn compress_inner(
     chaining_value: &[u32; 8],
     block_words: &[u32; 16],
     offset: u64,
-    block_len: u8,
-    flags: u8,
+    block_len: u32,
+    flags: u32,
 ) -> [u32; 16] {
     let mut state = [
         chaining_value[0],
@@ -93,8 +93,8 @@ fn compress_inner(
         IV[3],
         IV[4] ^ (offset as u32),
         IV[5] ^ ((offset >> 32) as u32),
-        IV[6] ^ block_len as u32,
-        IV[7] ^ flags as u32,
+        IV[6] ^ block_len,
+        IV[7] ^ flags,
     ];
     for r in 0..ROUNDS {
         round(&mut state, &block_words, &MSG_SCHEDULE[r]);
@@ -107,8 +107,8 @@ fn compress(
     chaining_value: &mut [u32; 8],
     block_words: &[u32; 16],
     offset: u64,
-    block_len: u8,
-    flags: u8,
+    block_len: u32,
+    flags: u32,
 ) {
     let state =
         compress_inner(chaining_value, block_words, offset, block_len, flags);
@@ -124,8 +124,8 @@ fn compress_extended(
     chaining_value: &[u32; 8],
     block_words: &[u32; 16],
     offset: u64,
-    block_len: u8,
-    flags: u8,
+    block_len: u32,
+    flags: u32,
 ) -> [u32; 16] {
     let mut state =
         compress_inner(chaining_value, block_words, offset, block_len, flags);
@@ -142,8 +142,8 @@ struct Output {
     input_chaining_value: [u32; 8],
     block_words: [u32; 16],
     offset: u64,
-    block_len: u8,
-    flags: u8,
+    block_len: u32,
+    flags: u32,
 }
 
 impl Output {
@@ -181,11 +181,11 @@ struct ChunkState {
     block: [u8; BLOCK_LEN],
     block_len: u8,
     blocks_compressed: u8,
-    flags: u8,
+    flags: u32,
 }
 
 impl ChunkState {
-    fn new(key: &[u32; 8], offset: u64, flags: u8) -> Self {
+    fn new(key: &[u32; 8], offset: u64, flags: u32) -> Self {
         Self {
             chaining_value: *key,
             offset,
@@ -200,7 +200,7 @@ impl ChunkState {
         BLOCK_LEN * self.blocks_compressed as usize + self.block_len as usize
     }
 
-    fn start_flag(&self) -> u8 {
+    fn start_flag(&self) -> u32 {
         if self.blocks_compressed == 0 {
             CHUNK_START
         } else {
@@ -218,8 +218,8 @@ impl ChunkState {
                     &mut self.chaining_value,
                     &block_words,
                     self.offset,
-                    BLOCK_LEN as u8,
-                    block_flags,
+                    BLOCK_LEN as u32,
+                    block_flags as u32,
                 );
                 self.blocks_compressed += 1;
                 self.block = [0; BLOCK_LEN];
@@ -242,7 +242,7 @@ impl ChunkState {
         Output {
             input_chaining_value: self.chaining_value,
             block_words,
-            block_len: self.block_len,
+            block_len: self.block_len as u32,
             offset: self.offset,
             flags: block_flags,
         }
@@ -253,7 +253,7 @@ fn parent_output(
     left_child_cv: &[u32; 8],
     right_child_cv: &[u32; 8],
     key: &[u32; 8],
-    flags: u8,
+    flags: u32,
 ) -> Output {
     let mut block_words = [0; 16];
     block_words[..8].copy_from_slice(left_child_cv);
@@ -261,8 +261,8 @@ fn parent_output(
     Output {
         input_chaining_value: *key,
         block_words,
-        offset: 0,                  // Always 0 for parent nodes.
-        block_len: BLOCK_LEN as u8, // Always BLOCK_LEN (64) for parent nodes.
+        offset: 0,                   // Always 0 for parent nodes.
+        block_len: BLOCK_LEN as u32, // Always BLOCK_LEN (64) for parent nodes.
         flags: PARENT | flags,
     }
 }
@@ -276,7 +276,7 @@ pub struct Hasher {
 }
 
 impl Hasher {
-    fn new_internal(key: &[u32; 8], flags: u8) -> Self {
+    fn new_internal(key: &[u32; 8], flags: u32) -> Self {
         Self {
             chunk_state: ChunkState::new(key, 0, flags),
             key: *key,
