@@ -677,7 +677,7 @@ fn bench_hasher_03_block_c(b: &mut Bencher) {
 }
 
 #[bench]
-fn bench_reference_01_long_c(b: &mut Bencher) {
+fn bench_reference_01_long(b: &mut Bencher) {
     let mut input = RandomInput::new(b, LONG);
     b.iter(|| {
         let mut hasher = reference_impl::Hasher::new();
@@ -687,7 +687,7 @@ fn bench_reference_01_long_c(b: &mut Bencher) {
 }
 
 #[bench]
-fn bench_reference_02_chunk_c(b: &mut Bencher) {
+fn bench_reference_02_chunk(b: &mut Bencher) {
     let mut input = RandomInput::new(b, CHUNK_LEN_32);
     b.iter(|| {
         let mut hasher = reference_impl::Hasher::new();
@@ -697,7 +697,7 @@ fn bench_reference_02_chunk_c(b: &mut Bencher) {
 }
 
 #[bench]
-fn bench_reference_03_block_c(b: &mut Bencher) {
+fn bench_reference_03_block(b: &mut Bencher) {
     let mut r = RandomInput::new(b, BLOCK_LEN_32);
     let input = r.get();
     b.iter(|| {
