@@ -89,8 +89,7 @@ void baokeshed64_compress_avx2(uint64_t state[4],
   __m256i a = loadu((uint8_t *)state);
   __m256i b = loadu((uint8_t *)&IV[4]);
   __m256i c = loadu((uint8_t *)&IV[0]);
-  __m256i flags_vec = set4(offset, 0, (uint64_t)block_len, (uint64_t)flags);
-  __m256i d = xorv(loadu((uint8_t *)&IV[4]), flags_vec);
+  __m256i d = set4(offset, IV[5], (uint64_t)block_len, (uint64_t)flags);
 
   __m256i m0 = _mm256_broadcastsi128_si256(
       _mm_loadu_si128((__m128i const *)&block[0 * 16]));
@@ -461,22 +460,10 @@ void baokeshed64_hash4_avx2(const uint8_t *const *inputs, size_t blocks,
     transpose_msg_vecs(inputs, block * BLOCK_LEN, msg_vecs);
 
     __m256i v[16] = {
-        h_vecs[0],
-        h_vecs[1],
-        h_vecs[2],
-        h_vecs[3],
-        set1(IV[4]),
-        set1(IV[5]),
-        set1(IV[6]),
-        set1(IV[7]),
-        set1(IV[0]),
-        set1(IV[1]),
-        set1(IV[2]),
-        set1(IV[3]),
-        xorv(set1(IV[4]), offset_vec),
-        set1(IV[5]),
-        xorv(set1(IV[6]), block_len_vec),
-        xorv(set1(IV[7]), block_flags_vec),
+        h_vecs[0],   h_vecs[1],   h_vecs[2],     h_vecs[3],
+        set1(IV[4]), set1(IV[5]), set1(IV[6]),   set1(IV[7]),
+        set1(IV[0]), set1(IV[1]), set1(IV[2]),   set1(IV[3]),
+        offset_vec,  set1(IV[5]), block_len_vec, block_flags_vec,
     };
     round_fn(v, msg_vecs, 0);
     round_fn(v, msg_vecs, 1);

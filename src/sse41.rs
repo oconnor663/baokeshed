@@ -134,10 +134,10 @@ unsafe fn compress_inner(
     let row2 = &mut loadu(cv.as_ptr().add(4) as _);
     let row3 = &mut set4(IV[0], IV[1], IV[2], IV[3]);
     let row4 = &mut set4(
-        IV[4] ^ offset_low(offset),
-        IV[5] ^ offset_high(offset),
-        IV[6] ^ block_len as Word,
-        IV[7] ^ flags as Word,
+        offset_low(offset),
+        offset_high(offset),
+        block_len as Word,
+        flags as Word,
     );
 
     let m0 = loadu(block.as_ptr().add(0 * WORD_BYTES * DEGREE));
@@ -570,10 +570,10 @@ pub unsafe fn hash4(
             set1(IV[1]),
             set1(IV[2]),
             set1(IV[3]),
-            xor(set1(IV[4]), offset_low_vec),
-            xor(set1(IV[5]), offset_high_vec),
-            xor(set1(IV[6]), block_len_vec),
-            xor(set1(IV[7]), block_flags_vec),
+            offset_low_vec,
+            offset_high_vec,
+            block_len_vec,
+            block_flags_vec,
         ];
         round(&mut v, &msg_vecs, 0);
         round(&mut v, &msg_vecs, 1);

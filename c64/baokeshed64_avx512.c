@@ -123,8 +123,7 @@ void baokeshed64_compress_avx512(uint64_t state[4],
   __m256i a = loadu_256((uint8_t *)state);
   __m256i b = loadu_256((uint8_t *)&IV[4]);
   __m256i c = loadu_256((uint8_t *)&IV[0]);
-  __m256i flags_vec = set4(offset, 0, (uint64_t)block_len, (uint64_t)flags);
-  __m256i d = xor_256(loadu_256((uint8_t *)&IV[4]), flags_vec);
+  __m256i d = set4(offset, IV[5], (uint64_t)block_len, (uint64_t)flags);
 
   __m256i m0 = _mm256_broadcastsi128_si256(
       _mm_loadu_si128((__m128i const *)&block[0 * 16]));
@@ -499,22 +498,10 @@ void baokeshed64_hash2_avx512(const uint8_t *const *inputs, size_t blocks,
     transpose_msg_vecs2(inputs, block * BLOCK_LEN, msg_vecs);
 
     __m128i v[16] = {
-        h_vecs[0],
-        h_vecs[1],
-        h_vecs[2],
-        h_vecs[3],
-        set1_128(IV[4]),
-        set1_128(IV[5]),
-        set1_128(IV[6]),
-        set1_128(IV[7]),
-        set1_128(IV[0]),
-        set1_128(IV[1]),
-        set1_128(IV[2]),
-        set1_128(IV[3]),
-        xor_128(set1_128(IV[4]), offset_vec),
-        set1_128(IV[5]),
-        xor_128(set1_128(IV[6]), block_len_vec),
-        xor_128(set1_128(IV[7]), block_flags_vec),
+        h_vecs[0],       h_vecs[1],       h_vecs[2],       h_vecs[3],
+        set1_128(IV[4]), set1_128(IV[5]), set1_128(IV[6]), set1_128(IV[7]),
+        set1_128(IV[0]), set1_128(IV[1]), set1_128(IV[2]), set1_128(IV[3]),
+        offset_vec,      set1_128(IV[5]), block_len_vec,   block_flags_vec,
     };
     round_fn2(v, msg_vecs, 0);
     round_fn2(v, msg_vecs, 1);
@@ -733,22 +720,10 @@ void baokeshed64_hash4_avx512(const uint8_t *const *inputs, size_t blocks,
     transpose_msg_vecs4(inputs, block * BLOCK_LEN, msg_vecs);
 
     __m256i v[16] = {
-        h_vecs[0],
-        h_vecs[1],
-        h_vecs[2],
-        h_vecs[3],
-        set1_256(IV[4]),
-        set1_256(IV[5]),
-        set1_256(IV[6]),
-        set1_256(IV[7]),
-        set1_256(IV[0]),
-        set1_256(IV[1]),
-        set1_256(IV[2]),
-        set1_256(IV[3]),
-        xor_256(set1_256(IV[4]), offset_vec),
-        set1_256(IV[5]),
-        xor_256(set1_256(IV[6]), block_len_vec),
-        xor_256(set1_256(IV[7]), block_flags_vec),
+        h_vecs[0],       h_vecs[1],       h_vecs[2],       h_vecs[3],
+        set1_256(IV[4]), set1_256(IV[5]), set1_256(IV[6]), set1_256(IV[7]),
+        set1_256(IV[0]), set1_256(IV[1]), set1_256(IV[2]), set1_256(IV[3]),
+        offset_vec,      set1_256(IV[5]), block_len_vec,   block_flags_vec,
     };
     round_fn4(v, msg_vecs, 0);
     round_fn4(v, msg_vecs, 1);
@@ -996,22 +971,10 @@ void baokeshed64_hash8_avx512(const uint8_t *const *inputs, size_t blocks,
     transpose_msg_vecs8(inputs, block * BLOCK_LEN, msg_vecs);
 
     __m512i v[16] = {
-        h_vecs[0],
-        h_vecs[1],
-        h_vecs[2],
-        h_vecs[3],
-        set1_512(IV[4]),
-        set1_512(IV[5]),
-        set1_512(IV[6]),
-        set1_512(IV[7]),
-        set1_512(IV[0]),
-        set1_512(IV[1]),
-        set1_512(IV[2]),
-        set1_512(IV[3]),
-        xor_512(set1_512(IV[4]), offset_vec),
-        set1_512(IV[5]),
-        xor_512(set1_512(IV[6]), block_len_vec),
-        xor_512(set1_512(IV[7]), block_flags_vec),
+        h_vecs[0],       h_vecs[1],       h_vecs[2],       h_vecs[3],
+        set1_512(IV[4]), set1_512(IV[5]), set1_512(IV[6]), set1_512(IV[7]),
+        set1_512(IV[0]), set1_512(IV[1]), set1_512(IV[2]), set1_512(IV[3]),
+        offset_vec,      set1_512(IV[5]), block_len_vec,   block_flags_vec,
     };
     round_fn8(v, msg_vecs, 0);
     round_fn8(v, msg_vecs, 1);

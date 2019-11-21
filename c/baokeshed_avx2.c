@@ -260,22 +260,10 @@ void hash8_avx2(const uint8_t *const *inputs, size_t blocks,
     transpose_msg_vecs(inputs, block * BLOCK_LEN, msg_vecs);
 
     __m256i v[16] = {
-        h_vecs[0],
-        h_vecs[1],
-        h_vecs[2],
-        h_vecs[3],
-        h_vecs[4],
-        h_vecs[5],
-        h_vecs[6],
-        h_vecs[7],
-        set1(IV[0]),
-        set1(IV[1]),
-        set1(IV[2]),
-        set1(IV[3]),
-        xorv(set1(IV[4]), offset_low_vec),
-        xorv(set1(IV[5]), offset_high_vec),
-        xorv(set1(IV[6]), block_len_vec),
-        xorv(set1(IV[7]), block_flags_vec),
+        h_vecs[0],      h_vecs[1],       h_vecs[2],     h_vecs[3],
+        h_vecs[4],      h_vecs[5],       h_vecs[6],     h_vecs[7],
+        set1(IV[0]),    set1(IV[1]),     set1(IV[2]),   set1(IV[3]),
+        offset_low_vec, offset_high_vec, block_len_vec, block_flags_vec,
     };
     round_fn(v, msg_vecs, 0);
     round_fn(v, msg_vecs, 1);

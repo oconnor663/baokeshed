@@ -114,8 +114,8 @@ void compress_avx512(uint32_t state[8], const uint8_t block[BLOCK_LEN],
   __m128i row1 = loadu_128((uint8_t *)&state[0]);
   __m128i row2 = loadu_128((uint8_t *)&state[4]);
   __m128i row3 = set4(IV[0], IV[1], IV[2], IV[3]);
-  __m128i row4 = set4(IV[4] ^ offset_low(offset), IV[5] ^ offset_high(offset),
-                      IV[6] ^ (uint32_t)block_len, IV[7] ^ (uint32_t)flags);
+  __m128i row4 = set4(offset_low(offset), offset_high(offset),
+                      (uint32_t)block_len, (uint32_t)flags);
 
   __m128i m0 = loadu_128(&block[sizeof(__m128i) * 0]);
   __m128i m1 = loadu_128(&block[sizeof(__m128i) * 1]);
@@ -479,22 +479,10 @@ void hash4_avx512(const uint8_t *const *inputs, size_t blocks,
     transpose_msg_vecs4(inputs, block * BLOCK_LEN, msg_vecs);
 
     __m128i v[16] = {
-        h_vecs[0],
-        h_vecs[1],
-        h_vecs[2],
-        h_vecs[3],
-        h_vecs[4],
-        h_vecs[5],
-        h_vecs[6],
-        h_vecs[7],
-        set1_128(IV[0]),
-        set1_128(IV[1]),
-        set1_128(IV[2]),
-        set1_128(IV[3]),
-        xor_128(set1_128(IV[4]), offset_low_vec),
-        xor_128(set1_128(IV[5]), offset_high_vec),
-        xor_128(set1_128(IV[6]), block_len_vec),
-        xor_128(set1_128(IV[7]), block_flags_vec),
+        h_vecs[0],       h_vecs[1],       h_vecs[2],       h_vecs[3],
+        h_vecs[4],       h_vecs[5],       h_vecs[6],       h_vecs[7],
+        set1_128(IV[0]), set1_128(IV[1]), set1_128(IV[2]), set1_128(IV[3]),
+        offset_low_vec,  offset_high_vec, block_len_vec,   block_flags_vec,
     };
     round_fn4(v, msg_vecs, 0);
     round_fn4(v, msg_vecs, 1);
@@ -738,22 +726,10 @@ void hash8_avx512(const uint8_t *const *inputs, size_t blocks,
     transpose_msg_vecs8(inputs, block * BLOCK_LEN, msg_vecs);
 
     __m256i v[16] = {
-        h_vecs[0],
-        h_vecs[1],
-        h_vecs[2],
-        h_vecs[3],
-        h_vecs[4],
-        h_vecs[5],
-        h_vecs[6],
-        h_vecs[7],
-        set1_256(IV[0]),
-        set1_256(IV[1]),
-        set1_256(IV[2]),
-        set1_256(IV[3]),
-        xor_256(set1_256(IV[4]), offset_low_vec),
-        xor_256(set1_256(IV[5]), offset_high_vec),
-        xor_256(set1_256(IV[6]), block_len_vec),
-        xor_256(set1_256(IV[7]), block_flags_vec),
+        h_vecs[0],       h_vecs[1],       h_vecs[2],       h_vecs[3],
+        h_vecs[4],       h_vecs[5],       h_vecs[6],       h_vecs[7],
+        set1_256(IV[0]), set1_256(IV[1]), set1_256(IV[2]), set1_256(IV[3]),
+        offset_low_vec,  offset_high_vec, block_len_vec,   block_flags_vec,
     };
     round_fn8(v, msg_vecs, 0);
     round_fn8(v, msg_vecs, 1);
@@ -1061,22 +1037,10 @@ void hash16_avx512(const uint8_t *const *inputs, size_t blocks,
     transpose_msg_vecs16(inputs, block * BLOCK_LEN, msg_vecs);
 
     __m512i v[16] = {
-        h_vecs[0],
-        h_vecs[1],
-        h_vecs[2],
-        h_vecs[3],
-        h_vecs[4],
-        h_vecs[5],
-        h_vecs[6],
-        h_vecs[7],
-        set1_512(IV[0]),
-        set1_512(IV[1]),
-        set1_512(IV[2]),
-        set1_512(IV[3]),
-        xor_512(set1_512(IV[4]), offset_low_vec),
-        xor_512(set1_512(IV[5]), offset_high_vec),
-        xor_512(set1_512(IV[6]), block_len_vec),
-        xor_512(set1_512(IV[7]), block_flags_vec),
+        h_vecs[0],       h_vecs[1],       h_vecs[2],       h_vecs[3],
+        h_vecs[4],       h_vecs[5],       h_vecs[6],       h_vecs[7],
+        set1_512(IV[0]), set1_512(IV[1]), set1_512(IV[2]), set1_512(IV[3]),
+        offset_low_vec,  offset_high_vec, block_len_vec,   block_flags_vec,
     };
     round_fn16(v, msg_vecs, 0);
     round_fn16(v, msg_vecs, 1);

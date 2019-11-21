@@ -105,10 +105,10 @@ def compress_inner(cv, block, block_len, offset, flags):
         IV[1],
         IV[2],
         IV[3],
-        IV[4] ^ offset_low(offset),
-        IV[5] ^ offset_high(offset),
-        IV[6] ^ block_len,
-        IV[7] ^ flags,
+        offset_low(offset),
+        offset_high(offset),
+        block_len,
+        flags,
     ]
     for round_number in range(7):
         round(state, block_words, MSG_SCHEDULE[round_number])

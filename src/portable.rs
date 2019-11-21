@@ -76,10 +76,10 @@ fn compress_inner(
         IV[1],
         IV[2],
         IV[3],
-        IV[4] ^ offset_low(offset),
-        IV[5] ^ offset_high(offset),
-        IV[6] ^ block_len as Word,
-        IV[7] ^ flags as Word,
+        offset_low(offset),
+        offset_high(offset),
+        block_len as Word,
+        flags as Word,
     ];
 
     round(&mut state, &block_words, 0);

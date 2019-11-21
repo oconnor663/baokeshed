@@ -38,22 +38,10 @@ void baokeshed64_compress_portable(uint64_t state[4],
   load_msg_words(block, block_words); // This handles big-endianness.
 
   uint64_t full_state[16] = {
-      state[0],
-      state[1],
-      state[2],
-      state[3],
-      IV[4],
-      IV[5],
-      IV[6],
-      IV[7],
-      IV[0],
-      IV[1],
-      IV[2],
-      IV[3],
-      IV[4] ^ offset,
-      IV[5],
-      IV[6] ^ (uint64_t)block_len,
-      IV[7] ^ (uint64_t)flags,
+      state[0],        state[1], state[2], state[3], IV[4],
+      IV[5],           IV[6],    IV[7],    IV[0],    IV[1],
+      IV[2],           IV[3],    offset,   IV[5],    (uint64_t)block_len,
+      (uint64_t)flags,
   };
 
   round_fn(full_state, block_words, 0);

@@ -239,22 +239,10 @@ void baokeshed64_hash2_neon(const uint8_t *const *inputs, size_t blocks,
     transpose_msg_vecs2(inputs, block * BLOCK_LEN, msg_vecs);
 
     uint64x2_t v[16] = {
-        h_vecs[0],
-        h_vecs[1],
-        h_vecs[2],
-        h_vecs[3],
-        set1_128(IV[4]),
-        set1_128(IV[5]),
-        set1_128(IV[6]),
-        set1_128(IV[7]),
-        set1_128(IV[0]),
-        set1_128(IV[1]),
-        set1_128(IV[2]),
-        set1_128(IV[3]),
-        xor_128(set1_128(IV[4]), offset_vec),
-        set1_128(IV[5]),
-        xor_128(set1_128(IV[6]), block_len_vec),
-        xor_128(set1_128(IV[7]), block_flags_vec),
+        h_vecs[0],       h_vecs[1],       h_vecs[2],       h_vecs[3],
+        set1_128(IV[4]), set1_128(IV[5]), set1_128(IV[6]), set1_128(IV[7]),
+        set1_128(IV[0]), set1_128(IV[1]), set1_128(IV[2]), set1_128(IV[3]),
+        offset_vec,      set1_128(IV[5]), block_len_vec,   block_flags_vec,
     };
     round_fn2(v, msg_vecs, 0);
     round_fn2(v, msg_vecs, 1);

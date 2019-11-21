@@ -345,10 +345,10 @@ pub unsafe fn hash8(
             set1(IV[1]),
             set1(IV[2]),
             set1(IV[3]),
-            xor(set1(IV[4]), offset_low_vec),
-            xor(set1(IV[5]), offset_high_vec),
-            xor(set1(IV[6]), block_len_vec),
-            xor(set1(IV[7]), block_flags_vec),
+            offset_low_vec,
+            offset_high_vec,
+            block_len_vec,
+            block_flags_vec,
         ];
         round(&mut v, &msg_vecs, 0);
         round(&mut v, &msg_vecs, 1);

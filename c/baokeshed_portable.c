@@ -48,10 +48,10 @@ void compress_portable(uint32_t state[8], const uint8_t block[BLOCK_LEN],
       IV[1],
       IV[2],
       IV[3],
-      IV[4] ^ offset_low(offset),
-      IV[5] ^ offset_high(offset),
-      IV[6] ^ (uint32_t)block_len,
-      IV[7] ^ (uint32_t)flags,
+      offset_low(offset),
+      offset_high(offset),
+      (uint32_t)block_len,
+      (uint32_t)flags,
   };
 
   round_fn(&full_state[0], &block_words[0], 0);
