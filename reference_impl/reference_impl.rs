@@ -313,15 +313,9 @@ impl Hasher {
 
     /// Finalize the hash and write any number of output bytes.
     pub fn finalize(&self, out_slice: &mut [u8]) {
-        // If the subtree stack is empty, then the current chunk is the root.
-        if self.subtree_stack_len == 0 {
-            self.chunk_state.output().root_output_bytes(out_slice);
-            return;
-        }
-
-        // Otherwise, starting with the Output from the current chunk, compute
-        // all the parent chaining values along the right edge of the tree,
-        // until we have the root Output.
+        // Starting with the Output from the current chunk, compute all the
+        // parent chaining values along the right edge of the tree, until we
+        // have the root Output.
         let mut output = self.chunk_state.output();
         let mut parent_nodes_remaining = self.subtree_stack_len as usize;
         while parent_nodes_remaining > 0 {
