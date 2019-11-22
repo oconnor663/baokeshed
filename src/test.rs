@@ -388,6 +388,12 @@ fn test_regular_xof_match() {
     );
 }
 
+fn finalize_default_length(hasher: &reference_impl::Hasher) -> [u8; 32] {
+    let mut out = [0; 32];
+    hasher.finalize(&mut out);
+    out
+}
+
 #[test]
 fn test_lib_against_reference_impl() {
     let mut key = [0; KEY_LEN];
@@ -401,7 +407,7 @@ fn test_lib_against_reference_impl() {
         // all at once
         let mut hasher = reference_impl::Hasher::new();
         hasher.update(&input);
-        let output = hasher.finalize();
+        let output = finalize_default_length(&hasher);
         assert_eq!(hash(&input), output);
 
         // one byte at a time
@@ -409,26 +415,26 @@ fn test_lib_against_reference_impl() {
         for &byte in &input {
             hasher.update(&[byte]);
         }
-        let output = hasher.finalize();
+        let output = finalize_default_length(&hasher);
         assert_eq!(hash(&input), output);
 
         // keyed
         let mut hasher = reference_impl::Hasher::new_keyed(&key);
         hasher.update(&input);
-        let output = hasher.finalize();
+        let output = finalize_default_length(&hasher);
         assert_eq!(keyed_hash(&key, &input), output);
 
         // derive key
         let mut hasher = reference_impl::Hasher::new_derive_key(&key);
         hasher.update(&input);
-        let output = hasher.finalize();
+        let output = finalize_default_length(&hasher);
         assert_eq!(derive_key(&key, &input), output);
 
         // extended output
         let mut hasher = reference_impl::Hasher::new_keyed(&key);
         hasher.update(&input);
         let mut output = [0; 300];
-        hasher.finalize_extended(&mut output);
+        hasher.finalize(&mut output);
         let mut expected_output = Vec::new();
         let mut xof = keyed_hash_xof(&key, &input);
         while expected_output.len() < output.len() {

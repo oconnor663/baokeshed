@@ -679,20 +679,22 @@ fn bench_hasher_03_block_c(b: &mut Bencher) {
 #[bench]
 fn bench_reference_01_long(b: &mut Bencher) {
     let mut input = RandomInput::new(b, LONG);
+    let mut output = [0; 32];
     b.iter(|| {
         let mut hasher = reference_impl::Hasher::new();
         hasher.update(input.get());
-        hasher.finalize()
+        hasher.finalize(&mut output);
     });
 }
 
 #[bench]
 fn bench_reference_02_chunk(b: &mut Bencher) {
     let mut input = RandomInput::new(b, CHUNK_LEN_32);
+    let mut output = [0; 32];
     b.iter(|| {
         let mut hasher = reference_impl::Hasher::new();
         hasher.update(input.get());
-        hasher.finalize()
+        hasher.finalize(&mut output);
     });
 }
 
@@ -700,10 +702,11 @@ fn bench_reference_02_chunk(b: &mut Bencher) {
 fn bench_reference_03_block(b: &mut Bencher) {
     let mut r = RandomInput::new(b, BLOCK_LEN_32);
     let input = r.get();
+    let mut output = [0; 32];
     b.iter(|| {
         let mut hasher = reference_impl::Hasher::new();
         hasher.update(input);
-        hasher.finalize()
+        hasher.finalize(&mut output);
     });
 }
 

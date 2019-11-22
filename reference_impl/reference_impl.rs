@@ -312,15 +312,8 @@ impl Hasher {
         }
     }
 
-    /// Finalize the hash and return the default 32-byte output.
-    pub fn finalize(&self) -> [u8; OUT_LEN] {
-        let mut bytes = [0; OUT_LEN];
-        self.finalize_extended(&mut bytes);
-        bytes
-    }
-
     /// Finalize the hash and write any number of output bytes.
-    pub fn finalize_extended(&self, out_slice: &mut [u8]) {
+    pub fn finalize(&self, out_slice: &mut [u8]) {
         // If the subtree stack is empty, then the current chunk is the root.
         if self.subtree_stack_len == 0 {
             self.chunk_state.output().root_output_bytes(out_slice);
