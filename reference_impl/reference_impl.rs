@@ -12,8 +12,7 @@ const KEYED_HASH: u32 = 1 << 4;
 const DERIVE_KEY: u32 = 1 << 5;
 
 const IV: [u32; 8] = [
-    0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A, 0x510E527F, 0x9B05688C,
-    0x1F83D9AB, 0x5BE0CD19,
+    0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A, 0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19,
 ];
 
 const MSG_SCHEDULE: [[usize; 16]; ROUNDS] = [
@@ -39,15 +38,7 @@ fn little_endian_bytes_from_words(words: &[u32], bytes: &mut [u8]) {
 }
 
 // The mixing function, G, which mixes either a column or a diagonal.
-fn g(
-    state: &mut [u32; 16],
-    a: usize,
-    b: usize,
-    c: usize,
-    d: usize,
-    mx: u32,
-    my: u32,
-) {
+fn g(state: &mut [u32; 16], a: usize, b: usize, c: usize, d: usize, mx: u32, my: u32) {
     state[a] = state[a].wrapping_add(state[b]).wrapping_add(mx);
     state[d] = (state[d] ^ state[a]).rotate_right(16);
     state[c] = state[c].wrapping_add(state[d]);
@@ -110,8 +101,7 @@ fn compress(
     block_len: u32,
     flags: u32,
 ) {
-    let state =
-        compress_inner(chaining_value, block_words, offset, block_len, flags);
+    let state = compress_inner(chaining_value, block_words, offset, block_len, flags);
     for i in 0..8 {
         chaining_value[i] = state[i] ^ state[i + 8];
     }
@@ -127,8 +117,7 @@ fn compress_extended(
     block_len: u32,
     flags: u32,
 ) -> [u32; 16] {
-    let mut state =
-        compress_inner(chaining_value, block_words, offset, block_len, flags);
+    let mut state = compress_inner(chaining_value, block_words, offset, block_len, flags);
     for i in 0..8 {
         state[i] ^= state[i + 8];
         state[i + 8] ^= chaining_value[i];
@@ -228,8 +217,7 @@ impl ChunkState {
 
             let want = BLOCK_LEN - self.block_len as usize;
             let take = core::cmp::min(want, input.len());
-            self.block[self.block_len as usize..][..take]
-                .copy_from_slice(&input[..take]);
+            self.block[self.block_len as usize..][..take].copy_from_slice(&input[..take]);
             self.block_len += take as u8;
             input = &input[take..];
         }
@@ -314,11 +302,7 @@ impl Hasher {
         self.subtree_stack[self.subtree_stack_len as usize]
     }
 
-    fn push_chunk_chaining_value(
-        &mut self,
-        mut cv: [u32; 8],
-        total_bytes: u64,
-    ) {
+    fn push_chunk_chaining_value(&mut self, mut cv: [u32; 8], total_bytes: u64) {
         // The new chunk chaining value might pair with CVs already on the
         // stack to complete some parent nodes. If so, pop each of those CVs
         // off the stack and compute a new parent CV. After compressing as many
@@ -327,13 +311,8 @@ impl Hasher {
         // total number of chunks or (equivalently) input bytes so far.
         let final_stack_len = total_bytes.count_ones() as u8;
         while self.subtree_stack_len >= final_stack_len {
-            cv = parent_output(
-                &self.pop_stack(),
-                &cv,
-                &self.key,
-                self.chunk_state.flags,
-            )
-            .chaining_value();
+            cv = parent_output(&self.pop_stack(), &cv, &self.key, self.chunk_state.flags)
+                .chaining_value();
         }
         self.push_stack(&cv);
     }
@@ -343,14 +322,10 @@ impl Hasher {
         while !input.is_empty() {
             if self.chunk_state.len() == CHUNK_LEN {
                 let chunk_cv = self.chunk_state.output().chaining_value();
-                let new_chunk_offset =
-                    self.chunk_state.offset + CHUNK_LEN as u64;
+                let new_chunk_offset = self.chunk_state.offset + CHUNK_LEN as u64;
                 self.push_chunk_chaining_value(chunk_cv, new_chunk_offset);
-                self.chunk_state = ChunkState::new(
-                    &self.key,
-                    new_chunk_offset,
-                    self.chunk_state.flags,
-                );
+                self.chunk_state =
+                    ChunkState::new(&self.key, new_chunk_offset, self.chunk_state.flags);
             }
 
             let want = CHUNK_LEN - self.chunk_state.len();
