@@ -279,12 +279,12 @@ impl Hasher {
     }
 
     fn push_chunk_chaining_value(&mut self, mut cv: [u32; 8], total_bytes: u64) {
-        // The new chunk chaining value might pair with CVs already on the
-        // stack to complete some parent nodes. If so, pop each of those CVs
-        // off the stack and compute a new parent CV. After compressing as many
-        // parent nodes as possible, push the newest CV onto the stack. The
-        // final height of the stack is the same as the count of 1 bits in the
-        // total number of chunks or (equivalently) input bytes so far.
+        // The new chunk chaining value might complete some subtrees along the
+        // right edge of the growing tree. For each complete subtree, pop its
+        // left child CV off the stack and compress a new parent CV. After as
+        // many parent compressions as possible, push the new CV onto the
+        // stack. The final length of the stack will be the count of 1 bits in
+        // the total number of chunks or (equivalently) input bytes so far.
         let final_stack_len = total_bytes.count_ones() as u8;
         while self.subtree_stack_len >= final_stack_len {
             cv = parent_output(&self.pop_stack(), &cv, &self.key, self.chunk_state.flags)
