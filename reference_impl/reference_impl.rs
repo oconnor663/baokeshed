@@ -73,8 +73,8 @@ fn compress(
         IV[1],
         IV[2],
         IV[3],
-        (offset as u32),
-        ((offset >> 32) as u32),
+        offset as u32,
+        (offset >> 32) as u32,
         block_len,
         flags,
     ];
@@ -280,7 +280,7 @@ impl Hasher {
 
     fn push_chunk_chaining_value(&mut self, mut cv: [u32; 8], total_bytes: u64) {
         // The new chunk chaining value might complete some subtrees along the
-        // right edge of the growing tree. For each complete subtree, pop its
+        // right edge of the growing tree. For each completed subtree, pop its
         // left child CV off the stack and compress a new parent CV. After as
         // many parent compressions as possible, push the new CV onto the
         // stack. The final length of the stack will be the count of 1 bits in
