@@ -1,3 +1,6 @@
+use core::cmp::min;
+use core::convert::TryInto;
+
 const OUT_LEN: usize = 32;
 const KEY_LEN: usize = 32;
 const BLOCK_LEN: usize = 64;
@@ -85,17 +88,13 @@ fn compress(
     state
 }
 
-fn truncate_to_8_words(compression_output: [u32; 16]) -> [u32; 8] {
-    let mut array = [0; 8];
-    array.copy_from_slice(&compression_output[0..8]);
-    array
+fn first_8_words(compression_output: [u32; 16]) -> [u32; 8] {
+    compression_output[0..8].try_into().unwrap()
 }
 
 fn words_from_litte_endian_bytes(bytes: &[u8], words: &mut [u32]) {
     for (bytes_block, word) in bytes.chunks_exact(4).zip(words.iter_mut()) {
-        let mut array = [0; 4];
-        array.copy_from_slice(bytes_block);
-        *word = u32::from_le_bytes(array);
+        *word = u32::from_le_bytes(bytes_block.try_into().unwrap());
     }
 }
 
@@ -118,7 +117,7 @@ struct Output {
 
 impl Output {
     fn chaining_value(&self) -> [u32; 8] {
-        truncate_to_8_words(compress(
+        first_8_words(compress(
             &self.input_chaining_value,
             &self.block_words,
             self.offset,
@@ -181,7 +180,7 @@ impl ChunkState {
             if self.block_len as usize == BLOCK_LEN {
                 let mut block_words = [0; 16];
                 words_from_litte_endian_bytes(&self.block, &mut block_words);
-                self.chaining_value = truncate_to_8_words(compress(
+                self.chaining_value = first_8_words(compress(
                     &self.chaining_value,
                     &block_words,
                     self.offset,
@@ -194,7 +193,7 @@ impl ChunkState {
             }
 
             let want = BLOCK_LEN - self.block_len as usize;
-            let take = core::cmp::min(want, input.len());
+            let take = min(want, input.len());
             self.block[self.block_len as usize..][..take].copy_from_slice(&input[..take]);
             self.block_len += take as u8;
             input = &input[take..];
@@ -306,7 +305,7 @@ impl Hasher {
             }
 
             let want = CHUNK_LEN - self.chunk_state.len();
-            let take = core::cmp::min(want, input.len());
+            let take = min(want, input.len());
             self.chunk_state.update(&input[..take]);
             input = &input[take..];
         }
