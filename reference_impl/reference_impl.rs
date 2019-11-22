@@ -272,7 +272,7 @@ pub struct Hasher {
     chunk_state: ChunkState,
     key: [u32; 8],
     subtree_stack: [[u32; 8]; 53], // Space for 53 subtree chaining values:
-    num_subtrees: u8,              // 2^53 * CHUNK_LEN = 2^64
+    subtree_stack_len: u8,         // 2^53 * CHUNK_LEN = 2^64
 }
 
 impl Hasher {
@@ -281,7 +281,7 @@ impl Hasher {
             chunk_state: ChunkState::new(key, 0, flags),
             key: *key,
             subtree_stack: [[0; 8]; 53],
-            num_subtrees: 0,
+            subtree_stack_len: 0,
         }
     }
 
@@ -304,33 +304,38 @@ impl Hasher {
         Self::new_internal(&key_words, DERIVE_KEY)
     }
 
-    // Pop the top two subtree chaining values off the stack, compress them
-    // into a parent CV, and put that new CV on top of the stack.
-    fn merge_two_subtrees(&mut self) {
-        let left_child = &self.subtree_stack[self.num_subtrees as usize - 2];
-        let right_child = &self.subtree_stack[self.num_subtrees as usize - 1];
-        let parent_hash = parent_output(
-            left_child,
-            right_child,
-            &self.key,
-            self.chunk_state.flags,
-        )
-        .chaining_value();
-        self.subtree_stack[self.num_subtrees as usize - 2] = parent_hash;
-        self.num_subtrees -= 1;
+    fn push_stack(&mut self, cv: &[u32; 8]) {
+        self.subtree_stack[self.subtree_stack_len as usize] = *cv;
+        self.subtree_stack_len += 1;
     }
 
-    fn push_chunk_chaining_value(&mut self, cv: &[u32; 8], total_bytes: u64) {
-        self.subtree_stack[self.num_subtrees as usize] = *cv;
-        self.num_subtrees += 1;
-        // After pushing the new chunk chaining value onto the stack, assemble
-        // and compress as many parent nodes as we can. The number of 1 bits in
-        // the total number of chunks so far is the same as the number of CVs
-        // that should remain in the stack after this is done.
-        let total_chunks = total_bytes / CHUNK_LEN as u64;
-        while self.num_subtrees as usize > total_chunks.count_ones() as usize {
-            self.merge_two_subtrees();
+    fn pop_stack(&mut self) -> [u32; 8] {
+        self.subtree_stack_len -= 1;
+        self.subtree_stack[self.subtree_stack_len as usize]
+    }
+
+    fn push_chunk_chaining_value(
+        &mut self,
+        mut cv: [u32; 8],
+        total_bytes: u64,
+    ) {
+        // The new chunk chaining value might pair with CVs already on the
+        // stack to complete some parent nodes. If so, pop each of those CVs
+        // off the stack and compute a new parent CV. After compressing as many
+        // parent nodes as possible, push the newest CV onto the stack. The
+        // final height of the stack is the same as the count of 1 bits in the
+        // total number of chunks or (equivalently) input bytes so far.
+        let final_stack_len = total_bytes.count_ones() as u8;
+        while self.subtree_stack_len >= final_stack_len {
+            cv = parent_output(
+                &self.pop_stack(),
+                &cv,
+                &self.key,
+                self.chunk_state.flags,
+            )
+            .chaining_value();
         }
+        self.push_stack(&cv);
     }
 
     /// Add input to the hash state. This can be called any number of times.
@@ -340,7 +345,7 @@ impl Hasher {
                 let chunk_cv = self.chunk_state.output().chaining_value();
                 let new_chunk_offset =
                     self.chunk_state.offset + CHUNK_LEN as u64;
-                self.push_chunk_chaining_value(&chunk_cv, new_chunk_offset);
+                self.push_chunk_chaining_value(chunk_cv, new_chunk_offset);
                 self.chunk_state = ChunkState::new(
                     &self.key,
                     new_chunk_offset,
@@ -365,29 +370,25 @@ impl Hasher {
     /// Finalize the hash and write any number of output bytes.
     pub fn finalize_extended(&self, out_slice: &mut [u8]) {
         // If the subtree stack is empty, then the current chunk is the root.
-        if self.num_subtrees == 0 {
+        if self.subtree_stack_len == 0 {
             self.chunk_state.output().root_output(out_slice);
             return;
         }
 
-        // Otherwise, finalize the current chunk, and then merge all the
-        // subtrees along the right edge of the tree.
-        let mut right_child = self.chunk_state.output().chaining_value();
-        let mut subtrees_remaining = self.num_subtrees as usize;
-        loop {
-            let left_child = &self.subtree_stack[subtrees_remaining - 1];
-            let output = parent_output(
-                left_child,
-                &right_child,
+        // Otherwise, starting with the Output from the current chunk, compute
+        // all the parent chaining values along the right edge of the tree,
+        // until we have the root Output.
+        let mut output = self.chunk_state.output();
+        let mut parent_nodes_remaining = self.subtree_stack_len as usize;
+        while parent_nodes_remaining > 0 {
+            parent_nodes_remaining -= 1;
+            output = parent_output(
+                &self.subtree_stack[parent_nodes_remaining],
+                &output.chaining_value(),
                 &self.key,
                 self.chunk_state.flags,
             );
-            if subtrees_remaining == 1 {
-                output.root_output(out_slice);
-                return;
-            }
-            right_child = output.chaining_value();
-            subtrees_remaining -= 1;
         }
+        output.root_output(out_slice);
     }
 }
