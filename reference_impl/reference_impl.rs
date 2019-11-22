@@ -25,18 +25,6 @@ const MSG_SCHEDULE: [[usize; 16]; ROUNDS] = [
     [12, 5, 1, 15, 14, 13, 4, 10, 0, 7, 6, 3, 9, 2, 8, 11],
 ];
 
-fn words_from_litte_endian_bytes(bytes: &[u8], words: &mut [u32]) {
-    for (b, w) in bytes.chunks_exact(4).zip(words.iter_mut()) {
-        *w = u32::from_le_bytes(core::convert::TryInto::try_into(b).unwrap());
-    }
-}
-
-fn little_endian_bytes_from_words(words: &[u32], bytes: &mut [u8]) {
-    for (w, b) in words.iter().zip(bytes.chunks_exact_mut(4)) {
-        b.copy_from_slice(&w.to_le_bytes());
-    }
-}
-
 // The mixing function, G, which mixes either a column or a diagonal.
 fn g(state: &mut [u32; 16], a: usize, b: usize, c: usize, d: usize, mx: u32, my: u32) {
     state[a] = state[a].wrapping_add(state[b]).wrapping_add(mx);
@@ -62,7 +50,7 @@ fn round(state: &mut [u32; 16], m: &[u32; 16], schedule: &[usize; 16]) {
     g(state, 3, 4, 9, 14, m[schedule[14]], m[schedule[15]]);
 }
 
-fn compress_inner(
+fn compress(
     chaining_value: &[u32; 8],
     block_words: &[u32; 16],
     offset: u64,
@@ -90,34 +78,6 @@ fn compress_inner(
     for r in 0..ROUNDS {
         round(&mut state, &block_words, &MSG_SCHEDULE[r]);
     }
-    state
-}
-
-// The standard compression function updates an 8-word chaining value in place.
-fn compress(
-    chaining_value: &mut [u32; 8],
-    block_words: &[u32; 16],
-    offset: u64,
-    block_len: u32,
-    flags: u32,
-) {
-    let state = compress_inner(chaining_value, block_words, offset, block_len, flags);
-    for i in 0..8 {
-        chaining_value[i] = state[i] ^ state[i + 8];
-    }
-}
-
-// The extended compression function returns a new 16-word extended output.
-// Note that the first 8 words of output are the same as with compress().
-// Implementations that do not support extendable output can omit this.
-fn compress_extended(
-    chaining_value: &[u32; 8],
-    block_words: &[u32; 16],
-    offset: u64,
-    block_len: u32,
-    flags: u32,
-) -> [u32; 16] {
-    let mut state = compress_inner(chaining_value, block_words, offset, block_len, flags);
     for i in 0..8 {
         state[i] ^= state[i + 8];
         state[i + 8] ^= chaining_value[i];
@@ -125,8 +85,29 @@ fn compress_extended(
     state
 }
 
-// The output of a chunk or parent node, which could be an 8-word chaining
-// value or any number of root output bytes.
+fn truncate_to_8_words(compression_output: [u32; 16]) -> [u32; 8] {
+    let mut array = [0; 8];
+    array.copy_from_slice(&compression_output[0..8]);
+    array
+}
+
+fn words_from_litte_endian_bytes(bytes: &[u8], words: &mut [u32]) {
+    for (bytes_block, word) in bytes.chunks_exact(4).zip(words.iter_mut()) {
+        let mut array = [0; 4];
+        array.copy_from_slice(bytes_block);
+        *word = u32::from_le_bytes(array);
+    }
+}
+
+fn little_endian_bytes_from_words(words: &[u32], bytes: &mut [u8]) {
+    for (word, bytes_block) in words.iter().zip(bytes.chunks_exact_mut(4)) {
+        bytes_block.copy_from_slice(&word.to_le_bytes());
+    }
+}
+
+// Each chunk or parent node can produce either an 8-word chaining value or, by
+// setting the ROOT flag, any number of final output bytes. The Output struct
+// captures the state just prior to choosing between those two possibilities.
 struct Output {
     input_chaining_value: [u32; 8],
     block_words: [u32; 16],
@@ -137,21 +118,19 @@ struct Output {
 
 impl Output {
     fn chaining_value(&self) -> [u32; 8] {
-        let mut cv = self.input_chaining_value;
-        compress(
-            &mut cv,
+        truncate_to_8_words(compress(
+            &self.input_chaining_value,
             &self.block_words,
             self.offset,
             self.block_len,
             self.flags,
-        );
-        cv
+        ))
     }
 
-    fn root_output(&self, out_slice: &mut [u8]) {
+    fn root_output_bytes(&self, out_slice: &mut [u8]) {
         let mut offset = self.offset;
         for out_block in out_slice.chunks_mut(2 * OUT_LEN) {
-            let words = compress_extended(
+            let words = compress(
                 &self.input_chaining_value,
                 &self.block_words,
                 offset,
@@ -202,14 +181,13 @@ impl ChunkState {
             if self.block_len as usize == BLOCK_LEN {
                 let mut block_words = [0; 16];
                 words_from_litte_endian_bytes(&self.block, &mut block_words);
-                let block_flags = self.start_flag() | self.flags;
-                compress(
-                    &mut self.chaining_value,
+                self.chaining_value = truncate_to_8_words(compress(
+                    &self.chaining_value,
                     &block_words,
                     self.offset,
                     BLOCK_LEN as u32,
-                    block_flags as u32,
-                );
+                    self.flags | self.start_flag(),
+                ));
                 self.blocks_compressed += 1;
                 self.block = [0; BLOCK_LEN];
                 self.block_len = 0;
@@ -226,13 +204,12 @@ impl ChunkState {
     fn output(&self) -> Output {
         let mut block_words = [0; 16];
         words_from_litte_endian_bytes(&self.block, &mut block_words);
-        let block_flags = self.flags | self.start_flag() | CHUNK_END;
         Output {
             input_chaining_value: self.chaining_value,
             block_words,
             block_len: self.block_len as u32,
             offset: self.offset,
-            flags: block_flags,
+            flags: self.flags | self.start_flag() | CHUNK_END,
         }
     }
 }
@@ -346,7 +323,7 @@ impl Hasher {
     pub fn finalize_extended(&self, out_slice: &mut [u8]) {
         // If the subtree stack is empty, then the current chunk is the root.
         if self.subtree_stack_len == 0 {
-            self.chunk_state.output().root_output(out_slice);
+            self.chunk_state.output().root_output_bytes(out_slice);
             return;
         }
 
@@ -364,6 +341,6 @@ impl Hasher {
                 self.chunk_state.flags,
             );
         }
-        output.root_output(out_slice);
+        output.root_output_bytes(out_slice);
     }
 }
