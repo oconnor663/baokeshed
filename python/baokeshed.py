@@ -38,18 +38,22 @@ KEYED_HASH = 1 << 4
 DERIVE_KEY = 1 << 5
 
 
+def wrapping_add(a, b):
+    return (a + b) & WORD_MAX
+
+
 def rotate_right(x, n):
     return (x >> n | x << (WORD_BITS - n)) & WORD_MAX
 
 
 def g(state, a, b, c, d, x, y):
-    state[a] = (state[a] + state[b] + x) & WORD_MAX
+    state[a] = wrapping_add(state[a], wrapping_add(state[b], x))
     state[d] = rotate_right(state[d] ^ state[a], 16)
-    state[c] = (state[c] + state[d]) & WORD_MAX
+    state[c] = wrapping_add(state[c], state[d])
     state[b] = rotate_right(state[b] ^ state[c], 12)
-    state[a] = (state[a] + state[b] + y) & WORD_MAX
+    state[a] = wrapping_add(state[a], wrapping_add(state[b], y))
     state[d] = rotate_right(state[d] ^ state[a], 8)
-    state[c] = (state[c] + state[d]) & WORD_MAX
+    state[c] = wrapping_add(state[c], state[d])
     state[b] = rotate_right(state[b] ^ state[c], 7)
 
 
@@ -75,22 +79,14 @@ def words_from_bytes(buf):
 
 
 def bytes_from_words(words):
-    buf = bytearray(OUT_LEN)
+    buf = bytearray(len(words) * WORD_BYTES)
     for word_i in range(len(words)):
         buf[WORD_BYTES * word_i:WORD_BYTES * (word_i + 1)] = \
             words[word_i].to_bytes(WORD_BYTES, "little")
     return buf
 
 
-def offset_low(offset):
-    return offset & WORD_MAX
-
-
-def offset_high(offset):
-    return (offset >> WORD_BITS) & WORD_MAX
-
-
-def compress_inner(cv, block, block_len, offset, flags):
+def compress(cv, block, block_len, offset, flags):
     block_words = words_from_bytes(block)
     state = [
         cv[0],
@@ -105,60 +101,22 @@ def compress_inner(cv, block, block_len, offset, flags):
         IV[1],
         IV[2],
         IV[3],
-        offset_low(offset),
-        offset_high(offset),
+        offset & WORD_MAX,
+        (offset >> WORD_BITS) & WORD_MAX,
         block_len,
         flags,
     ]
     for round_number in range(7):
         round(state, block_words, MSG_SCHEDULE[round_number])
+    for i in range(8):
+        state[i] ^= state[i + 8]
+        state[i + 8] ^= cv[i]
     return state
 
 
-# The standard compression function. Used for chaining values in the interior
-# of the tree, and to compute the default OUT_LEN output. This updates the
-# chaining value in place. Note that the output of compress() is a prefix of
-# the output of compress_xof().
-def compress(cv, block, block_len, offset, flags):
-    state = compress_inner(cv, block, block_len, offset, flags)
-    cv[0] = state[0] ^ state[8]
-    cv[1] = state[1] ^ state[9]
-    cv[2] = state[2] ^ state[10]
-    cv[3] = state[3] ^ state[11]
-    cv[4] = state[4] ^ state[12]
-    cv[5] = state[5] ^ state[13]
-    cv[6] = state[6] ^ state[14]
-    cv[7] = state[7] ^ state[15]
-
-
-# The wide compression function. Used to compute XOF output larger than
-# OUT_LEN. This returns output bytes without modifying the chaining value that
-# produced it. Note that the output of compress() is a prefix of the output of
-# compress_xof().
-def compress_xof(cv, block, block_len, offset, flags):
-    state = compress_inner(cv, block, block_len, offset, flags)
-    state[0] ^= state[8]
-    state[1] ^= state[9]
-    state[2] ^= state[10]
-    state[3] ^= state[11]
-    state[4] ^= state[12]
-    state[5] ^= state[13]
-    state[6] ^= state[14]
-    state[7] ^= state[15]
-    state[8] ^= cv[0]
-    state[9] ^= cv[1]
-    state[10] ^= cv[2]
-    state[11] ^= cv[3]
-    state[12] ^= cv[4]
-    state[13] ^= cv[5]
-    state[14] ^= cv[6]
-    state[15] ^= cv[7]
-    return bytes_from_words(state)
-
-
-# The XOF output object. This can provide any number of output bytes. Note that
-# Output objects returned from public functions always set the ROOT flag, but
-# Output objects used internally do not.
+# Each chunk or parent node can produce either an 32-byte chaining value or, by
+# setting the ROOT flag, any number of final output bytes. The Output struct
+# captures the state just prior to choosing between those two possibilities.
 class Output:
     def __init__(self, cv, block, block_len, offset, flags):
         self.cv = cv
@@ -167,48 +125,43 @@ class Output:
         self.offset = offset
         self.flags = flags
 
-    # Return a hash of the default size, OUT_LEN.
-    def to_hash(self):
-        words = self.cv[:]
-        compress(words, self.block, self.block_len, self.offset, self.flags)
-        return bytes_from_words(words)
+    def chaining_value(self):
+        words = compress(self.cv, self.block, self.block_len, self.offset,
+                         self.flags)
+        return bytes_from_words(words[:8])
 
-    # Return any number of output bytes. Note that this interface doesn't
-    # mutate the Output object, so calling it twice will give the same bytes.
-    def to_bytes(self, num_bytes):
-        buf = bytearray(num_bytes)
-        offset = self.offset
-        i = 0
-        while i < num_bytes:
-            output = compress_xof(self.cv, self.block, self.block_len, offset,
-                                  self.flags)
-            take = min(len(output), num_bytes - i)
-            buf[i:i + take] = output[:take]
-            offset += len(output)
-            i += len(output)
+    def root_output_bytes(self, out_len):
+        buf = bytearray(out_len)
+        offset = 0
+        while offset < out_len:
+            words = compress(self.cv, self.block, self.block_len, offset,
+                             self.flags | ROOT)
+            out_bytes = bytes_from_words(words)
+            take = min(len(out_bytes), out_len - offset)
+            buf[offset:offset + take] = out_bytes[:take]
+            offset += take
         return buf
 
 
-# Hash a node, which might be either a parent or a chunk, and return an Output
-# object. Parent nodes will always be exactly one block, but chunks may be more
-# than one. The `flags` argument applies to all blocks in a chunk, while
-# `flags_start` is only included for the first block, and `flags_end` is only
-# included for the last block. Note that if a chunk is just a single block,
-# that block will get both start and end flags.
-def hash_node(node, key_words, offset, flags, flags_start, flags_end):
-    cv = key_words[:]
-    block_flags = flags | flags_start
+def hash_chunk(chunk, key_words, offset, flags):
+    cv = key_words
+    block_flags = flags | CHUNK_START
     position = 0
-    while len(node) - position > BLOCK_LEN:
-        block = node[position:position + BLOCK_LEN]
-        compress(cv, block, BLOCK_LEN, offset, block_flags)
+    while len(chunk) - position > BLOCK_LEN:
+        block = chunk[position:position + BLOCK_LEN]
+        cv = compress(cv, block, BLOCK_LEN, offset, block_flags)[:8]
         block_flags = flags
         position += BLOCK_LEN
-    block_len = len(node) - position
+    block_len = len(chunk) - position
     block = bytearray(BLOCK_LEN)
-    block[0:block_len] = node[position:]
-    block_flags |= flags_end
+    block[0:block_len] = chunk[position:]
+    block_flags |= CHUNK_END
     return Output(cv, block, block_len, offset, block_flags)
+
+
+def hash_parent(left_child, right_child, key_words, flags):
+    node_bytes = left_child.chaining_value() + right_child.chaining_value()
+    return Output(key_words, node_bytes, BLOCK_LEN, 0, PARENT | flags)
 
 
 # The left subtree is the largest possible complete tree that still leaves at
@@ -221,68 +174,37 @@ def left_len(parent_len):
 
 
 # Hash an entire subtree recursively, returning an Output object.
-def hash_recurse(input_bytes, key_words, offset, flags, is_root):
-    maybe_root = ROOT if is_root else 0
-    # If this subtree is just one chunk, hash it as a single node and return.
-    # Note that if that chunk is the root, the root flag will only be set for
-    # the final block.
+def hash_recurse(input_bytes, key_words, offset, flags):
     if len(input_bytes) <= CHUNK_LEN:
-        return hash_node(input_bytes, key_words, offset, flags, CHUNK_START,
-                         CHUNK_END | maybe_root)
+        return hash_chunk(input_bytes, key_words, offset, flags)
     # The subtree is larger than one chunk. Split it into left and right
-    # subtrees, recurse to compute their hashes, and combine those hashes into
-    # a parent node.
+    # subtrees, recurse to compute their chaining values, and combine those
+    # chaining values into a parent output.
     left = input_bytes[:left_len(len(input_bytes))]
     right = input_bytes[len(left):]
     right_offset = offset + len(left)
-    # Note that the left and right subtrees always use is_root=False.
-    left_hash = hash_recurse(left, key_words, offset, flags, False).to_hash()
-    right_hash = hash_recurse(right, key_words, right_offset, flags,
-                              False).to_hash()
-    node_bytes = left_hash + right_hash
-    # Parent nodes always use an offset of 0. And because they're a single
-    # block, they don't need start or end flags, so those are 0 too.
-    parent_flags = flags | PARENT | maybe_root
-    return hash_node(node_bytes, key_words, 0, parent_flags, 0, 0)
+    left_output = hash_recurse(left, key_words, offset, flags)
+    right_output = hash_recurse(right, key_words, right_offset, flags)
+    return hash_parent(left_output, right_output, key_words, flags)
 
 
-# The core hash function, taking an input of any length, a 32-byte key, and any
-# domain separation flags that will apply to all nodes (namely KEYED_HASH or
-# DERIVE_KEY). Returns an Output object.
-def hash_internal(input_bytes, key_words, flags):
-    return hash_recurse(input_bytes, key_words, 0, flags, True)
+def hash_internal(input_bytes, key_words, flags, out_len):
+    output = hash_recurse(input_bytes, key_words, 0, flags)
+    return output.root_output_bytes(out_len)
 
 
 # ==================== Public API ====================
 
 
-# The default hash function, returning a 32-byte hash.
-def hash(input_bytes):
-    return hash_xof(input_bytes).to_hash()
+def hash(input_bytes, out_len):
+    return hash_internal(input_bytes, IV, 0, out_len)
 
 
-# The default hash function, returning an extensible Output object.
-def hash_xof(input_bytes):
-    return hash_internal(input_bytes, IV, 0)
-
-
-# The keyed hash function, returning a 32-byte hash.
-def keyed_hash(key_bytes, input_bytes):
-    return keyed_hash_xof(key_bytes, input_bytes).to_hash()
-
-
-# The keyed hash function, returning an extensible Output object.
-def keyed_hash_xof(key_bytes, input_bytes):
+def keyed_hash(key_bytes, input_bytes, out_len):
     key_words = words_from_bytes(key_bytes)
-    return hash_internal(input_bytes, key_words, KEYED_HASH)
+    return hash_internal(input_bytes, key_words, KEYED_HASH, out_len)
 
 
-# The KDF, returning a 32 byte key.
-def derive_key(key_bytes, context_bytes):
-    return derive_key_xof(key_bytes, context_bytes).to_hash()
-
-
-# The KDF, returning an extensible Output object.
-def derive_key_xof(key_bytes, context_bytes):
+def derive_key(key_bytes, context_bytes, out_len):
     key_words = words_from_bytes(key_bytes)
-    return hash_internal(context_bytes, key_words, DERIVE_KEY)
+    return hash_internal(context_bytes, key_words, DERIVE_KEY, out_len)

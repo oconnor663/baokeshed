@@ -52,61 +52,34 @@ def to_hex(b):
     return binascii.hexlify(b).decode("utf-8")
 
 
-def test_default_functions():
+def test_compare_to_rust():
     key_bytes = make_test_input(baokeshed.KEY_LEN)
     key_hex = to_hex(key_bytes)
+    # Use a length that's not a multiple of 4.
+    output_len = 303
     for case in CASES:
         print("case:", case)
         input_bytes = make_test_input(case)
-
-        # The default hash function.
-        rust_output = cmd(baokeshed_path()).stdin_bytes(input_bytes).read()
-        python_output = to_hex(baokeshed.hash(input_bytes))
-        assert rust_output == python_output
-
-        # The keyed hash function.
-        rust_output = cmd(baokeshed_path(), "--key",
-                          key_hex).stdin_bytes(input_bytes).read()
-        python_output = to_hex(baokeshed.keyed_hash(key_bytes, input_bytes))
-        assert rust_output == python_output
-
-        # The KDF.
-        rust_output = cmd(baokeshed_path(), "--derive-key",
-                          key_hex).stdin_bytes(input_bytes).read()
-        python_output = to_hex(baokeshed.derive_key(key_bytes, input_bytes))
-        assert rust_output == python_output
-
-
-def test_xof_functions():
-    key_bytes = make_test_input(baokeshed.KEY_LEN)
-    key_hex = to_hex(key_bytes)
-    for case in CASES:
-        print("case:", case)
-        input_bytes = make_test_input(case)
-        output_len = 300
 
         # The default hash function.
         rust_output = cmd(baokeshed_path(), "--length",
                           str(output_len)).stdin_bytes(input_bytes).read()
-        python_output = to_hex(
-            baokeshed.hash_xof(input_bytes).to_bytes(output_len))
+        python_output = to_hex(baokeshed.hash(input_bytes, output_len))
         assert rust_output == python_output
 
         # The keyed hash function.
-        rust_output = cmd(baokeshed_path(), "--key", key_hex, "--length",
-                          str(output_len)).stdin_bytes(input_bytes).read()
+        rust_output = cmd(baokeshed_path(), "--length", str(output_len),
+                          "--key", key_hex).stdin_bytes(input_bytes).read()
         python_output = to_hex(
-            baokeshed.keyed_hash_xof(key_bytes,
-                                     input_bytes).to_bytes(output_len))
+            baokeshed.keyed_hash(key_bytes, input_bytes, output_len))
         assert rust_output == python_output
 
         # The KDF.
-        rust_output = cmd(baokeshed_path(), "--derive-key", key_hex,
-                          "--length",
-                          str(output_len)).stdin_bytes(input_bytes).read()
+        rust_output = cmd(baokeshed_path(), "--length", str(output_len),
+                          "--derive-key",
+                          key_hex).stdin_bytes(input_bytes).read()
         python_output = to_hex(
-            baokeshed.derive_key_xof(key_bytes,
-                                     input_bytes).to_bytes(output_len))
+            baokeshed.derive_key(key_bytes, input_bytes, output_len))
         assert rust_output == python_output
 
 
