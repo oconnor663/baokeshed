@@ -433,7 +433,8 @@ fn test_lib_against_reference_impl() {
         // extended output
         let mut hasher = reference_impl::Hasher::new_keyed(&key);
         hasher.update(&input);
-        let mut output = [0; 300];
+        // Test a non-multiple of 4.
+        let mut output = [0; 303];
         hasher.finalize(&mut output);
         let mut expected_output = Vec::new();
         let mut xof = keyed_hash_xof(&key, &input);
